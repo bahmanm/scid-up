@@ -5,10 +5,10 @@
 proc getScorefromComment { comment maxY } {
     set maxY [expr $maxY - 0.01 ]
     set minY [expr 0.0 - $maxY]
-	set evalExp {.*?\[%eval\s*(.*?)\s*\].*}
-	set eval ""
-	set score ""
-	regexp $evalExp $comment -> eval
+    set evalExp {.*?\[%eval\s*(.*?)\s*\].*}
+    set eval ""
+    set score ""
+    regexp $evalExp $comment -> eval
     if { $eval != "" } { # check for [%eval 1.23]
         if { [scan $eval "%f" score ] == 1 } {
             if { $score > $maxY } { set score $maxY }
@@ -24,27 +24,27 @@ proc getScorefromComment { comment maxY } {
         }
     }
 
-	set foundIndex [string first ":M" $comment]
-	# check for Mate :M5 or :M-3
-	if { $foundIndex >= 0 } {
-	    if { [scan [string range $comment [expr $foundIndex+2] end] "%f" score] == 1 } {
+    set foundIndex [string first ":M" $comment]
+    # check for Mate :M5 or :M-3
+    if { $foundIndex >= 0 } {
+        if { [scan [string range $comment [expr $foundIndex+2] end] "%f" score] == 1 } {
             # change Mate in x to +/$minY
             if { $score >= 1 } { set score $maxY }
             if { $score <= -1 } { set score $minY }
-	    }
-	} else {
-	    set f 1
-	    set foundIndex [string first "+M" $comment]
-	    if { $foundIndex < 0 } { set foundIndex [string first "-M" $comment]; set f -1 }
-	    # check for Mate +M5 or -M3 (Annotation from Arena GUI)
-	    if { $foundIndex >= 0 } {
+        }
+    } else {
+        set f 1
+        set foundIndex [string first "+M" $comment]
+        if { $foundIndex < 0 } { set foundIndex [string first "-M" $comment]; set f -1 }
+        # check for Mate +M5 or -M3 (Annotation from Arena GUI)
+        if { $foundIndex >= 0 } {
             if { [scan [string range $comment [expr $foundIndex+2] end] "%f" score] == 1 } {
                 # change Mate in x to +/- maxY
                 set score [expr $f * $score]
                 if { $score >= 1 } { set score $maxY }
                 if { $score <= -1 } { set score $minY }
             }
-	    } else {
+        } else {
             # check for scores +1.23 or -1.23, find the first apperance in the comment
             set foundIndex [string first "+" $comment]
             if { $foundIndex < 0 } { set foundIndex [string first "-" $comment] }
@@ -54,8 +54,8 @@ proc getScorefromComment { comment maxY } {
                     if { $score < $minY } { set score $minY }
                 }
             }
-	    }
-	}
+        }
+    }
     return $score
 }
 
@@ -499,68 +499,68 @@ proc MoveTimeList {color add} {
     set n [llength $game]
     set movenr 0
     for {set i 0} { $i < $n} { incr i } {
-	set RAVd [lindex [lindex $game $i] 0]
-	set RAVn [lindex [lindex $game $i] 1]
-	# only search in the mainline
-	if { $RAVd == 0 && $RAVn == 0} {
-	    # append comments for white
-	    if {  $color == "w" && [expr $movenr % 2] == 1 }  {
-		lappend mainline [lindex [lindex $game $i] 4] }
-	    # append comments for black
-	    if {  $color == "b" && [expr $movenr % 2] == 0 }  {
-		lappend mainline [lindex [lindex $game $i] 4] }
-	    incr movenr
-	}
+        set RAVd [lindex [lindex $game $i] 0]
+        set RAVn [lindex [lindex $game $i] 1]
+        # only search in the mainline
+        if { $RAVd == 0 && $RAVn == 0} {
+            # append comments for white
+            if {  $color == "w" && [expr $movenr % 2] == 1 }  {
+                lappend mainline [lindex [lindex $game $i] 4] }
+            # append comments for black
+            if {  $color == "b" && [expr $movenr % 2] == 0 }  {
+                lappend mainline [lindex [lindex $game $i] 4] }
+            incr movenr
+        }
     }
     set movenr 0
     set offset 0.0
     if {  $color == "w" } { set offset 0.5 }
     set sum 0.0
     for {set i 0} { $i < $n} { incr i } {
-	# only look for the first match, because normaly only one of these types should used in game
-	set comment [lindex $mainline $i]
-	set clkmsExp {.*?\[%clkms\s*(.*?)\s*\].*}
-	set clkms ""
-	regexp $clkmsExp $comment -> clkms
-	if { $clkms != "" } {
-	    scan $clkms "%f" sec
-	    if { [scan $clkms "%f" sec ] == 1 } {
-		# scale millisec to minutes
-		lappend movetimes [expr $movenr+$offset] [expr { $sec / 60000.0 }] }
-	} else {
-	    set clkExp {.*?\[%clk\s*(.*?)\s*\].*}
-	    set clock ""
-	    regexp $clkExp $comment -> clock
-	    if { $clock != "" } {
-		if { [scan $clock "%f:%f:%f" ho mi sec ] == 3 } {
-		    lappend movetimes [expr $movenr+$offset] [expr { $ho*60.0 + $mi + $sec/60}] }
-	    } else {
-		set emtExp {.*?\[%emt\s*(.*?)\s*\].*}
-		set emt ""
-		regexp $emtExp $comment -> emt
-		if { $emt != "" } {
-		    # emt could have 2 formats: 00:12:34 or 1.23
-		    set ok 0
-		    if { [regexp ":" $emt] } {
-			if { [scan $emt "%f:%f:%f" ho mi sec ] == 3 } { incr ok }
-		    } else {
-			set ho 0.0
-			set mi 0.0
-			if { [scan $emt "%f" sec ] == 1 } { incr ok }
-		    }
-		    if { $ok == 1 } {
-			set f [expr { $ho*3600.0 + $mi*60 + $sec}]
-			if { $add } {
-			    # add move times and scale to minutes
-			    set f [expr { $f/60.0 + $sum }]
-			    set sum $f
-			}
-			lappend movetimes [expr $movenr+$offset] $f
-		    }
-		}
-	    }
-	}
-	incr movenr
+        # only look for the first match, because normaly only one of these types should used in game
+        set comment [lindex $mainline $i]
+        set clkmsExp {.*?\[%clkms\s*(.*?)\s*\].*}
+        set clkms ""
+        regexp $clkmsExp $comment -> clkms
+        if { $clkms != "" } {
+            scan $clkms "%f" sec
+            if { [scan $clkms "%f" sec ] == 1 } {
+                # scale millisec to minutes
+                lappend movetimes [expr $movenr+$offset] [expr { $sec / 60000.0 }] }
+        } else {
+            set clkExp {.*?\[%clk\s*(.*?)\s*\].*}
+            set clock ""
+            regexp $clkExp $comment -> clock
+            if { $clock != "" } {
+                if { [scan $clock "%f:%f:%f" ho mi sec ] == 3 } {
+                    lappend movetimes [expr $movenr+$offset] [expr { $ho*60.0 + $mi + $sec/60}] }
+            } else {
+                set emtExp {.*?\[%emt\s*(.*?)\s*\].*}
+                set emt ""
+                regexp $emtExp $comment -> emt
+                if { $emt != "" } {
+                    # emt could have 2 formats: 00:12:34 or 1.23
+                    set ok 0
+                    if { [regexp ":" $emt] } {
+                        if { [scan $emt "%f:%f:%f" ho mi sec ] == 3 } { incr ok }
+                    } else {
+                        set ho 0.0
+                        set mi 0.0
+                        if { [scan $emt "%f" sec ] == 1 } { incr ok }
+                    }
+                    if { $ok == 1 } {
+                        set f [expr { $ho*3600.0 + $mi*60 + $sec}]
+                        if { $add } {
+                            # add move times and scale to minutes
+                            set f [expr { $f/60.0 + $sum }]
+                            set sum $f
+                        }
+                        lappend movetimes [expr $movenr+$offset] $f
+                    }
+                }
+            }
+        }
+        incr movenr
     }
     return $movetimes
 }
@@ -684,13 +684,13 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
       set max 0
       # Find max Value of time, then set the tick value vor horizontal lines
       foreach j { "w" "b"} {
-	  set coords [MoveTimeList $j $::tools::graphs::score::TimeSum]
-	  set coords$j $coords
-	  set ncoords [expr {[llength $coords] - 1}]
-	  for {set i 0} {$i < $ncoords} {incr i 2} {
-	      set y [lindex $coords [expr {$i + 1}]]
-	      if { $y > $max } { set max $y }
-	  }
+        set coords [MoveTimeList $j $::tools::graphs::score::TimeSum]
+        set coords$j $coords
+        set ncoords [expr {[llength $coords] - 1}]
+        for {set i 0} {$i < $ncoords} {incr i 2} {
+            set y [lindex $coords [expr {$i + 1}]]
+            if { $y > $max } { set max $y }
+        }
       }
       if {$max > 20} { set yticks 5 }
       if {$max > 50} { set yticks 10 }
@@ -717,15 +717,15 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
   if { $::tools::graphs::score::Times } {
       # draw move time
       catch {::utils::graph::data score data1 -color $firstColor -points 0 -lines 1\
-		  -key [sc_game info white] -linewidth $linewidth -radius $psize -outline $firstColor -coords $coordsw }
+          -key [sc_game info white] -linewidth $linewidth -radius $psize -outline $firstColor -coords $coordsw }
       catch {::utils::graph::data score data2 -color $secondColor -points 0 -lines 1 \
-		 -linewidth $linewidth -radius $psize -outline $secondColor -coords $coordsb}
+         -linewidth $linewidth -radius $psize -outline $secondColor -coords $coordsb}
   }
   if { $::tools::graphs::score::Scores } {
       # draw score bars
       catch {::utils::graph::data score data -color $linecolor -points 0 -lines 0 -bars 2 \
-		 -linewidth $linewidth -radius $psize -outline $linecolor \
-		 -coords [::tools::graphs::MoveScoreList $::tools::graphs::score::White $::tools::graphs::score::Black]}
+         -linewidth $linewidth -radius $psize -outline $linecolor \
+         -coords [::tools::graphs::MoveScoreList $::tools::graphs::score::White $::tools::graphs::score::Black]}
   }
 
   ::utils::graph::redraw score
