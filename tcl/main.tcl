@@ -494,23 +494,12 @@ proc getNextMoves { {num 4} } {
 proc showVars {} {
     if {$::autoplayMode == 1} { return }
 
+    set numVars [sc_var count]
     # No need to display an empty menu
-    if {[sc_var count] == 0} {
-        return
-    }
-
-    if {[sc_var count] == 1 &&  [sc_game info nextMove] == ""} {
-        # There is only one variation and no main line, so enter it
-        sc_var moveInto 0
-        updateBoard
-        return
-    }
+    if {$numVars == 0} { return }
 
     set w .variations
     if {[winfo exists $w]} { return }
-
-    set varList [sc_var list]
-    set numVars [sc_var count]
 
     # Present a menu of the possible variations
     toplevel $w
@@ -534,6 +523,7 @@ proc showVars {} {
     }
 
     # insert variations
+    set varList [sc_var list]
     for {set i 0} {$i < $numVars} {incr i} {
         set move [::trans [lindex $varList $i]]
         if {$move == ""} {
@@ -547,44 +537,20 @@ proc showVars {} {
         $w.lbVar insert {} end -id $j -values [list "$str"]
         incr j
     }
+    $w.lbVar focus 0
     $w.lbVar selection set 0
-    # bindings
+
     bind $w <Configure> "recordWinSize $w"
-    bind .variations <Return> {catch { event generate .variations <Right> } }
-    bind .variations <ButtonRelease-1> {catch { event generate .variations <Right> } }
-    bind .variations <Right> {
-        set cur [.variations.lbVar selection]
-        destroy .variations
-        ::move::EnterVar $cur
-    }
-    bind .variations <Up> { set cur [.variations.lbVar selection]
-        set sel [expr $cur - 1]
-        if {$sel < 0} { set sel 0 }
-        .variations.lbVar selection set $sel ; .variations.lbVar see $sel}
-    bind .variations <Down> { set cur [.variations.lbVar selection]
-        if {[.variations.lbVar next $cur] == {} } { return }
-        set sel [expr $cur + 1]
-        .variations.lbVar selection set $sel ; .variations.lbVar see $sel}
-    bind .variations <Left> { destroy .variations }
-    bind .variations <Escape> { catch { event generate .variations <Destroy> } }
-    # in order to have the window always on top : this does not really work ...
-    bind .variations <Visibility> {
-        if { "%s" != "VisibilityUnobscured" } {
-            focus .variations
-            raise .variations
-        }
-    }
-    bind .variations <FocusOut> {
-        focus .variations
-        raise .variations
-    }
+    bind $w <Escape> "destroy $w"
+    bind $w <Left> "destroy $w"
+    bind $w <Right> "::move::EnterVar \[$w.lbVar selection\]; destroy $w"
+    bind $w <Return> "event generate $w <Right>"
+    bind $w <ButtonRelease-1> "event generate $w <Right>"
 
-    # Needed or the main window loses the focus
-    bind .variations <Destroy> { focus -force .main }
-
-    catch { focus .variations }
-    catch { grab $w }
-    update
+    tkwait visibility $w
+    ::tk::SetFocusGrab $w $w.lbVar
+    tkwait window $w
+    ::tk::RestoreFocusGrab $w $w.lbVar
 }
 ################################################################################
 #
