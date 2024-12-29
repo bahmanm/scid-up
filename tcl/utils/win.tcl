@@ -155,6 +155,19 @@ proc ::win::isDocked {wnd} {
 
 # Undock a toplevel window
 proc ::win::undockWindow { wnd srctab {title ""} } {
+	# The default widgets' bindtags is an empty list that's dynamically
+	# resolved to window's name, window's class, window's toplevel and all.
+	# Setting the bindtags we get the same docked/undocked event propagation.
+	set children $wnd
+	while {$children ne ""} {
+		set tmp {}
+		foreach elem $children {
+			lappend tmp {*}[winfo children $elem]
+			bindtags $elem [bindtags $elem]
+		}
+		set children $tmp
+	}
+
 	if {$srctab ne "" } {
 		set old_options [::docking::remove_tab $wnd $srctab]
 		set title "Scid: [dict get $old_options -text]"

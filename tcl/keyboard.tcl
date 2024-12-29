@@ -13,49 +13,24 @@
 # It is not necessary to recompile scid after changing this file.
 
 proc keyboardShortcuts {w} {
-	# Go back one move
-	bind $w <Left> {
-		eval [excludeTextWidget %W]
-		::move::Back;
-		break
-	}
+	# Go back/forward
+	bind $w <Left>  { excludeTextWidget %W; ::move::Back }
+	bind $w <Right> { excludeTextWidget %W; ::move::Forward }
+	bind $w <Up>    { excludeTextWidget %W; ::move::Back 10 }
+	bind $w <Down>  { excludeTextWidget %W; ::move::Forward 10 }
+	bind $w <Home>  { excludeTextWidget %W; ::move::ExitVarOrStart }
+	bind $w <End>   { excludeTextWidget %W; ::move::End }
 
-	# Go forward one move
-	bind $w <Right> {
-		eval [excludeTextWidget %W]
-		::move::Forward
-		break
-	}
+	# Load game
+	bind $w <Control-Up>   { excludeTextWidget %W; ::game::LoadNextPrev previous }
+	bind $w <Control-Down> { excludeTextWidget %W; ::game::LoadNextPrev next }
+	bind $w <Control-question> { excludeTextWidget %W; ::game::LoadRandom }
 
-	bind $w <Up> {
-		eval [excludeTextWidget %W]
-		::move::Back 10
-		break
-	}
+	# Rotate the chess board
+	bind $w <period> { excludeTextWidget %W; toggleRotateBoard }
 
-	bind $w <Down> {
-		eval [excludeTextWidget %W]
-		::move::Forward 10
-		break
-	}
-
-	# Exit Variation/Go to game start
-	bind $w <Home> {
-		eval [excludeTextWidget %W]
-		if {[::move::ExitVar] != 0} { break }
-		::move::Start
-		break
-	}
-
-	# Go to game end
-	bind $w <End> {
-		eval [excludeTextWidget %W]
-		::move::End
-		break
-	}
-
-	# Close Scid
-	# bind $w <Control-q> { ::file::Exit }
+	# Open "Setup Board" dialog
+	bind $w <s> { excludeTextWidget %W; ::setupBoard }
 
 	# Open a database
 	bind $w <Control-o> { ::file::Open }
@@ -82,27 +57,11 @@ proc keyboardShortcuts {w} {
 	# Toggle fullscreen
 	bind $w <F11> { wm attributes . -fullscreen [expr ![wm attributes . -fullscreen]] }
 
-	# Rotate the chess board
-	bind $w <period> {
-		eval [excludeTextWidget %W]
-		toggleRotateBoard
-		break
-	}
-
-	# Open "Setup Board" dialog
-	bind $w <s> {
-		eval [excludeTextWidget %W]
-		::setupBoard
-		break
-	}
-
-
 	# Open the enter/create variation dialog
 	# TODO: <v> is not intuitive: <space> or <up> <down> may be better
 	bind $w <KeyPress-v> {
-		eval [excludeTextWidget %W]
+		excludeTextWidget %W
 		::showVars
-		break
 	}
 
 	# Change current database
@@ -140,12 +99,10 @@ proc keyboardShortcuts {w} {
 
 	#TODO: to be improved
 	bind $w <Control-a> {
-		eval [excludeTextWidget %W]
+		excludeTextWidget %W
 		sc_var create
 		::notify::PosChanged -pgn
-		break
 	}
-
 
 	#TODO: are these shortcuts useful?
 	bind $w <Control-B> ::search::board
@@ -162,13 +119,6 @@ proc keyboardShortcuts {w} {
 	bind $w <Control-u> ::game::GotoMoveNumber
 	bind $w <Control-Y> findNovelty
 	bind $w <Control-N> nameEditor
-
-	bind $w <Control-slash> ::file::finder::Open
-	bind $w <Control-Shift-Up> {::game::LoadNextPrev first}
-	bind $w <Control-Shift-Down> {::game::LoadNextPrev last}
-	bind $w <Control-Up> {::game::LoadNextPrev previous}
-	bind $w <Control-Down> {::game::LoadNextPrev next}
-	bind $w <Control-question> ::game::LoadRandom
 }
 
 proc excludeTextWidget {w} {
@@ -176,7 +126,7 @@ proc excludeTextWidget {w} {
 		# HACK: enable binding for .pgnWin
 		# TODO: replace this using the new %M (available since Tk 8.6.4)
 		if {$w ne ".pgnWin.text"} {
-			return "continue"
+			return -code continue
 		}
 	}
 }
