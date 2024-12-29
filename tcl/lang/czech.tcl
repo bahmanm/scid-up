@@ -137,6 +137,8 @@ menuText C WindowsStats "Statistické okno" 0 {Otevøít/zavøít statistické okno fi
 menuText C WindowsTree "Stromové okno" 4 {Otevøít/zavøít stromové okno}
 menuText C WindowsBook "Okno knihovny zahájení" 0 {Otevøít/zavøít okno knihovny zahájení}
 menuText C WindowsCorrChess "Korespondenèní okno" 0 {Otevøít/zavøít okno knihovny zahájení}
+# ====== TODO To be translated ======
+menuText C WindowsGraph "Analysis Graph" 0 {Open the Graph window with moves' times and evaluations}
 
 # Tools menu:
 menuText C Tools "Nástroje" 3
@@ -177,7 +179,6 @@ menuText C ToolsPlayerReport "Profil hráèe..." 7 \
   {Generovat profil hráèe}
 menuText C ToolsRating "Graf ratingu" 5 \
   {Zobrazit graf vývoje ratingu hráèù aktuální partie}
-menuText C ToolsScore "Graf skóre" 6  {Zobrazit okno grafu skóre}
 menuText C ToolsExpCurrent "Export aktuální partie" 7 \
   {Zapsat aktuální partii do textového souboru}
 menuText C ToolsExpCurrentPGN "Export partie do PGN souboru..." 17 \

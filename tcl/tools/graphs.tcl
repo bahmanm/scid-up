@@ -1,7 +1,7 @@
 ### graph.tcl: part of Scid.
 
-# TODO: find a better position in this file for this function  
-# search for valid score in comment. Cut to maxY. if no score is found returns an empty string 
+# TODO: find a better position in this file for this function
+# search for valid score in comment. Cut to maxY. if no score is found returns an empty string
 proc getScorefromComment { comment maxY } {
     set maxY [expr $maxY - 0.01 ]
     set minY [expr 0.0 - $maxY]
@@ -71,11 +71,11 @@ proc ::tools::graphs::Save {mode w} {
   set ftypes {{"PostScript files" {.eps .ps}} {"All files" *}}
   set fname [tk_getSaveFile -filetypes $ftypes -parent $w -defaultextension ".eps" -title "Scid: Save Graph"]
   if {$fname == ""} { return }
-  
+
   if {[file extension $fname] != ".eps" && [file extension $fname] != ".ps" } {
     append fname ".eps"
   }
-  
+
   if {[catch {$w postscript -file $fname -colormode $mode} result]} {
     tk_messageBox -icon info -parent $w -title "Scid" -message $result
   }
@@ -113,12 +113,12 @@ proc checkConfigFilterGraph {} {
 
 proc configureFilterGraph {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO
-  
+
   set w .configFilterGraph
   if {[winfo exists $w]} {
     destroy $w
   }
-  
+
   win::createDialog $w
   wm title $w $::tr(ConfigureFilter)
   setWinLocation $w
@@ -221,7 +221,7 @@ proc configureFilterGraph {} {
         ::tools::graphs::filter::Refresh
      }
   }
-  
+
   pack $w.filternew -side top -fill x
   if { [winfo exists .statsWin]} {
       pack $w.filterold -side top -fill both -expand 1 -pady "10 0"
@@ -265,11 +265,11 @@ proc tools::graphs::filter::Open {} {
   wm title $w $::tr(TitleFilterGraph)
   set filterGraph 1
   bind $w <Destroy> {set filterGraph 0}
-  
+
   ttk::frame $w.b
   pack $w.b -side top -fill x
   ttk::label $w.b.status -width 1 -font font_Small -anchor w
-  
+
   canvas $w.c -width 600 -height 400
   $w.c create text 25 5 -tag title -justify center -width 1 \
       -font font_Small -anchor n
@@ -277,7 +277,7 @@ proc tools::graphs::filter::Open {} {
       -font font_Small -anchor s
   pack $w.c -side top -expand yes -fill both
   ::utils::graph::create filter
-  
+
   bind $w <F1> {helpWindow Graphs Filter}
   bind $w <Configure> {
     .fgraph.c itemconfigure title -width [expr {[winfo width .fgraph.c] - 50}]
@@ -291,7 +291,7 @@ proc tools::graphs::filter::Open {} {
   }
   bind $w.c <1> tools::graphs::filter::Switch
   bind $w.c <$::MB3> ::tools::graphs::filter::Refresh
-  
+
   foreach {name text} {decade Decade year Year elo Rating move moves} {
     ttk::radiobutton $w.b.$name -text $::tr($text) \
         -variable ::tools::graphs::filter::type -value $name \
@@ -302,7 +302,7 @@ proc tools::graphs::filter::Open {} {
   pack $w.b.decade $w.b.elo -side left -padx 1 -pady 2
   pack $w.b.setup -side right -pady 2
   pack $w.b.status -side left -padx 2 -pady 2 -fill x -expand yes
-  
+
   ::tools::graphs::filter::Refresh
 }
 
@@ -319,10 +319,10 @@ proc tools::graphs::filter::Switch {} {
 
 proc ::tools::graphs::filter::Refresh {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO
-  
+
   set w .fgraph
   if {! [winfo exists $w]} { return }
-  
+
   $w.c itemconfigure title -width [expr {[winfo width $w.c] - 50}]
   $w.c coords title [expr {[winfo width $w.c] / 2}] 10
   $w.c itemconfigure type -width [expr {[winfo width $w.c] - 50}]
@@ -350,19 +350,19 @@ proc ::tools::graphs::filter::Refresh {} {
       lappend vlines [list $vlineColor 1 at $i.5]
     }
   }
-  
+
   ::utils::graph::create filter -width $width -height $height -xtop 40 -ytop 35 \
       -ytick 1 -xtick 1 -font font_Small -canvas $w.c -textcolor black \
       -vline $vlines -background lightYellow -tickcolor black -xmin 0 -xmax 1
   ::utils::graph::redraw filter
   busyCursor .
   update
-  
+
   set count 0
   set dlist {}
   set xlabels {}
   set max 0.0
-  
+
   # Generate plot values and labels:
   if {$::tools::graphs::filter::type == "decade"} {
     set ftype date
@@ -415,7 +415,7 @@ proc ::tools::graphs::filter::Refresh {} {
       }
     }
   }
-  
+
   foreach {start end label} $rlist {
     if {$ftype == "date"} { append end ".12.31" }
     set r [sc_filter freq [sc_base current] dbfilter $ftype $start $end $FilterGuessELO]
@@ -433,7 +433,7 @@ proc ::tools::graphs::filter::Refresh {} {
     if {$freq > $max} { set max $freq }
     lappend xlabels [list $count $label]
   }
-  
+
   # Find a suitable spacing of y-axis labels:
   set ytick 0.1
   if {$max > 1.0} { set ytick 0.2 }
@@ -454,10 +454,10 @@ proc ::tools::graphs::filter::Refresh {} {
     if {$mean >= 1000.0} { set mean 999.9 }
     lappend hlines [list red 1 at $mean]
   }
-  
+
   # Create fake dataset with bounds so we see 0.0::
   #::utils::graph::data decade bounds -points 0 -lines 0 -bars 0 -coords {1 0.0 1 0.0}
-  
+
   ::utils::graph::data filter data -color darkBlue -points 1 -lines 1 -bars 0 \
       -linewidth 2 -radius 4 -outline darkBlue -coords $dlist
   ::utils::graph::configure filter -xlabels $xlabels -ytick $ytick \
@@ -616,11 +616,11 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
   set secondColor blue
   set linewidth 2
   set psize 2
-  
+
   set w .sgraph
   # Game has changed, but window is not open: do nothing
   if {! [winfo exists $w] && $docreate == 0 } { return }
-  
+
   if {! [winfo exists $w] } {
     ::createToplevel $w
     menu $w.menu
@@ -647,7 +647,8 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
     $w.c create text 25 5 -tag text -justify center -width 1 \
         -font font_Regular -anchor n
     ttk::frame $w.fbuttons
-    ttk::checkbutton $w.fbuttons.score -text [tr ToolsScore] -variable ::tools::graphs::score::Scores \
+    # TODO translate
+    ttk::checkbutton $w.fbuttons.score -text "Eval" -variable ::tools::graphs::score::Scores \
         -command "::tools::graphs::score::Refresh"
     ttk::checkbutton $w.fbuttons.time -text [tr Time] -variable ::tools::graphs::score::Times \
         -command "::tools::graphs::score::Refresh"
@@ -669,11 +670,10 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
       ::utils::graph::redraw score
     }
     bind $w.c <1> {::tools::graphs::score::Move %x}
-    wm title $w "Scid: [tr ToolsScore]"
+    ::setTitle $w "Scid: [tr WindowsGraph]"
     ::createToplevelFinalize $w
     ::tools::graphs::score::ConfigMenus
   }
-  ::setTitle $w "Scid: [tr ToolsScore]"
 
   $w.c itemconfigure text -width [expr {[winfo width $w.c] - 20}]
   $w.c coords text [expr {[winfo width $w.c] / 2}] 10
@@ -704,7 +704,7 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
 
   # Create fake dataset with bounds so we see at least -1.0 to 1.0:
   ::utils::graph::data score bounds -points 0 -lines 0 -bars 0 -coords {1 0 1 0.9}
-  
+
   # Update the graph:
   set whiteelo [sc_game tag get WhiteElo]
   set blackelo [sc_game tag get BlackElo]
@@ -784,14 +784,14 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
   set blackColor blue
   set lwidth 2
   set psize 2
-  
+
   if {$type == ""} { set type $::tools::graphs::rating::type }
   if {$player == ""} { set player $::tools::graphs::rating::player }
   set ::tools::graphs::rating::type $type
   set ::tools::graphs::rating::player $player
-  
+
   set w .rgraph
-  
+
   if {! [winfo exists $w]} {
     toplevel $w
     menu $w.menu
@@ -823,7 +823,7 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
           -variable ::tools::graphs::rating::year -value $i \
           -command "::tools::graphs::rating::Refresh"
     }
-    
+
     canvas $w.c -width 500 -height 300 -selectforeground [ttk::style lookup . -foreground] -background [ttk::style lookup . -background]
     $w.c create text 25 10 -tag text -justify center -width 1 \
         -font font_Regular -anchor n
@@ -842,7 +842,7 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
     wm title $w "Scid: [tr ToolsRating]"
     ::tools::graphs::rating::ConfigMenus
   }
-  
+
   $w.c itemconfigure text -width [expr {[winfo width $w.c] - 50} ]
   $w.c coords text [expr {[winfo width $w.c] / 2} ] 10
   set height [expr {[winfo height $w.c] - 70} ]
@@ -854,7 +854,7 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
   ::utils::graph::redraw ratings
   busyCursor $w
   update
-  
+
   set title "[tr ToolsRating]: "
   if {$type == "player"} {
     append title $player
@@ -933,15 +933,15 @@ proc tools::graphs::absfilter::Open {} {
   configMenuText $w.menu.file 1 GraphFileGrey $::language
   $w.menu.file add separator
   $w.menu.file add command -label GraphFileClose -command "destroy $w"
-  configMenuText $w.menu.file 3 GraphFileClose $::language  
+  configMenuText $w.menu.file 3 GraphFileClose $::language
   wm title $w $::tr(TitleFilterGraph)
   set absfilterGraph 1
   bind $w <Destroy> {set absfilterGraph 0}
-  
+
   ttk::frame $w.b
   pack $w.b -side top -fill x
   ttk::label $w.b.status -width 1 -font font_Small -anchor w
-  
+
   canvas $w.c -width 600 -height 400
   $w.c create text 25 5 -tag title -justify center -width 1 \
       -font font_Small -anchor n
@@ -949,7 +949,7 @@ proc tools::graphs::absfilter::Open {} {
       -font font_Small -anchor s
   pack $w.c -side top -expand yes -fill both
   ::utils::graph::create absfilter
-  
+
   bind $w <F1> {helpWindow Graphs Filter}
   bind $w <Configure> {
     .afgraph.c itemconfigure title -width [expr {[winfo width .afgraph.c] - 50}]
@@ -973,7 +973,7 @@ proc tools::graphs::absfilter::Open {} {
   pack $w.b.decade $w.b.elo -side left -padx 1 -pady 2
   pack $w.b.setup -side right -pady 2
   pack $w.b.status -side left -padx 2 -pady 2 -fill x -expand yes
-  
+
   ::tools::graphs::absfilter::Refresh
 }
 
@@ -990,10 +990,10 @@ proc tools::graphs::absfilter::Switch {} {
 
 proc ::tools::graphs::absfilter::Refresh {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO
-  
+
   set w .afgraph
   if {! [winfo exists $w]} { return }
-  
+
   $w.c itemconfigure title -width [expr {[winfo width $w.c] - 50}]
   $w.c coords title [expr {[winfo width $w.c] / 2}] 10
   $w.c itemconfigure type -width [expr {[winfo width $w.c] - 50}]
@@ -1021,19 +1021,19 @@ proc ::tools::graphs::absfilter::Refresh {} {
       lappend vlines [list $vlineColor 1 at $i.5]
     }
   }
-  
+
   ::utils::graph::create absfilter -width $width -height $height -xtop 40 -ytop 35 \
       -ytick 1 -xtick 1 -font font_Small -canvas $w.c -textcolor black \
       -vline $vlines -background lightYellow -tickcolor black -xmin 0 -xmax 1
   ::utils::graph::redraw absfilter
   busyCursor .
   update
-  
+
   set count 0
   set dlist {}
   set xlabels {}
   set max 0.0
-  
+
   # Generate plot values and labels:
   if {$::tools::graphs::absfilter::type == "decade"} {
     set ftype date
@@ -1086,7 +1086,7 @@ proc ::tools::graphs::absfilter::Refresh {} {
       }
     }
   }
-  
+
   set mean 0
   foreach {start end label} $rlist {
     if {$ftype == "date"} { append end ".12.31" }
@@ -1101,7 +1101,7 @@ proc ::tools::graphs::absfilter::Refresh {} {
     if {$freq > $max} { set max $freq }
     lappend xlabels [list $count $label]
   }
-  
+
   # Find a suitable spacing of y-axis labels:
   set ytick 1
   if {$max >=  10} { set ytick   1 }
@@ -1129,10 +1129,10 @@ proc ::tools::graphs::absfilter::Refresh {} {
     if {$mean > $max} { set max $mean }
     lappend hlines [list red 1 at $mean]
   }
-  
+
   # Create fake dataset with bounds so we see 0.0::
   #::utils::graph::data decade bounds -points 0 -lines 0 -bars 0 -coords {1 0.0 1 0.0}
-  
+
   ::utils::graph::data absfilter data -color darkBlue -points 1 -lines 1 -bars 0 \
       -linewidth 2 -radius 4 -outline darkBlue -coords $dlist
   ::utils::graph::configure absfilter -xlabels $xlabels -ytick $ytick \

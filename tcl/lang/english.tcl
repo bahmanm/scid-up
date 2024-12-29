@@ -176,6 +176,7 @@ menuText E WindowsStats "Statistics Window" 0 \
 menuText E WindowsTree "Tree Window" 0 {Open/close the Tree window}
 menuText E WindowsBook "Book Window" 0 {Open/close the Book window}
 menuText E WindowsCorrChess "Correspondence Window" 0 {Open/close the Correspondence window}
+menuText E WindowsGraph "Analysis Graph" 0 {Open the Graph window with moves' times and evaluations}
 
 # Tools menu:
 menuText E Tools "Tools" 0
@@ -213,7 +214,6 @@ menuText E ToolsPlayerReport "Player Report..." 3 \
   {Generate a player report}
 menuText E ToolsRating "Rating Graph" 0 \
   {Graph the rating history of the current game players}
-menuText E ToolsScore "Score Graph" 0 {Show the score graph window}
 menuText E ToolsExpCurrent "Export Current Game" 8 \
   {Write current game to a text file}
 menuText E ToolsExpCurrentPGN "Export Game to PGN File..." 15 \

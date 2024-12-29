@@ -151,6 +151,8 @@ menuText P WindowsTree "Drzewo wariantów" 0 {Otwórz/zamknij drzewo wariantów}
 menuText P WindowsBook "Book Window" 0 {Open/close the Book window}
 # ====== TODO To be translated ======
 menuText P WindowsCorrChess "Correspondence Window" 0 {Open/close the Correspondence window}
+# ====== TODO To be translated ======
+menuText P WindowsGraph "Analysis Graph" 0 {Open the Graph window with moves' times and evaluations}
 
 menuText P Tools "Narzêdzia" 0
 # ====== TODO To be translated ======
@@ -208,7 +210,6 @@ menuText P ToolsPlayerReport "Raport o graczu..." 9 \
   {Utwórz raport o graczu} 
 menuText P ToolsRating "Wykres rankingu" 0 \
   {Wykres historii rankingu graj±cych partiê}
-menuText P ToolsScore "Wykres wyników" 1 {Poka¿ wykres wyników}
 menuText P ToolsExpCurrent "Eksportuj partiê" 0 \
   {Zapisz partiê do pliku tekstowego}
 menuText P ToolsExpCurrentPGN "Do pliku PGN..." 9 \

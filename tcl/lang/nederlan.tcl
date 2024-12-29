@@ -159,6 +159,8 @@ menuText N WindowsTree "Openingoverzicht" 0 {Open/sluit het Openingsoverzichtven
 menuText N WindowsBook "Boek Venster" 0 {Open/sluit het Boek venster}
 menuText N WindowsCorrChess "Correspondentieschaak venster" 0 \
     {Open/sluit het correspondentieschaak venster}
+# ====== TODO To be translated ======
+menuText N WindowsGraph "Analysis Graph" 0 {Open the Graph window with moves' times and evaluations}
 
 # Tools menu:
 menuText N Tools "Gereedschappen" 0
@@ -200,8 +202,6 @@ menuText N ToolsPlayerReport "Speler Rapport ..." 3 \
   {Genereer een Speler Rapport} ;
 menuText N ToolsRating "Elo Klassering geschiedenis" 0 \
   {Grafiek van de Elo Klassering van de twee spelers}
-menuText N ToolsScore "Partij score" 7 \
-  {Laat het partij-score venster zien}
 menuText N ToolsExpCurrent "Partij exporteren" 8 \
   {Exporteer huidige partij naar een bestand}
 menuText N ToolsExpCurrentPGN "Partij in PGN-formaat exporteren..." 11 \
@@ -1889,8 +1889,6 @@ translate N OptionsBoardSize "Grootte van bord"
 translate N OptionsBoardPieces "Bord Stukken Stijl"
 # ====== TODO To be translated ======
 translate N OptionsInternationalization "Internationalization"
-# ====== TODO To be translated ======
-# ====== TODO To be translated ======
 # ====== TODO To be translated ======
 translate N OptionsTablebaseDir "Selecteer tot 4 tabelbasismappen:"
 # ====== TODO To be translated ======

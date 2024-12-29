@@ -149,6 +149,8 @@ menuText F WindowsTree "Fenêtre d'arbre" 10 \
   {Ouvrir/fermer la fenêtre d'arbre}
 menuText F WindowsBook "Bibliothèque d'ouvertures" 0 {Ouvrir/Fermer la bibliothèque d'ouverture}
 menuText F WindowsCorrChess "Jeu par correspondance" 0 {Ouvrir/Fermer la fenêtre de jeu par correspondance}
+# ====== TODO To be translated ======
+menuText F WindowsGraph "Analysis Graph" 0 {Open the Graph window with moves' times and evaluations}
 
 # Tools menu:
 menuText F Tools "Outils" 2
@@ -188,7 +190,6 @@ menuText F ToolsPlayerReport "Rapport sur le joueur..." 2 \
   {Générer un rapport pour le joueur}
 menuText F ToolsRating "Graphique Elo" 10 \
   {Tracer un graphique du classement Elo des joueurs de cette partie}
-menuText F ToolsScore "Graphique de score" 13 {Montrer le graphique de score pendant la partie}
 menuText F ToolsExpCurrent "Exporter la partie en cours" 1 \
   {Exporter la partie en cours dans un fichier texte}
 menuText F ToolsExpCurrentPGN "Dans un fichier PGN..." 16 \
