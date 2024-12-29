@@ -311,7 +311,7 @@ proc ::enginewin::createButtonsBar {id btn display} {
     $btn.config state pressed
     grid $btn.startStop $btn.lock $btn.addbestmove \
          $btn.addlines $btn.multipv $btn.threads $btn.hash $btn.limits x $btn.config -sticky ew
-    grid columnconfigure $btn 9 -weight 1
+    grid columnconfigure $btn 8 -weight 1
 }
 
 # Sends a SetOptions message to the engine if an option's value is different.
