@@ -331,7 +331,6 @@ namespace eval ::notify {
     ::board::update .main.board [sc_pos board] [expr {$animate ne ""}]
 
     after cancel ::notify::privPosChanged
-    update idletasks
     if {$pgnNeedsUpdate} { after idle ::notify::privGameTextChanged }
     after idle ::notify::privPosChanged
 
