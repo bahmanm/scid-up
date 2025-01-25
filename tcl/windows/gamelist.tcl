@@ -723,14 +723,14 @@ proc ::windows::gamelist::updateStats_ { {w} } {
 				set t_black "$n_black "
 			}
 
-			set win [expr { int($barW + $coeff * $p_white) }]
+			set win [expr { round($barW + $coeff * $p_white) }]
 			$w.stats.b.c create rectangle $barW  $barh1 $win $barh2  -fill white -outline ""
-			set draw [expr { int($win + $coeff * $p_draw) }]
+			set draw [expr { round($win + $coeff * $p_draw) }]
 			$w.stats.b.c create rectangle $win $barh1 $draw $barh2 -fill #707070 -outline ""
 			set loss [expr { $barW + $percW * 10 }]
 			$w.stats.b.c create rectangle $draw $barh1 $loss $barh2 -fill black -outline ""
 
-			$w.stats.b.c create rectangle $barW $barh1 $loss $barh2
+			$w.stats.b.c create rectangle $barW $barh1 $loss $barh2 -outline #808080
 
 			ttk_create $w.stats.b.c text [expr { $barW + $percW * 3 }] $barh1 \
 				-font font_Small -anchor se -text "$t_white"
