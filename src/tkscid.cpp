@@ -7940,7 +7940,7 @@ sc_search_header (ClientData, Tcl_Interp * ti, scidBaseT* base, HFilter& filter,
     bool bToMove = true;
 
     int pgnTextCount = 0;
-    char ** sPgnText = NULL;
+    const char ** sPgnText = NULL;
 
     const char * options[] = {
         "wtitles", "btitles", "toMove",
@@ -7985,7 +7985,7 @@ sc_search_header (ClientData, Tcl_Interp * ti, scidBaseT* base, HFilter& filter,
 
         case OPT_PGN:
             if (Tcl_SplitList (ti, (char *)value, &pgnTextCount,
-                               (CONST84 char ***) &sPgnText) != TCL_OK) {
+                               &sPgnText) != TCL_OK) {
                 delete[] wTitles;
                 delete[] bTitles;
                 return TCL_ERROR;
