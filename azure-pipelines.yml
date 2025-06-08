@@ -211,7 +211,7 @@ jobs:
 
 - job: linux_static
   pool:
-    vmImage: 'ubuntu-20.04'
+    vmImage: 'ubuntu-24.04'
   steps:
   - script: |
       mkdir tcltk && cd tcltk
@@ -221,6 +221,7 @@ jobs:
       make && make install
     displayName: Generate tcl library
   - script: |
+      sudo apt-get install -y libx11-dev
       cd tcltk
       git clone --depth=1 --branch core-8-6-branch https://github.com/tcltk/tk.git
       cd tk && cd unix
@@ -236,7 +237,6 @@ jobs:
             -DTCL_LIBRARY=$(Build.SourcesDirectory)/tcltk/lib/libtcl8.6.a \
             -DCMAKE_CXX_STANDARD_LIBRARIES="-lz -ldl" \
             -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
-            -DCMAKE_CXX_COMPILER=g++-10 \
              $(Build.SourcesDirectory)
       make VERBOSE=1
       make install
