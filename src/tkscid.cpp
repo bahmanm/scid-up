@@ -44,6 +44,7 @@
 #include "ui.h"
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 #include <numeric>
 #include <set>
 #include <unordered_map>
@@ -357,7 +358,6 @@ exportGame (Game * g, FILE * exportFile, gameFormatT format, uint pgnStyle)
 int
 sc_base_export (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
 {
-    FILE * exportFile = NULL;
     bool exportFilter = false;
     bool appendToFile = false;
     gameFormatT outputFormat = PGN_FORMAT_Plain;
@@ -394,8 +394,6 @@ sc_base_export (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     if (exportFilter  &&  !db->inUse) {
         return errorResult (ti, errMsgNotOpen(ti));
     }
-
-    const char * exportFileName = argv[4];
 
     // Check for an even number of optional parameters:
     if ((argc % 2) != 1) { return errorResult (ti, usage); }
@@ -459,7 +457,11 @@ sc_base_export (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             return InvalidCommand (ti, "sc_base export", options);
         }
     }
-    exportFile = fopen (exportFileName, (appendToFile ? "r+" : "w"));
+
+    const auto tcl_strings_are_utf8 =
+        std::filesystem::path((const char8_t*)argv[4]).string();
+    const auto exportFileName = tcl_strings_are_utf8.c_str();
+    auto exportFile = fopen (exportFileName, (appendToFile ? "r+" : "w"));
     if (exportFile == NULL) {
         return errorResult (ti, "Error opening file for exporting games.");
     }
@@ -1839,7 +1841,10 @@ sc_filter_old(ClientData cd, Tcl_Interp * ti, int argc, const char ** argv)
 
     case FILTER_EXPORT:
         if (argc >= 7 && argc <=9) {
-            FILE* exportFile = fopen(argv[5], "wb");
+            const auto tcl_strings_are_utf8 =
+                std::filesystem::path((const char8_t*)argv[5]).string();
+            const auto exportFileName = tcl_strings_are_utf8.c_str();
+            auto exportFile = fopen(exportFileName, "wb");
             if (exportFile == NULL) return errorResult (ti, "Error opening file for exporting games.");
             auto old_language = language;
             Game g;
