@@ -2069,12 +2069,7 @@ proc ::board::animate {w oldboard newboard} {
 
   # Start the animation:
   set start [clock clicks -milli]
-  set ::board::_animate($w,start) $start
-  set ::board::_animate($w,end) [expr {$start + $::animateDelay} ]
-  set ::board::_animate($w,from) $from
-  set ::board::_animate($w,to) $to
-  set ::board::_animate($w,from2) $from2
-  set ::board::_animate($w,to2) $to2
+  set ::board::_animate($w) [list $start [expr {$start + $::animateDelay}] $from $to $from2 $to2]
   ::board::_animate $w
 }
 
@@ -2083,18 +2078,12 @@ proc ::board::animate {w oldboard newboard} {
 #
 proc ::board::_animate {w} {
   if {! [winfo exists $w]} { return }
-  set from $::board::_animate($w,from)
-  set to $::board::_animate($w,to)
-  set start $::board::_animate($w,start)
-  set end $::board::_animate($w,end)
+
+  lassign $::board::_animate($w) start end from to from2 to2
   set now [clock clicks -milli]
-  if {$now > $end} {
-    ::board::update $w
-    return
-  }
 
   # Compute where the moving piece should be displayed and move it:
-  set ratio [expr {double($now - $start) / double($end - $start)} ]
+  set ratio [expr { min(1, double($now - $start) / double($end - $start)) } ]
   set fromMid [::board::midSquare $w $from]
   set toMid [::board::midSquare $w $to]
   set fromX [lindex $fromMid 0]
@@ -2105,24 +2094,24 @@ proc ::board::_animate {w} {
   set y [expr {$fromY + round(($toY - $fromY) * $ratio)} ]
   $w.bd coords p$to $x $y
   $w.bd raise p$to
-  if { $::board::_animate($w,from2) >= 0 } {
+  if {$from2 >= 0} {
       # move second piece
-      set from $::board::_animate($w,from2)
-      set to $::board::_animate($w,to2)
-      set fromMid [::board::midSquare $w $from]
-      set toMid [::board::midSquare $w $to]
+      set fromMid [::board::midSquare $w $from2]
+      set toMid [::board::midSquare $w $to2]
       set fromX [lindex $fromMid 0]
       set fromY [lindex $fromMid 1]
       set toX [lindex $toMid 0]
       set toY [lindex $toMid 1]
       set x [expr {$fromX + round(($toX - $fromX) * $ratio)} ]
       set y [expr {$fromY + round(($toY - $fromY) * $ratio)} ]
-      $w.bd coords p$to $x $y
-      $w.bd raise p$to
+      $w.bd coords p$to2 $x $y
+      $w.bd raise p$to2
   }
 
   # Schedule another animation update in a few milliseconds:
-  after 5 "::board::_animate $w"
+  if {$now < $end} {
+    after 5 "::board::_animate $w"
+  }
 }
 
 proc InitBoard {} {
