@@ -528,29 +528,12 @@ proc ::enginewin::callback {id msg} {
 }
 
 proc ::enginewin::changeDisplayLayout {id param value} {
-    upvar ::enginewin::engConfig_$id engConfig_
     set w .engineWin$id
     switch $param {
-        "notation" {
-            set idx 1
-            if {$value < 0} {
-                set value [expr { 0 - $value }]
-            }
-            # If it is an xboard engine with san=1 store it as a negative value
-            foreach elem [lsearch -all -inline -index 0 [lindex $engConfig_ 8] "san"] {
-                if {[lindex $elem 7]} {
-                    set value [expr { 0 - $value }]
-                    break
-                }
-            }
-        }
         "wrap" {
-            set idx 2
             $w.display.pv_lines configure -wrap $value
         }
-        default { error "changeDisplayLayout unknown $param" }
     }
-    lset engConfig_ 6 $idx $value
 }
 
 proc ::enginewin::updateOptions {id msgData} {

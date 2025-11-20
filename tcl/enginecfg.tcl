@@ -418,21 +418,20 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     $w insert end "\n[tr EngineNotation]:\t"
     ttk::combobox $w.notation -state readonly -width 12 -values [list engine SAN "English SAN" figurine]
     bind $w.notation <<ComboboxSelected>> "
-        ::enginewin::changeDisplayLayout $id notation \[ $w.notation current \]
+        ::enginecfg::onChangeLayout $id notation \[ $w.notation current \]
     "
     $w window create end -window $w.notation -pady 2
     $w.notation current [expr { $notation < 0 ? 0 - $notation : $notation }]
-    ::enginewin::changeDisplayLayout $id notation $notation
+    ::enginecfg::onChangeLayout $id notation $notation
 
     ttk::checkbutton $w.wrap -text [tr GInfoWrap] -onvalue word -offvalue none -style Toolbutton \
-        -command "::enginewin::changeDisplayLayout $id wrap \[ set ::$w.wrap \]"
+        -command "::enginecfg::onChangeLayout $id wrap \[ set ::$w.wrap \]"
     $w window create end -window $w.wrap -pady 2 -padx 6
     set ::$w.wrap $pvwrap
 
     $w insert end "\n[tr EngineFlipEvaluation]:\t"
-    ttk::checkbutton $w.scoreside -style Switch.Toolbutton -onvalue engine -offvalue white -command "
-        lset ::enginewin::engConfig_$id 6 0 \[::update_switch_btn $w.scoreside \]
-    "
+    ttk::checkbutton $w.scoreside -style Switch.Toolbutton -onvalue engine -offvalue white \
+        -command "::enginecfg::onChangeLayout $id scoreside \[::update_switch_btn $w.scoreside \]"
     ::update_switch_btn $w.scoreside $scoreside
     $w window create end -window $w.scoreside -pady 2
 
@@ -725,4 +724,32 @@ proc ::enginecfg::onSubmitNetd {id w} {
         }
     }
     $w.netport configure -state $state
+}
+
+proc ::enginecfg::onChangeLayout {id param value} {
+    upvar ::enginewin::engConfig_$id engConfig_
+    switch $param {
+        "scoreside" {
+            set idx 0
+        }
+        "notation" {
+            set idx 1
+            if {$value < 0} {
+                set value [expr { 0 - $value }]
+            }
+            # If it is an xboard engine with san=1 store it as a negative value
+            foreach elem [lsearch -all -inline -index 0 [lindex $engConfig_ 8] "san"] {
+                if {[lindex $elem 7]} {
+                    set value [expr { 0 - $value }]
+                    break
+                }
+            }
+        }
+        "wrap" {
+            set idx 2
+        }
+        default { error "changeLayout unknown $param" }
+    }
+    lset engConfig_ 6 $idx $value
+    ::enginewin::changeDisplayLayout $id $param $value
 }
