@@ -198,7 +198,7 @@ proc ::enginecfg::createConfigButtons {id w fn_connect} {
     ::utils::tooltip::Set $w.addremote [tr EngineAddRemote]
 
     ttk::button $w.clone -text "\u29C9" -style Toolbutton -command [list apply {{id fn_connect} {
-        {*}$fn_connect [::enginecfg::add [set ::enginewin::engConfig_$id]]
+        {*}$fn_connect [::enginecfg::add [set ::enginecfg::engConfig_$id]]
     }} $id $fn_connect]
     ::utils::tooltip::Set $w.clone [tr EngineClone]
 
@@ -238,7 +238,7 @@ proc ::enginecfg::createConfigFrame {id configFrame msg} {
 # If it is a new engine added with auto-config, return the new name
 # otherwise return an empty "" string
 proc ::enginecfg::updateConfigFrame {id configFrame msgInfoConfig} {
-    upvar ::enginewin::engConfig_$id engConfig_
+    upvar ::enginecfg::engConfig_$id engConfig_
     set w $configFrame.text
     lassign $msgInfoConfig protocol netclients options
 
@@ -287,7 +287,7 @@ proc ::enginecfg::updateConfigFrame {id configFrame msgInfoConfig} {
 proc ::enginecfg::autoSaveConfig {id configFrame {autosave false}} {
     if {$autosave} {
         bind $configFrame.text <Destroy> "
-            ::enginecfg::save \[ set ::enginewin::engConfig_$id \]
+            ::enginecfg::save \[ set ::enginecfg::engConfig_$id \]
         "
     } else {
         bind $configFrame.text <Destroy> {}
@@ -297,7 +297,7 @@ proc ::enginecfg::autoSaveConfig {id configFrame {autosave false}} {
 # Find an option by name (case insensitive).
 # Return the index of options or throw an exception if the option do not exists.
 proc ::enginecfg::findOption {id name} {
-    set options [lindex [set ::enginewin::engConfig_$id] 8]
+    set options [lindex [set ::enginecfg::engConfig_$id] 8]
     for {set idx 0} {$idx < [llength $options]} {incr idx} {
         lassign [lindex $options $idx] option_name
         if {[string equal -nocase $name $option_name]} {
@@ -311,7 +311,7 @@ proc ::enginecfg::findOption {id name} {
 # Return true if a message was sent to the engine.
 # Throw an exception in case of error.
 proc ::enginecfg::setOption {id idx value} {
-    lassign [lindex [set ::enginewin::engConfig_$id] 8 $idx] \
+    lassign [lindex [set ::enginecfg::engConfig_$id] 8 $idx] \
         name oldValue type default min max
 
     if {$value eq $oldValue} { return false }
@@ -381,9 +381,9 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
 
     apply $fn_create_entry $w name [tr EngineName] $name
     bind $w.name <FocusOut> [list apply {{id} {
-        lassign [set ::enginewin::engConfig_$id] old
+        lassign [set ::enginecfg::engConfig_$id] old
         if {$old ne [set name [%W get]]} {
-            ::enginecfg::save [set ::enginewin::engConfig_$id]
+            ::enginecfg::save [set ::enginecfg::engConfig_$id]
             ::enginewin::connectEngine $id [::enginecfg::rename $old $name]
         }
     }} $id]
@@ -437,7 +437,7 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
 
     $w insert end "\n[tr EngineShowLog]:\t"
     ttk::checkbutton $w.debug -style Switch.Toolbutton -command "
-        lset ::enginewin::engConfig_$id 6 3 \[::update_switch_btn $w.debug\]
+        lset ::enginecfg::engConfig_$id 6 3 \[::update_switch_btn $w.debug\]
         ::enginewin::logEngine $id \[::update_switch_btn $w.debug\]
     "
     ::update_switch_btn $w.debug $debugframe
@@ -451,7 +451,7 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
         ttk::checkbutton $w.priority -onvalue idle -offvalue normal \
             -style Switch.Toolbutton -command "
                 catch { sc_info priority $enginePid \[ ::update_switch_btn $w.priority \] }
-                lset ::enginewin::engConfig_$id 6 4 \[ ::update_switch_btn $w.priority \]
+                lset ::enginecfg::engConfig_$id 6 4 \[ ::update_switch_btn $w.priority \]
             "
         ::update_switch_btn $w.priority $priority
         $w window create end -window $w.priority -pady 2
@@ -623,7 +623,7 @@ proc ::enginecfg::onSubmitParam {id connectParam newValue {opendlg 0}} {
         "protocol" { set configIdx 7 }
         default { error "wrong option" }
     }
-    upvar ::enginewin::engConfig_$id engConfig_
+    upvar ::enginecfg::engConfig_$id engConfig_
     set oldValue [lindex $engConfig_ $configIdx]
     if {$opendlg} {
         set dlgcmd [expr { $opendlg == 1 ? "tk_getOpenFile" : "tk_chooseDirectory" }]
@@ -640,7 +640,7 @@ proc ::enginecfg::onSubmitParam {id connectParam newValue {opendlg 0}} {
 
 # Reset all the engine's options to their default values.
 proc ::enginecfg::onSubmitReset {id w} {
-    upvar ::enginewin::engConfig_$id engConfig_
+    upvar ::enginecfg::engConfig_$id engConfig_
     set options {}
     foreach option [lindex $engConfig_ 8] {
         lassign $option name value type default min max var_list internal
@@ -659,7 +659,7 @@ proc ::enginecfg::onSubmitReset {id w} {
 # Also, for the options of type "file" or "path", the related widget that
 # display the value is updated when the engine replies with InfoConfig.
 proc ::enginecfg::onSubmitButton {id idx} {
-    lassign [lindex [set ::enginewin::engConfig_$id] 8 $idx] \
+    lassign [lindex [set ::enginecfg::engConfig_$id] 8 $idx] \
         name oldValue type default min max
 
     if {$type eq "file"} {
@@ -689,14 +689,14 @@ proc ::enginecfg::setupNetd {id netport} {
     }
     set port [::engine::netserver $id $netport]
     append new_value $port
-    lset ::enginewin::engConfig_$id 6 5 $new_value
+    lset ::enginecfg::engConfig_$id 6 5 $new_value
     return $port
 }
 
 # Invoked when the value of one of the netd widgets has changed.
 # Invoke ::enginecfg::setupNetd and update the netd widgets accordingly.
 proc ::enginecfg::onSubmitNetd {id w} {
-    set old_value [lindex [set ::enginewin::engConfig_$id] 6 5]
+    set old_value [lindex [set ::enginecfg::engConfig_$id] 6 5]
 
     switch [$w.netd get] {
       "auto_port" {
@@ -727,7 +727,7 @@ proc ::enginecfg::onSubmitNetd {id w} {
 }
 
 proc ::enginecfg::onChangeLayout {id param value} {
-    upvar ::enginewin::engConfig_$id engConfig_
+    upvar ::enginecfg::engConfig_$id engConfig_
     switch $param {
         "scoreside" {
             set idx 0

@@ -147,7 +147,7 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
         unset ::enginewin::engState($id)
         ::engine::close $id
         unset ::enginewin::m_(afterId,$id)
-        unset ::enginewin::engConfig_$id
+        unset ::enginecfg::engConfig_$id
         unset ::enginewin::limits_$id
         unset ::enginewin::m_(position,$id)
         unset ::enginewin::newgame_$id
@@ -158,7 +158,7 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
     ::options.store ::enginewin_lastengine($id) ""
     set ::enginewin::engState($id) {}
     set ::enginewin::m_(afterId,$id) {}
-    set ::enginewin::engConfig_$id {}
+    set ::enginecfg::engConfig_$id {}
     set ::enginewin::limits_$id {}
     set ::enginewin::m_(position,$id) ""
     set ::enginewin::newgame_$id true
@@ -435,7 +435,7 @@ proc ::enginewin::connectEngine {id enginename} {
     lassign $config name cmd args wdir elo time url uci options
     # Update engine's last used time.
     set time [clock seconds]
-    set ::enginewin::engConfig_$id [list $name $cmd $args $wdir $elo $time $url $uci {}]
+    set ::enginecfg::engConfig_$id [list $name $cmd $args $wdir $elo $time $url $uci {}]
 
     ::enginewin::updateDisplay $id ""
     ::enginewin::changeState $id closed
@@ -589,7 +589,7 @@ proc ::enginewin::updateDisplay {id msgData} {
         return
     }
 
-    lassign [lindex [set ::enginewin::engConfig_$id] 6] scoreside notation
+    lassign [lindex [set ::enginecfg::engConfig_$id] 6] scoreside notation
     if {[catch {
 
     set translated untranslated
