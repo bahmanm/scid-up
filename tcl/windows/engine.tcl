@@ -146,10 +146,9 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
     bind $w.config <Destroy> "
         unset ::enginewin::engState($id)
         ::engine::close $id
-        unset ::enginewin::m_(afterId,$id)
+        array unset ::enginewin::m_ *,$id
         unset ::enginecfg::engConfig_$id
         unset ::enginewin::limits_$id
-        unset ::enginewin::m_(position,$id)
         unset ::enginewin::newgame_$id
         unset ::enginewin::startTime_$id
         ::notify::EngineBestMove $id {} {}
@@ -449,7 +448,7 @@ proc ::enginewin::connectEngine {id enginename} {
 
     ::enginecfg::createConfigFrame $id $configFrame "$cmd $args\nConnecting..."
 
-    lassign $url scoreside notation pvwrap debugframe priority netport
+    lassign $url ::enginewin::m_(scoreside,$id) notation pvwrap debugframe priority netport
     ::enginewin::changeDisplayLayout $id notation $notation
     ::enginewin::changeDisplayLayout $id wrap $pvwrap
     ::enginewin::updateOptions $id ""
@@ -530,6 +529,10 @@ proc ::enginewin::callback {id msg} {
 proc ::enginewin::changeDisplayLayout {id param value} {
     set w .engineWin$id
     switch $param {
+        "notation" -
+        "scoreside" {
+            set ::enginewin::m_($param,$id) $value
+        }
         "wrap" {
             $w.display.pv_lines configure -wrap $value
         }
@@ -589,7 +592,8 @@ proc ::enginewin::updateDisplay {id msgData} {
         return
     }
 
-    lassign [lindex [set ::enginecfg::engConfig_$id] 6] scoreside notation
+    set notation $::enginewin::m_(notation,$id)
+    set scoreside $::enginewin::m_(scoreside,$id)
     if {[catch {
 
     set translated untranslated
