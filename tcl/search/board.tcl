@@ -46,8 +46,8 @@ proc ::search::Open {ref_base ref_filter title create_subwnd} {
 	grid $w.filterOp.and $w.filterOp.or $w.filterOp.reset -ipadx 8
 
 	grid [ttk::frame $w.buttons] -sticky news
-	ttk::button $w.buttons.save -text [::tr Save] -state disabled \
-		-command "::search::save_ $options_cmd"
+	ttk::menubutton $w.buttons.save -text [::tr Presets] -direction above
+	$w.buttons.save configure {*}[$options_cmd $w.buttons.save]
 	ttk::button $w.buttons.reset_values -text [::tr Defaults] \
 		-command "set ::search::filterOp_($w) reset; $options_cmd reset"
 	ttk::button $w.buttons.search_new -text "[tr Search] ([tr GlistNewSort] [tr Filter])" \
@@ -125,10 +125,6 @@ proc ::search::progressbar_ {w show_hide} {
 		grid $w.buttons.search_new
 		grid $w.buttons.search
 	}
-}
-
-proc ::search::save_ {options_cmd} {
-	# TODO:
 }
 
 proc ::search::start_ {new_filter w options_cmd} {
@@ -247,6 +243,10 @@ proc ::search::boardCreateFrame {w} {
 }
 
 proc ::search::boardOptions {{cmd ""}} {
+	if {[string index $cmd 0] eq "."} {
+		return [list -state disabled]
+	}
+
 	if {$cmd eq "reset"} {
 		set ::search::boardOptType_ Exact
 		set ::search::boardOptInVars_ 0

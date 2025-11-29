@@ -4,6 +4,10 @@
 
 namespace eval ::search::header {}
 
+# Store custom preset filters
+array set ::sHeader_PresetFilters {}
+::options.store ::sHeader_PresetFilters
+
 set sTitleList [list gm im fm none wgm wim wfm w]
 foreach i $sTitleList {
   set sTitles(w:$i) 1
@@ -376,6 +380,24 @@ proc search::headerCreateFrame { w } {
 }
 
 proc ::search::headerGetOptions {{cmd ""}} {
+	if {[string index $cmd 0] eq "."} {
+		set m $cmd.sHeader_presets
+		menu $m -postcommand [list apply {{m} {
+		    foreach submenu [winfo children $m] { destroy $submenu }
+			$m delete 0 end
+			$m add command -label [::tr Save] -command "::search::header::savePreset {}"
+			$m add separator
+			set i 0
+			foreach name [array names ::sHeader_PresetFilters] {
+				menu $m.i[incr i]
+				$m.i$i add command -label [::tr Load] -command "::search::header::loadPreset [list $name]"
+				$m.i$i add command -label [::tr Delete] -command "unset [list ::sHeader_PresetFilters($name)]"
+				$m add cascade -label $name -menu $m.i$i
+			}
+		}} $m]
+		return [list -menu $m]
+	}
+
 	if {$cmd eq "reset"} {
 		::search::header::defaults
 		return
@@ -548,6 +570,76 @@ proc ::search::getSearchOptions {dest_list} {
 	     lappend search $fCounts($i) $fCountsV($i)
         }
     }
+}
+
+proc ::search::header::loadPreset {name} {
+  set scalar_vars {
+    sWhite sBlack sEvent sSite sRound sAnnotated
+    sDateMin sDateMax sEventDateMin sEventDateMax
+    sWhiteEloMin sWhiteEloMax sBlackEloMin sBlackEloMax
+    sEloDiffMin sEloDiffMax sGlMin sGlMax
+    sGnumMin sGnumMax sEcoMin sEcoMax sEco
+    sSideToMoveW sSideToMoveB
+    sResWin sResLoss sResDraw sResOther
+    sTagName sTagValue sVariantStd sVariant960 sIgnoreCol
+  }
+  set array_vars {sPgntext sHeaderFlags sTitles}
+
+  array set data $::sHeader_PresetFilters($name)
+  foreach var $scalar_vars {
+    set ::$var [expr {[info exists data($var)] ? $data($var) : {}}]
+  }
+  foreach arr $array_vars {
+    array unset ::$arr
+    array set ::$arr $data($arr)
+  }
+}
+
+proc ::search::header::savePreset {name} {
+  if {$name eq ""} {
+    set w .searchHeaderNewPreset
+    ::win::createDialog $w
+    pack [ttk::label $w.msg -text "New preset filter:"] -fill x
+    pack [ttk::entry $w.value] -fill x
+    dialogbutton $w.cancel -text [tr Cancel] -command "destroy $w"
+    dialogbutton $w.ok -text "OK" -command [list apply {{w} {
+      set value [$w.value get]
+      destroy $w
+      if {$value ne ""} {
+        ::search::header::savePreset $value
+      }
+    }} $w]
+    ::packdlgbuttons $w.ok $w.cancel
+    bind $w <Escape> "$w.cancel invoke"
+    bind $w <Return> "$w.ok invoke"
+    grab $w
+    tk::PlaceWindow $w pointer
+    focus $w.value
+    tkwait window $w
+    return
+  }
+  set scalar_vars {
+    sWhite sBlack sEvent sSite sRound sAnnotated
+    sDateMin sDateMax sEventDateMin sEventDateMax
+    sWhiteEloMin sWhiteEloMax sBlackEloMin sBlackEloMax
+    sEloDiffMin sEloDiffMax sGlMin sGlMax
+    sGnumMin sGnumMax sEcoMin sEcoMax sEco
+    sSideToMoveW sSideToMoveB
+    sResWin sResLoss sResDraw sResOther
+    sTagName sTagValue sVariantStd sVariant960 sIgnoreCol
+  }
+  set array_vars {sPgntext sHeaderFlags sTitles}
+
+  set data {}
+  foreach var $scalar_vars {
+    if {[set value [set ::$var]] ne ""} {
+      lappend data $var $value
+    }
+  }
+  foreach arr $array_vars {
+    lappend data $arr [array get ::$arr]
+  }
+  set ::sHeader_PresetFilters($name) $data
 }
 
 ##############################
