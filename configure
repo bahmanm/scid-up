@@ -4,7 +4,7 @@
 #
 # This program tries to determine system-specific details needed
 # for compiling Scid (such as the version of Tcl/Tk you have
-# installed, and where to find the Tcl/Tk header and library 
+# installed, and where to find the Tcl/Tk header and library
 # files), and creates the file "Makefile".
 
 # Execute this script using tclsh
@@ -22,7 +22,7 @@ set var(OPTIMIZE) {-std=c++20 -O3 -fno-rtti -fno-exceptions}
 set var(PROFILE) {}
 set var(SCIDFLAGS) {}
 set var(SHAREDIR) /usr/local/share/scid
-set var(TCL_VERSION) 8.6
+set var(TCL_VERSION) [info tclversion]
 set var(WARNINGS) "-Wall -Wno-deprecated-declarations"
 set var(MAKEFILE) Makefile.conf
 set var(INSTALL) {install_scid install_engines}
@@ -38,70 +38,26 @@ set defaultVar(TCL_INCLUDE) {/usr/include}
 #    found is returned.
 #
 proc findDir {f path {exp ""}} {
+    # Expand the path list to include immediate subdirectories.
     set subpath {}
     foreach d $path {
-        lappend subpath "$d"
-        foreach subdir [glob -nocomplain -type {d  r} -directory "$d" *] {
-            lappend subpath "$subdir"
-        }
+        lappend subpath $d {*}[glob -nocomplain -type {d  r} -directory $d *]
     }
-
     set best ""
     foreach dir $subpath {
         set p [file join $dir $f]
-        if {![catch {glob $p}]} {
+        if {[llength [glob -nocomplain $p]] > 0} {
           if {$best == ""} { set best $p }
             if {$exp != ""} {
               if {[catch {exec grep -c $exp $p}] == 0} { return $dir } else {
                 # puts "$p skipped, not right version"
               }
             } else {
-                return $dir 
+                return $dir
             }
         }
     }
     return $best
-}
-
-# findTclTkPathsDarwin:
-#    Set-up paths using frameworks. Since frameworks are quite
-#    different, the UNIX search logic is not sharable:
-proc findTclTkPathsAqua {} {
-    global var
-    set frameworkPaths "\
-        [ file nativename ~/Library/Frameworks ] \
-        /Library/Frameworks \
-        /System/Library/Frameworks \
-    "
-    set fw_path ""
-    # Find the path to the Tcl and Tk frameworks:
-    foreach F $frameworkPaths {
-        set both 1
-        foreach fw {"Tcl" "Tk"} {
-            # Both Tcl.framework and Tk.framework must be present:
-            if {! [file exists "$F/$fw.framework/Versions/$var(TCL_VERSION)"]} {
-                set both 0
-                break
-            }
-        }
-        if {$both == 1} {
-            # $F has both frameworks, continue:
-            set fw_path $F
-            break
-        }
-    }
-    if {$both == 0} {
-        # Couldn't find Tcl and Tk frameworks, keep searching the "unix" way:
-        return 0
-    }
-    if {! [info exists var(TCL_INCLUDE)]} {
-        set var(TCL_INCLUDE) "-F$fw_path/Tcl.framework -F$fw_path/Tk.framework"
-    }
-    if {! [info exists var(TCL_LIBRARY)]} {
-        set var(TCL_LIBRARY) {-framework Tcl}
-    }
-    puts "    Location of Tcl/Tk Aqua frameworks: $fw_path"
-    return 1
 }
 
 # findTclTkPaths:
@@ -109,14 +65,6 @@ proc findTclTkPathsAqua {} {
 #    Returns 1 on success, 0 on failure.
 #
 proc findTclTkPaths {} {
-    global tclv tclv_nodot var
-    set success 1
-    array set opt {}
-    if {"$::tcl_platform(os)" == "Darwin" && [findTclTkPathsAqua]} {
-        # Frameworks found, stop looking for paths:
-        return 1
-    }
-
     # headerPath: List of possible locations for tcl.h
     set headerPath {
         /usr/local/include
@@ -139,61 +87,63 @@ proc findTclTkPaths {} {
         /opt/tcltk/lib
     }
 
-    # Try to add tcl_library and auto_path values to libraryPath,
+    # Use meta variables from the current Tcl interpreter
     # in case the user has a non-standard Tcl/Tk library location:
-    if {[info exists ::tcl_library]} {
-        lappend headerPath \
-            [file join [file dirname [file dirname $::tcl_library]] include]
-        lappend libraryPath [file dirname $::tcl_library]
-        lappend libraryPath $::tcl_library
+    set metaPath {}
+    foreach e $::auto_path {
+        if {"native" ni [file system $e]} continue
+        lappend metaPath [file dirname [file normalize $e]]
     }
-    if {[info exists ::auto_path]} {
-        foreach name $::auto_path {
-            lappend libraryPath $name
+    set headerPath [linsert $headerPath 0 {*}$metaPath]
+    set libraryPath [linsert $libraryPath 0 {*}$metaPath]
+
+    global var
+    set success 1
+    set tclv $var(TCL_VERSION)
+
+    if {! [info exists var(TCL_INCLUDE)] && ! [info exists var(TCL_LIBRARY)]} {
+        set fw_path [findDir "Tcl.framework" $libraryPath]
+        if {$fw_path ne ""} {
+            set var(TCL_INCLUDE) "-F$fw_path/Tcl.framework"
+            set var(TCL_LIBRARY) {-framework Tcl}
+            puts "    Location of Tcl/Tk frameworks: $fw_path"
+            return 1
         }
     }
 
     if {! [info exists var(TCL_INCLUDE)]} {
         puts -nonewline {    Location of "tcl.h": }
-        set opt(tcl_h) [findDir "tcl.h" $headerPath "TCL_VERSION.*$tclv"]
-        if {$opt(tcl_h) == ""} {
+        set tcl_h [findDir "tcl.h" $headerPath "TCL_VERSION.*$tclv"]
+        if {$tcl_h == ""} {
+            set var(TCL_INCLUDE) ""
             puts "not found"
+            puts "headerPath: $headerPath"
             set success 0
-            set opt(tcl_h) "$::defaultVar(TCL_INCLUDE)"
         } else {
-            puts $opt(tcl_h)
+            set var(TCL_INCLUDE) "-I$tcl_h"
+            puts $tcl_h
         }
     }
-
-    set opt(tcl_lib) ""
 
     if {! [info exists var(TCL_LIBRARY)]} {
         puts -nonewline "    Location of Tcl $tclv library: "
-        set opt(tcl_lib) [findDir "libtcl${tclv}.*" $libraryPath]
-        if {$opt(tcl_lib) == ""} {
-            set opt(tcl_lib) [findDir "libtcl${tclv_nodot}.*" $libraryPath]
-            if {$opt(tcl_lib) == ""} {
-                set opt(tcl_lib) [findDir "tcl${tclv_nodot}.*" $libraryPath]
+        set tcl_lib [findDir "libtcl${tclv}.*" $libraryPath]
+        if {$tcl_lib == ""} {
+            set tclv [expr round($tclv * 10)]
+            set tcl_lib [findDir "libtcl${tclv}.*" $libraryPath]
+            if {$tcl_lib == ""} {
+                set tcl_lib [findDir "tcl${tclv}.*" $libraryPath]
             }
-            if {$opt(tcl_lib) == ""} {
-                puts "not found"
-                set success 0
-                set opt(tcl_lib_file) "tcl"
-            } else {
-                set opt(tcl_lib_file) "tcl${tclv_nodot}"
-                puts $opt(tcl_lib)
-            }
-        } else {
-            set opt(tcl_lib_file) "tcl\$(TCL_VERSION)"
-            puts $opt(tcl_lib)
         }
-    }
-
-    if {! [info exists var(TCL_INCLUDE)]} {
-        set var(TCL_INCLUDE) "-I$opt(tcl_h)"
-    }
-    if {! [info exists var(TCL_LIBRARY)]} {
-        set var(TCL_LIBRARY) "-L$opt(tcl_lib) -l$opt(tcl_lib_file)"
+        if {$tcl_lib == ""} {
+            set var(TCL_LIBRARY) ""
+            puts "not found"
+            puts "libraryPath: $libraryPath"
+            set success 0
+        } else {
+            set var(TCL_LIBRARY) "-L$tcl_lib -ltcl${tclv}"
+            puts $tcl_lib
+        }
     }
     return $success
 }
@@ -203,7 +153,7 @@ proc findTclTkPaths {} {
 #    settings.
 #    Also creates tcl/config.tcl
 #
-proc writeMakefile {{type ""}} {
+proc writeMakefile {} {
     global var
     set success [findTclTkPaths]
 
@@ -288,12 +238,7 @@ proc usage {} {
 puts "configure: Makefile configuration program for Scid"
 
 # Parse command-line arguments:
-set default 0
-
 foreach arg $argv {
-    if {![string compare "default" $arg]} {
-        set default 1
-    } else {
         set temp_idx [string first "=" $arg]
         if {$temp_idx > 0} {
             set temp_var [string range $arg 0 [expr $temp_idx - 1]]
@@ -303,29 +248,16 @@ foreach arg $argv {
             puts "Invalid argument: $arg"
             usage
         }
-    }
 }
 
 if {![info exists var(LINK)]} { set var(LINK) "$var(COMPILE)" }
-
-if {$default} {
-    writeMakefile default
-    exit 0
-}
 
 if {[file readable "Makefile"]} {
     puts {    Renaming "Makefile" to "Makefile.bak"}
     catch {file rename -force "Makefile" "Makefile.bak"}
 }
 
-set tclv $var(TCL_VERSION)
-set tclv_nodot [expr round($tclv * 10)]
-
-puts "    Tcl/Tk version: $tclv"
+puts "    Tcl/Tk version: $var(TCL_VERSION)"
 puts "    Your operating system is: $tcl_platform(os) $tcl_platform(osVersion)"
 
 writeMakefile
-
-exit 0
-
-### End of configure script ###
