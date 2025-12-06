@@ -26,6 +26,7 @@ set var(TCL_VERSION) [info tclversion]
 set var(WARNINGS) "-Wall -Wno-deprecated-declarations"
 set var(MAKEFILE) Makefile.conf
 set var(INSTALL) {install_scid install_engines}
+set var(LIBS) {}
 
 set defaultVar(TCL_INCLUDE) {/usr/include}
 
@@ -212,6 +213,7 @@ proc usage {} {
     puts {  DEBUG        Debugging flags. Defaut: "-DNDEBUG"}
     puts {  LANGUAGES    Multi-language support. Use LANGUAGES="" for English only.}
     puts {  LINK         Your C++ linker. Default: "g++".}
+    puts {  LIBS         Extra libraries to link with (e.g. -lz).}
     puts {  OPTIMIZE     C++ optimizations. Default: "-O3 -fno-rtti -fno-exceptions".}
     puts {  PROFILE      Used for profiling the source code. Default: none.}
     puts {  SCIDFLAGS    Scid customization flags. Default: none.}
