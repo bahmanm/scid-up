@@ -68,26 +68,12 @@ proc ::search::header::defaults {} {
     set ::sTitles(b:$i) 1
   }
 }
-
-foreach i {sWhiteEloMin sWhiteEloMax sBlackEloMin sBlackEloMax} {
-  trace variable $i w [list ::utils::validate::Integer [sc_info limit elo] 0]
-}
-trace variable sEloDiffMin w [list ::utils::validate::Integer "-[sc_info limit elo]" 0]
-trace variable sEloDiffMax w [list ::utils::validate::Integer "-[sc_info limit elo]" 0]
-
 ::search::header::defaults
 
 trace variable sDateMin w ::utils::validate::Date
 trace variable sDateMax w ::utils::validate::Date
 trace variable sEventDateMin w ::utils::validate::Date
 trace variable sEventDateMax w ::utils::validate::Date
-
-
-trace variable sGlMin w {::utils::validate::Integer 9999 0}
-trace variable sGlMax w {::utils::validate::Integer 9999 0}
-
-trace variable sGnumMin w {::utils::validate::Integer -9999999 0}
-trace variable sGnumMax w {::utils::validate::Integer -9999999 0}
 
 # Forcing ECO entry to be valid ECO codes:
 foreach i {sEcoMin sEcoMax} {
@@ -118,6 +104,7 @@ proc search::headerCreateFrame { w } {
   set regular font_Small
   ttk::labelframe $w.player -text $::tr(Player)
   pack $w.player -side top -fill x -pady 5
+  set elo_limit [sc_info limit elo]
   foreach color {White Black} {
     pack $w.c$color -side top -fill x -in $w.player
     ttk::label $w.c$color.lab -textvar ::tr($color:) -width 9 -anchor w
@@ -126,9 +113,12 @@ proc search::headerCreateFrame { w } {
 
     ttk::label $w.c$color.space
     ttk::label $w.c$color.elo1 -textvar ::tr(Rating:)
-    ttk::entry $w.c$color.elomin -textvar s${color}EloMin -width 6 -justify right
+    ttk::entry $w.c$color.elomin -textvar s${color}EloMin -width 6 -justify right \
+      -validate key -validatecommand [list ::validate::integer %P 0 $elo_limit]
     ttk::label $w.c$color.elo2 -text "-"
-    ttk::entry $w.c$color.elomax -textvar s${color}EloMax -width 6 -justify right
+    ttk::entry $w.c$color.elomax -textvar s${color}EloMax -width 6 -justify right \
+      -validate key -validatecommand [list ::validate::integer %P 0 $elo_limit]
+
     pack $w.c$color.lab $w.c$color.e $w.c$color.space -side left
     pack $w.c$color.elomax $w.c$color.elo2 $w.c$color.elomin $w.c$color.elo1 -side right
   }
@@ -137,9 +127,12 @@ proc search::headerCreateFrame { w } {
   ttk::checkbutton $w.ignore.yes -variable sIgnoreCol -onvalue Yes -offvalue No -textvar ::tr(IgnoreColors)
   pack $w.ignore.yes -side left
   ttk::label $w.ignore.rdiff -textvar ::tr(RatingDiff:)
-  ttk::entry $w.ignore.rdmin -width 6 -textvar sEloDiffMin -justify right
+  ttk::entry $w.ignore.rdmin -width 6 -textvar sEloDiffMin -justify right \
+    -validate key -validatecommand [list ::validate::integer %P -$elo_limit $elo_limit]
   ttk::label $w.ignore.rdto -text "-"
-  ttk::entry $w.ignore.rdmax -width 6 -textvar sEloDiffMax -justify right
+  ttk::entry $w.ignore.rdmax -width 6 -textvar sEloDiffMax -justify right \
+    -validate key -validatecommand [list ::validate::integer %P -$elo_limit $elo_limit]
+
   pack $w.ignore.rdmax $w.ignore.rdto $w.ignore.rdmin $w.ignore.rdiff -side right
 
   pack [ttk::separator $w.sep] -side top -fill x -in $w.player
@@ -255,8 +248,11 @@ proc search::headerCreateFrame { w } {
   ttk::label $w.gl.l1 -textvar ::tr(GameLength:)
   ttk::label $w.gl.l2 -text "-"
   ttk::label $w.gl.l3 -textvar ::tr(HalfMoves)
-  ttk::entry $w.gl.emin -textvariable sGlMin -justify right -width 4
-  ttk::entry $w.gl.emax -textvariable sGlMax -justify right -width 4
+  ttk::entry $w.gl.emin -textvariable sGlMin -justify right -width 4 \
+    -validate key -validatecommand [list ::validate::integer %P 0 9999]
+  ttk::entry $w.gl.emax -textvariable sGlMax -justify right -width 4 \
+    -validate key -validatecommand [list ::validate::integer %P 0 9999]
+
   pack $w.gl -in $w.res -side right -fill x
   pack $w.gl.l1 $w.gl.emin $w.gl.l2 $w.gl.emax $w.gl.l3 -side left
 
@@ -288,9 +284,12 @@ proc search::headerCreateFrame { w } {
   set f [ttk::frame $w.gnum]
   pack $f -side top -fill x -pady "0 5"
   ttk::label $f.l1 -textvar ::tr(GlistGameNumber:)
-  ttk::entry $f.emin -textvariable sGnumMin -width 8 -justify right
+  ttk::entry $f.emin -textvariable sGnumMin -width 12 -justify right \
+    -validate key -validatecommand [list ::validate::integer %P 0]
   ttk::label $f.l2 -text "-" -font $regular
-  ttk::entry $f.emax -textvariable sGnumMax -width 8 -justify right
+  ttk::entry $f.emax -textvariable sGnumMax -width 12 -justify right \
+    -validate key -validatecommand [list ::validate::integer %P 0]
+
   pack $f.l1 $f.emin $f.l2 $f.emax -side left
   ttk::label $f.l3 -text " "
   ttk::button $f.all -text [::utils::string::Capital $::tr(all)] -style Pad0.Small.TButton -command {set sGnumMin ""; set sGnumMax ""}
