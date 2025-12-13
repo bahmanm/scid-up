@@ -1,6 +1,6 @@
 app-id: io.github.benini.scid
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
+runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 command: scid
 
@@ -13,7 +13,8 @@ finish-args:
   - --socket=pulseaudio      # play sound with PulseAudio
 
 modules:
-  - name: stockfish # Stockfish engine, put into /app/engines/stockfish/
+  - name: stockfish # Stockfish engine, put into /app/engines
+    subdir: src
     buildsystem: simple
     build-options:
       arch:
@@ -24,18 +25,24 @@ modules:
           env:
             ARCH: armv8
     build-commands:
-      - cp nn-5af11540bbfe.nnue ./src
-      - cd src; make -j build
-      - mkdir -p /app/engines/stockfish
-      - cp ./src/stockfish /app/engines/stockfish/
-      - cp ./nn-5af11540bbfe.nnue /app/engines/stockfish/
+      - make -j $FLATPAK_BUILDER_N_JOBS build
+      - make install BINDIR=/app/engines
     sources:
       - type: archive
-        url: https://github.com/official-stockfish/Stockfish/releases/download/sf_16/stockfish-ubuntu-x86-64-modern.tar
-        sha256: dc94bdfbc0097a7606d3ed13b855cb03ee99184301b6fc8f8d85c68c4726bf8a
+        url: https://github.com/official-stockfish/Stockfish/archive/sf_17.1.tar.gz
+        sha256: 0cfd9396438798cc68f5c0d5fa0bb458bb8ffff7de06add841aaeace86bec1f1
+        x-checker-data:
+          type: anitya
+          project-id: 5750
+          url-template: https://github.com/official-stockfish/Stockfish/archive/sf_$version.tar.gz
       - type: file
-        url: https://tests.stockfishchess.org/api/nn/nn-5af11540bbfe.nnue
-        sha256: 5af11540bbfefcb54e38c5dd000cab4b469dfa7599a1d55be5d2722c20a8929b
+        dest: src
+        url: https://tests.stockfishchess.org/api/nn/nn-1c0000000000.nnue
+        sha256: 1c0000000000a67d629999d932d0c373f7450ce43cd12d0562868f4eaf9ae2ad
+      - type: file
+        dest: src
+        url: https://tests.stockfishchess.org/api/nn/nn-37f18f62d772.nnue
+        sha256: 37f18f62d772f3107e1d6aaca3898c130c3c86f2ab63e6555fbbca20635a899d
 
   - name: eigen # library for linear algebra, used for lc0
     buildsystem: cmake-ninja
@@ -54,21 +61,31 @@ modules:
       - USE_OPENMP=0
     make-install-args:
       - PREFIX=/app
-    post-install:
-      - rm /app/lib/*.a
+    cleanup:
+      - /bin
+      - /include
+      - /lib/cmake
+      - /lib/*.a
+      - /lib/*.la
+      - /lib/pkgconfig
+      - /share/man
     sources:
       - type: archive
-        url: https://github.com/xianyi/OpenBLAS/archive/refs/tags/v0.3.23.tar.gz
-        sha256: 5d9491d07168a5d00116cdc068a40022c3455bf9293c7cb86a65b1054d7e5114
+        url: https://github.com/OpenMathLib/OpenBLAS/archive/v0.3.30.tar.gz
+        sha512: c726ced2d3e6ebd3ddcd0b13c255bb43fae8c12d2aec15e9ef992b0bc7099996c02cd284ccaaa7b5fac3f23f280b098063dd60f521d97a68dc183ab192fcccdb
+        x-checker-data:
+          type: anitya
+          project-id: 2540
+          url-template: https://github.com/OpenMathLib/OpenBLAS/archive/v$version.tar.gz
 
   - name: lc0 # Lc0 engine, put into /app/engines/lc0
     buildsystem: meson
     config-opts:
-      - "-Dopenblas=true"
-      - "-Dopenblas_libdirs=/app/lib"
-      - "-Dgtest=false"
-      - "-Db_lto=true"
-      - "-Dopencl=false"
+      - -Dopenblas=true
+      - -Dopenblas_libdirs=/app/lib
+      - -Dgtest=false
+      - -Db_lto=true
+      - -Dopencl=false
     post-install:
       - mkdir -p /app/engines/lc0
       - mv /app/bin/lc0 /app/engines/lc0/
@@ -85,28 +102,44 @@ modules:
       - gzip -d nn.pb.gz
       - mv nn.pb /app/engines/lc0/
     sources:
-    - type: file
-      dest-filename: nn.pb.gz
-      url: https://storage.lczero.org/files/networks-contrib/t1-512x15x8h-distilled-swa-3395000.pb.gz
-      sha256: 1fdb1519e5b02e03f1d9201ec8eb95f640e32cc6459a4f14c0eab6890dc097e8
+      - type: file
+        dest-filename: nn.pb.gz
+        url: https://storage.lczero.org/files/networks-contrib/t1-512x15x8h-distilled-swa-3395000.pb.gz
+        sha256: 1fdb1519e5b02e03f1d9201ec8eb95f640e32cc6459a4f14c0eab6890dc097e8
 
   - name: tcl # latest stable tcl, required for scid
-    sources:
-      - type: archive
-        url: https://prdownloads.sourceforge.net/tcl/tcl-core8.6.15-src.tar.gz
-        sha1: b35c3bf9044841e0bdaa96db0512f1d1ec59495a
-    subdir: "unix"
+    subdir: unix
     post-install:
       - chmod 755 /app/lib/libtcl*.so
+    cleanup:
+      - /bin
+      - /lib/pkgconfig
+      - /man
+    sources:
+      - type: git
+        url: https://github.com/tcltk/tcl.git
+        tag: core-8-6-17
+        commit: b522ab7c2ad740a068df9546538405f8d2a2c703
 
   - name: tk # latest stable tk, required for scid
-    sources:
-      - type: archive
-        url: https://prdownloads.sourceforge.net/tcl/tk8.6.15-src.tar.gz
-        sha1: ef44f7be00d0249e281ad87785650f5475bbc939
-    subdir: "unix"
+    subdir: unix
+    make-args:
+      - binaries
+      - libraries
+    make-install-args:
+      - install-binaries
+      - install-libraries
     post-install:
       - chmod 755 /app/lib/libtk*.so
+    cleanup:
+      - /bin
+      - /lib/pkgconfig
+      - /man
+    sources:
+      - type: git
+        url: https://github.com/tcltk/tk.git
+        tag: core-8-6-17
+        commit: afdf30259d05840a4e513bae638955902322d1ec
 
   - name: scid # main app
     buildsystem: cmake-ninja
@@ -118,5 +151,5 @@ modules:
     sources:
       - type: git
         url: https://github.com/benini/scid.git
-        tag: v5.1.0
-        commit: 22aba17c8e41791637a7ca81c17e790394cba744
+        commit: be56eae535473304dd90fe7b4a5cbf74d4327e15
+
