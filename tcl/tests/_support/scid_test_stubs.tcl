@@ -44,6 +44,12 @@ if {![llength [info procs sc_pos]]} {
                 }
                 return $::scid_test::sc_pos_moveNumber
             }
+            fen {
+                if {![info exists ::scid_test::sc_pos_fen]} {
+                    error "::scid_test::sc_pos_fen is not set by the test"
+                }
+                return $::scid_test::sc_pos_fen
+            }
             default {
                 error "sc_pos $subcmd not stubbed in tests"
             }
