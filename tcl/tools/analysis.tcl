@@ -35,11 +35,17 @@ set batchEnd 1
 set stack ""
 
 ################################################################################
-#
+# resetEngine
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int): Analysis engine slot (typically 1 or 2).
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes global array `analysis(...)` for the given engine slot.
+#   - Unsets `::uciOptions$n` (UCI option capability cache).
 ################################################################################
-# resetEngine:
-#   Resets all engine-specific data.
-#
 proc resetEngine {n} {
     global analysis
     set analysis(pipe$n) ""             ;# Communication pipe file channel
@@ -109,8 +115,16 @@ resetEngine 2
 set annotateMode 0
 
 ################################################################################
-# calculateNodes:
-#   Divides string-represented node count by 1000
+# calculateNodes
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (string|int, optional): Node count as a decimal string (as produced by
+#     engines). Defaults to empty.
+# Returns:
+#   - int: Truncated kilo-nodes (e.g. "12345" -> 12); returns 0 if < 1000.
+# Side effects:
+#   - None.
 ################################################################################
 proc calculateNodes {{n}} {
     set len [string length $n]
@@ -124,9 +138,17 @@ proc calculateNodes {{n}} {
 }
 
 
-# resetAnalysis:
-#   Resets the analysis statistics: score, depth, etc.
-#
+################################################################################
+# resetAnalysis
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets analysis statistics in the global `analysis(...)` array.
+################################################################################
 proc resetAnalysis {{n 1}} {
     global analysis
     set analysis(score$n) 0
@@ -146,11 +168,18 @@ namespace eval enginelist {}
 
 set engines(list) {}
 
-# engine:
-#   Adds an engine to the engine list.
-#   Calls to this function will be found in the user engines.lis
-#   file, which is sourced below.
-#
+################################################################################
+# engine
+# Visibility:
+#   Public.
+# Inputs:
+#   - arglist (list): Flat list of attribute/value pairs, e.g.
+#       `{Name ... Cmd ... Dir ... Args ... Elo ... Time ... URL ... UCI ...}`.
+# Returns:
+#   - int (0|1): 1 if the engine entry was accepted, 0 otherwise.
+# Side effects:
+#   - Appends to global `engines(list)`.
+################################################################################
 proc engine {arglist} {
     global engines
     array set newEngine {}
@@ -177,16 +206,33 @@ proc engine {arglist} {
     return 1
 }
 
+################################################################################
 # ::enginelist::read
-#   Reads the user Engine list file.
-#
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - int: Result of `catch` (0 on success, non-zero on error).
+# Side effects:
+#   - Sources the engines configuration file (may call `engine` repeatedly).
+################################################################################
 proc ::enginelist::read {} {
     catch {source [scidConfigFile engines]}
 }
 
-# ::enginelist::write:
-#   Writes the user Engine list file.
-#
+################################################################################
+# ::enginelist::write
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - int (0|1): 1 on success, 0 on failure.
+# Side effects:
+#   - Writes the engines configuration file and rotates a backup (`engines.bak`).
+#   - Reads globals: `::scidVersion`, `engines(list)`.
+################################################################################
 proc ::enginelist::write {} {
     global engines
     
@@ -289,18 +335,34 @@ if {[llength $engines(list)] == 0} {
     }
 }
 
+################################################################################
 # ::enginelist::date
-#   Given a time in seconds since 1970, returns a
-#   formatted date string.
+# Visibility:
+#   Public.
+# Inputs:
+#   - time (int): Seconds since 1970-01-01 (Unix epoch).
+# Returns:
+#   - string: Local time formatted as "%a %b %d %Y %H:%M".
+# Side effects:
+#   - None.
+################################################################################
 proc ::enginelist::date {time} {
     return [clock format $time -format "%a %b %d %Y %H:%M"]
 }
 
+################################################################################
 # ::enginelist::sort
-#   Sort the engine list.
-#   If the engine-open dialog is open, its list is updated.
-#   The type defaults to the current engines(sort) value.
-#
+# Visibility:
+#   Public.
+# Inputs:
+#   - type (string, optional): One of `Name`, `Elo`, `Time`. If empty, the
+#     current `engines(sort)` is used.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reorders `engines(list)` and updates `engines(sort)`.
+#   - If the engine chooser dialog is open, repopulates its tree view.
+################################################################################
 proc ::enginelist::sort {{type ""}} {
     global engines
     
@@ -339,11 +401,19 @@ proc ::enginelist::sort {{type ""}} {
     lassign [$w.list.list children {}] firstItem
     $w.list.list selection set $firstItem
 }
+
 ################################################################################
-# ::enginelist::choose
-#   Select an engine from the Engine List.
-#   Returns an integer index into the engines(list) list variable.
-#   If no engine is selected, returns the empty string.
+# engine.singleclick_
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (widget, optional): Tree view widget.
+#   - x (int, optional): Pointer x coordinate.
+#   - y (int, optional): Pointer y coordinate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sorts the engine list when the user clicks on a column heading.
 ################################################################################
 proc engine.singleclick_ {{w} {x} {y}} {
     lassign [$w identify $x $y] what
@@ -352,6 +422,19 @@ proc engine.singleclick_ {{w} {x} {y}} {
         ::enginelist::sort [$w column $col -id]
     }
 }
+
+################################################################################
+# ::enginelist::choose
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - string|int: Engine index into `engines(list)`, or empty string if cancelled.
+# Side effects:
+#   - Creates and shows the engine chooser dialog and blocks via `tkwait`.
+#   - Updates `engines(selection)` and may call `::enginelist::sort`.
+################################################################################
 proc ::enginelist::choose {} {
     global engines
     set w .enginelist
@@ -413,12 +496,18 @@ proc ::enginelist::choose {} {
     return $engines(selection)
 }
 
+################################################################################
 # ::enginelist::setTime
-#   Sets the last-opened time of the engine specified by its
-#   index in the engines(list) list variable.
-#   The time should be in standard format (seconds since 1970)
-#   and defaults to the current time.
-#
+# Visibility:
+#   Public.
+# Inputs:
+#   - index (int): Index into `engines(list)`.
+#   - time (int, optional): Seconds since epoch; defaults to the current time.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the `Time` field of the engine entry in `engines(list)`.
+################################################################################
 proc ::enginelist::setTime {index {time -1}} {
     global engines
     set e [lindex $engines(list) $index]
@@ -429,9 +518,18 @@ proc ::enginelist::setTime {index {time -1}} {
 
 trace variable engines(newElo) w [list ::utils::validate::Integer [sc_info limit elo] 0]
 
+################################################################################
 # ::enginelist::delete
-#   Removes an engine from the list.
-#
+# Visibility:
+#   Public.
+# Inputs:
+#   - index (int): Index into `engines(list)`.
+# Returns:
+#   - bool: `true` if removed, `false` if cancelled, empty string on invalid index.
+# Side effects:
+#   - Prompts the user via `tk_messageBox`.
+#   - Modifies `engines(list)`, calls `::enginelist::sort` and `::enginelist::write`.
+################################################################################
 proc ::enginelist::delete {index} {
     global engines
     if {$index == ""  ||  $index < 0} { return }
@@ -450,10 +548,18 @@ proc ::enginelist::delete {index} {
     return false
 }
 
+################################################################################
 # ::enginelist::edit
-#   Opens a dialog for editing an existing engine list entry (if
-#   index >= 0), or adding a new entry (if index is -1).
-#
+# Visibility:
+#   Public.
+# Inputs:
+#   - index (int): Existing engine index, or -1 to create a new engine entry.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and shows the engine editor dialog (Tk).
+#   - Updates globals under `engines(...)` and, on commit, updates `engines(list)`.
+################################################################################
 proc ::enginelist::edit {index} {
     global engines
     if {$index == ""} { return }
@@ -620,8 +726,20 @@ proc ::enginelist::edit {index} {
     wm resizable $w 1 0
     catch {grab $w}
 }
-# ################################################################################
-#
+
+################################################################################
+# autoplay
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Advances through the game (main line and/or variations).
+#   - May start/stop engine analysis and add annotations.
+#   - Mutates multiple global state variables (e.g. `::autoplayMode`,
+#     `::annotateMode`, `::initialAnalysis`, `::wentOutOfBook`, and `analysis(...)`).
 ################################################################################
 proc autoplay {} {
     global autoplayDelay autoplayMode annotateMode analysis
@@ -755,11 +873,35 @@ proc autoplay {} {
     after $autoplayDelay autoplay
 }
 
+################################################################################
+# startAutoplay
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Enables autoplay and schedules the first `autoplay` tick.
+################################################################################
 proc startAutoplay { } {
     set ::autoplayMode 1
     after 100 autoplay
 }
 
+################################################################################
+# cancelAutoplay
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Disables autoplay/annotation mode.
+#   - Cancels pending `after` timer(s) and updates UI state if present.
+#   - Notifies the rest of the application via `::notify::PosChanged`.
+################################################################################
 proc cancelAutoplay {} {
     set ::autoplayMode 0
     set ::annotateMode 0
@@ -773,7 +915,19 @@ proc cancelAutoplay {} {
     ::notify::PosChanged
 }
 
-
+################################################################################
+# configAnnotation
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and shows the annotation configuration dialog (Tk).
+#   - May stop autoplay if it is currently active.
+#   - Adds validation traces to some configuration variables.
+################################################################################
 proc configAnnotation {} {
     global autoplayDelay tempdelay blunderThreshold
     
@@ -927,8 +1081,17 @@ proc configAnnotation {} {
     bind $w <Destroy> { focus . }
 }
 ################################################################################
-# Part of annotation process : will check the moves if they are in te book, and add a comment
-# when going out of it
+# bookAnnotation
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Loads and queries the configured opening book (`sc_book`).
+#   - Advances the game forward through book moves; may move back one ply.
+#   - Updates position comments and resets/updates some `analysis(...)` fields.
 ################################################################################
 proc bookAnnotation { {n 1} } {
     global analysis
@@ -976,9 +1139,20 @@ proc bookAnnotation { {n 1} } {
         set analysis(prevdepth$n)     $analysis(depth$n)
     }
 }
+
 ################################################################################
-# Will add **** to any position considered as a tactical shot
-# returns 1 if an exercise was marked, 0 if for some reason it was not (obvious move for example)
+# markExercise
+# Visibility:
+#   Internal.
+# Inputs:
+#   - prevscore (double): Previous evaluation score.
+#   - score (double): Current evaluation score.
+#   - nag (string): NAG to add for the current move (e.g. "!?").
+# Returns:
+#   - int (0|1): 1 if the position was marked as an exercise, otherwise 0.
+# Side effects:
+#   - Adds NAG(s) and may set/append comments on the current position.
+#   - Reads global config such as `::markTacticalExercises` and `::informant(...)`.
 ################################################################################
 proc markExercise { prevscore score nag} {
     
@@ -1053,8 +1227,20 @@ proc markExercise { prevscore score nag} {
     
     return 1
 }
+
 ################################################################################
-#
+# addAnnotation
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads engine analysis from `analysis(...)` and annotates the current game:
+#     adds comments, NAGs, and (optionally) engine line variations.
+#   - May push/pop variations, move forwards/backwards, and update UI.
+#   - Mutates `analysis(prev...)` fields and several global annotation settings.
 ################################################################################
 proc addAnnotation { {n 1} } {
     global analysis annotateMoves annotateBlunders annotateMode blunderThreshold scoreAllMoves autoplayDelay
@@ -1366,7 +1552,16 @@ array set ana_informantList { 0 "+=" 1 "+/-" 2 "+-" 3 "+--" }
 # Nags. Note the slight inconsistency for the "crushing" symbol (see game.cpp)
 array set ana_nagList  { 0 "=" 1 "+=" 2 "+/-" 3 "+-" 4 "+--" 5 "=" 6 "=+" 7 "-/+" 8 "-+" 9 "--+" }
 ################################################################################
-#
+# scoreToNag
+# Visibility:
+#   Public.
+# Inputs:
+#   - score (double): Evaluation score in pawns. Positive favours White.
+# Returns:
+#   - string: Informant-style evaluation symbol (NAG-like), e.g. "=", "+=", etc.
+# Side effects:
+#   - Reads global `::informant(...)` thresholds and the local maps
+#     `ana_informantList` / `ana_nagList`.
 ################################################################################
 proc scoreToNag {score} {
     global ana_informantList ana_nagList
@@ -1384,7 +1579,16 @@ proc scoreToNag {score} {
     return $ana_nagList($i)
 }
 ################################################################################
-# will append arg to current game Annotator tag
+# appendAnnotator
+# Visibility:
+#   Public.
+# Inputs:
+#   - s (string): Annotator identifier to add (e.g. engine name, mode description).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads/modifies the current game's "Extra" PGN tags via `sc_game tags ...`.
+#   - Creates an "Annotator" tag if absent; otherwise appends to it.
 ################################################################################
 proc appendAnnotator { s } {
     # Get the current collection of extra tags
@@ -1417,16 +1621,44 @@ proc appendAnnotator { s } {
     sc_game tags set -extra $nExtra
 }
 ################################################################################
-#
+# pushAnalysisData
+# Visibility:
+#   Public.
+# Inputs:
+#   - lastVar (int): Variation index to be restored on pop.
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - list: The updated `::stack` list (Tcl returns the result of `lappend`).
+# Side effects:
+#   - Pushes analysis state onto the global `::stack`.
+#   - Reads values from `analysis(...)`.
 ################################################################################
 proc pushAnalysisData { { lastVar } { n 1 } } {
     global analysis
-    lappend ::stack [list $analysis(prevscore$n) $analysis(prevscoremate$n) $analysis(prevdepth$n) \
-                          $analysis(score$n)     $analysis(scoremate$n)     $analysis(depth$n) \
-                          $analysis(prevmoves$n) $analysis(moves$n) $lastVar ]
+    lappend ::stack [list \
+        $analysis(prevscore$n) \
+        $analysis(prevscoremate$n) \
+        $analysis(prevdepth$n) \
+        $analysis(score$n) \
+        $analysis(scoremate$n) \
+        $analysis(depth$n) \
+        $analysis(prevmoves$n) \
+        $analysis(moves$n) \
+        $lastVar \
+    ]
 }
+
 ################################################################################
-#
+# popAnalysisData
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - int|string: The `lastVar` value from the restored stack frame; empty
+#     string if the stack is empty (also resets analysis state).
+# Side effects:
+#   - Pops from global `::stack` and restores multiple `analysis(...)` fields.
 ################################################################################
 proc popAnalysisData { { n 1 } } {
     global analysis
@@ -1458,7 +1690,18 @@ proc popAnalysisData { { n 1 } } {
 }
 
 ################################################################################
-#
+# addAnalysisVariation
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a single variation from the current engine PV.
+#   - Adds a score/depth comment at the start of the variation.
+#   - May move backwards/forwards if the current position is at variation end.
+#   - Notifies the UI via `::notify::PosChanged -pgn`.
 ################################################################################
 proc addAnalysisVariation {{n 1}} {
     global analysis
@@ -1507,7 +1750,18 @@ proc addAnalysisVariation {{n 1}} {
     ::notify::PosChanged -pgn
 }
 ################################################################################
-#
+# addAllVariations
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates one variation per PV line in `analysis(multiPV...)`.
+#   - Adds a score/depth comment at the start of each variation.
+#   - May move backwards/forwards if the current position is at variation end.
+#   - Notifies the UI via `::notify::PosChanged -pgn`.
 ################################################################################
 proc addAllVariations {{n 1}} {
     global analysis
@@ -1554,8 +1808,19 @@ proc addAllVariations {{n 1}} {
 
     ::notify::PosChanged -pgn
 }
+
 ################################################################################
-#
+# makeAnalysisMove
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+#   - comment (string, optional): Comment text to append to the newly added move.
+# Returns:
+#   - int (0|1): 1 if a move was added, 0 if no move was available.
+# Side effects:
+#   - Adds the engine's current best move to the game (SAN or UCI).
+#   - May append to the current position comment.
 ################################################################################
 proc makeAnalysisMove {{n 1} {comment ""}} {
     regexp {[^[:alpha:]]*(.*?)( .*|$)} $::analysis(moves$n) -> move
@@ -1575,13 +1840,20 @@ proc makeAnalysisMove {{n 1} {comment ""}} {
 
     return 1
 }
-################################################################################
-#
-################################################################################
 
-# destroyAnalysisWin:
-#   Closes an engine, because its analysis window is being destroyed.
-#
+################################################################################
+# destroyAnalysisWin
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Stops the engine process and closes its pipes/logs.
+#   - Cancels scheduled timers and destroys/updates related UI state.
+#   - Resets engine state via `resetEngine`.
+################################################################################
 proc destroyAnalysisWin {{n 1}} {
     
     global windowsOS analysis annotateMode
@@ -1636,20 +1908,37 @@ proc destroyAnalysisWin {{n 1}} {
     set ::analysisWin$n 0
 }
 
-# sendToEngine:
-#   Send a command to a running analysis engine.
-#
+################################################################################
+# sendToEngine
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int): Analysis engine slot (typically 1 or 2).
+#   - text (string): Command line to send to the engine.
+# Returns:
+#   - int: Result of `catch` (0 on success, non-zero on error).
+# Side effects:
+#   - Writes to the engine pipe and logs the communication.
+################################################################################
 proc sendToEngine {n text} {
     # puts " -------- Scid>> $text"
     logEngine $n "Scid  : $text"
     catch {puts $::analysis(pipe$n) $text}
 }
 
-# sendMoveToEngine:
-#   Sends a move to a running analysis engine, using sendToEngine.
-#   If the engine has indicated (with "usermove=1" on a "feature" line)
-#   that it wants it, send with "usermove " before the move.
-#
+################################################################################
+# sendMoveToEngine
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int): Analysis engine slot.
+#   - move (string): Move in coordinate notation (e.g. "e2e4" / "e7e8Q").
+# Returns:
+#   - None.
+# Side effects:
+#   - Sends the move to the engine (UCI or WinBoard protocol).
+#   - Reads state from `analysis(...)` and the current position (`sc_pos fen`).
+################################################################################
 proc sendMoveToEngine {n move} {
     # Convert "e7e8Q" into "e7e8q" since that is the XBoard/WinBoard
     # standard for sending moves in coordinate notation:
@@ -1666,9 +1955,19 @@ proc sendMoveToEngine {n move} {
     }
 }
 
-# logEngine:
-#   Log Scid-Engine communication.
-#
+################################################################################
+# logEngine
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int): Analysis engine slot.
+#   - text (string): Text line to log.
+# Returns:
+#   - None.
+# Side effects:
+#   - May write to stdout and/or to the engine log file.
+#   - Updates `analysis(logCount$n)` and may close the log on size limit.
+################################################################################
 proc logEngine {n text} {
     global analysis
     
@@ -1692,18 +1991,35 @@ proc logEngine {n text} {
     }
 }
 
-# logEngineNote:
-#   Add a note to the engine communication log file.
-#
+################################################################################
+# logEngineNote
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int): Analysis engine slot.
+#   - text (string): Note content (without the "NOTE  :" prefix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Delegates to `logEngine`.
+################################################################################
 proc logEngineNote {n text} {
     logEngine $n "NOTE  : $text"
 }
 
 ################################################################################
-#
-# makeAnalysisWin:
-#   Produces the engine list dialog box for choosing an engine,
-#   then opens an analysis window and starts the engine.
+# makeAnalysisWin
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+#   - index (int, optional): Engine index in `engines(list)`; -1 prompts the user.
+#   - autostart (bool, optional): Whether to start analysis immediately (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/destroys analysis window widgets.
+#   - Starts/stops engine processes and initialises analysis state.
 ################################################################################
 proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     global analysisWin$n font_Analysis analysisCommand analysis
@@ -1923,6 +2239,22 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     
 }
 
+################################################################################
+# onUciOk
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot.
+#   - multiPv_spin (widget, optional): Tk spinbox for MultiPV.
+#   - autostart (bool, optional): Whether to start analysis once the engine is ready.
+#   - uci_options (list, optional): Initial UCI options to apply (as provided by config).
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures the MultiPV spinbox range, initialises `::uciOptions$n`,
+#     and sends UCI options to the engine.
+#   - May schedule a `startEngineAnalysis` via `::uci::whenReady`.
+################################################################################
 proc onUciOk {{n} {multiPv_spin} {autostart} {uci_options}} {
     foreach opt $::analysis(uciOptions$n) {
         if { [lindex $opt 0] == "MultiPV" } {
@@ -1944,7 +2276,16 @@ proc onUciOk {{n} {multiPv_spin} {autostart} {uci_options}} {
 
 
 ################################################################################
-#
+# toggleMovesDisplay
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Toggles whether PV moves are displayed in the history widget and refreshes
+#     the analysis text.
 ################################################################################
 proc toggleMovesDisplay { {n 1} } {
     set ::analysis(movesDisplay$n) [expr 1 - $::analysis(movesDisplay$n)]
@@ -1956,7 +2297,16 @@ proc toggleMovesDisplay { {n 1} } {
 }
 
 ################################################################################
-# will truncate PV list if necessary and tell the engine to send N best lines
+# changePVSize
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Adjusts stored MultiPV lines in `analysis(multiPV...)` / `analysis(multiPVraw...)`.
+#   - Updates the history widget and sends the engine an updated MultiPV setting.
 ################################################################################
 proc changePVSize { n } {
     global analysis
@@ -1981,8 +2331,16 @@ proc changePVSize { n } {
 }
 ################################################################################
 # setAnalysisPriority
-#   Sets the priority class (in Windows) or nice level (in Unix)
-#   of a running analysis engine.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (widget): Analysis window to update (expects `$w.b1.priority`).
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Attempts to adjust engine process priority via `sc_info priority`.
+#   - Updates the priority button state and image.
 ################################################################################
 proc setAnalysisPriority {w n} {
     global analysis
@@ -2010,9 +2368,15 @@ proc setAnalysisPriority {w n} {
  }
 ################################################################################
 # checkAnalysisStarted
-#   Called a short time after an analysis engine was started
-#   to send it commands if Scid has not seen any output from
-#   it yet.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sends initial protocol commands if the engine has not produced output.
+#   - Writes `analysis(seen$n)` and logs a note via `logEngineNote`.
 ################################################################################
 proc checkAnalysisStarted {n} {
     global analysis
@@ -2043,9 +2407,17 @@ proc checkAnalysisStarted {n} {
     }
 }
 ################################################################################
-# with wb engines, we don't know when the startup phase is over and when the
-# engine is ready : so wait for the end of initial output and take some margin
-# to issue an analyze command
+# initialAnalysisStart
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Polls for a quiet period in WinBoard engine output and then schedules
+#     `startEngineAnalysis`.
+#   - Uses `after` and reads `analysis(processInput$n)`.
 ################################################################################
 proc initialAnalysisStart {n} {
     global analysis
@@ -2064,9 +2436,20 @@ proc initialAnalysisStart {n} {
     after 200 startEngineAnalysis $n 1
 }
 ################################################################################
-# processAnalysisInput (only for win/xboard engines)
-#   Called from a fileevent whenever there is a line of input
-#   from an analysis engine waiting to be processed.
+# processAnalysisInput
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads a line from the engine pipe and updates `analysis(...)` state.
+#   - Sends protocol initialisation commands when appropriate.
+#   - Updates analysis UI via `updateAnalysisText` and may call WinBoard detection.
+# Notes:
+#   - This handler is for WinBoard/XBoard engines; UCI engines use a separate
+#     input processor.
 ################################################################################
 proc processAnalysisInput {{n 1}} {
     global analysis
@@ -2197,7 +2580,16 @@ proc processAnalysisInput {{n 1}} {
     
 }
 ################################################################################
-# returns 0 if engine died abruptly or 1 otherwise
+# checkEngineIsAlive
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - int (0|1): 0 if the engine pipe reached EOF / closed, otherwise 1.
+# Side effects:
+#   - May close the engine pipe, log notes, show a message box, and destroy
+#     the analysis window.
 ################################################################################
 proc checkEngineIsAlive { {n 1} } {
     global analysis
@@ -2229,10 +2621,15 @@ proc checkEngineIsAlive { {n 1} } {
     return 1
 }
 ################################################################################
-# formatAnalysisMoves:
-#   Given the text at the end of a line of analysis data from an engine,
-#   this proc tries to strip out some extra stuff engines add to make
-#   the text more compatible for adding as a variation.
+# formatAnalysisMoves
+# Visibility:
+#   Public.
+# Inputs:
+#   - text (string): Raw PV text from an engine.
+# Returns:
+#   - string: Normalised PV text suitable for inserting as a variation.
+# Side effects:
+#   - None.
 ################################################################################
 proc formatAnalysisMoves {text} {
     # Yace puts ".", "t", "t-" or "t+" at the start of its moves text,
@@ -2257,7 +2654,16 @@ proc formatAnalysisMoves {text} {
 set finishGameMode 0
 
 ################################################################################
-# will ask engine(s) to play the game till the end
+# toggleFinishGame
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Toggles "finish game" mode, starts/stops engine(s), and updates UI state.
+#   - Creates and shows the configuration dialog for UCI engines.
 ################################################################################
 proc toggleFinishGame { { n 1 } } {
 	global analysis
@@ -2467,7 +2873,16 @@ proc toggleFinishGame { { n 1 } } {
 	if {$::finishGameMode} { toggleFinishGame }
 }
 ################################################################################
-#
+# autoplayFinishGame
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Invokes the engine move action periodically until the game ends.
+#   - Stops finish-game mode when mate is reached.
 ################################################################################
 proc autoplayFinishGame { {n 1} } {
     if {!$::finishGameMode || ![winfo exists .analysisWin$n]} {return}
@@ -2480,7 +2895,17 @@ proc autoplayFinishGame { {n 1} } {
 }
 
 ################################################################################
-#
+# startEngineAnalysis
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+#   - force (bool, optional): Force start even in situations where it is usually
+#     blocked (default 0).
+# Returns:
+#   - None.
+# Side effects:
+#   - Starts analyse mode, updates UI button state, and enables lock controls.
 ################################################################################
 proc startEngineAnalysis { {n 1} {force 0} } {
     global analysis
@@ -2497,7 +2922,15 @@ proc startEngineAnalysis { {n 1} {force 0} } {
 }
 
 ################################################################################
-#
+# stopEngineAnalysis
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Stops analyse mode, updates UI button state, and disables lock controls.
 ################################################################################
 proc stopEngineAnalysis { {n 1} } {
     global analysis
@@ -2516,7 +2949,16 @@ proc stopEngineAnalysis { {n 1} } {
 }
 
 ################################################################################
-#
+# toggleEngineAnalysis
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+#   - force (bool, optional): Force toggle even while annotating/finishing (default 0).
+# Returns:
+#   - None.
+# Side effects:
+#   - Starts or stops engine analysis depending on current state.
 ################################################################################
 proc toggleEngineAnalysis { { n 1 } { force 0 } } {
     global analysis
@@ -2534,8 +2976,17 @@ proc toggleEngineAnalysis { { n 1 } { force 0 } } {
     }
 }
 ################################################################################
-# startAnalyzeMode:
-#   Put the engine in analyze mode.
+# startAnalyzeMode
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+#   - force (bool, optional): Start even if already in analyse mode (default 0).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `analysis(analyzeMode$n)` and sends protocol commands to the engine.
+#   - Triggers `updateAnalysis` to refresh analysis state.
 ################################################################################
 proc startAnalyzeMode {{n 1} {force 0}} {
     global analysis
@@ -2558,6 +3009,15 @@ proc startAnalyzeMode {{n 1} {force 0}} {
 }
 ################################################################################
 # stopAnalyzeMode
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Sends stop/exit to the engine and clears `analysis(fen$n)`.
+#   - Updates `analysis(analyzeMode$n)`.
 ################################################################################
 proc stopAnalyzeMode { {n 1} } {
     global analysis
@@ -2572,7 +3032,16 @@ proc stopAnalyzeMode { {n 1} } {
 }
 ################################################################################
 # toggleLockEngine
-#   Toggle whether engine is locked to current position.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Toggles lock mode for the engine and updates UI widget states.
+#   - Captures the current move number/side when locking.
+#   - Triggers `updateAnalysis`.
 ################################################################################
 proc toggleLockEngine {n} {
     global analysis
@@ -2606,7 +3075,15 @@ proc toggleLockEngine {n} {
 }
 ################################################################################
 # updateAnalysisText
-#   Update the text in an analysis window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates analysis window widgets and the evaluation bar.
+#   - Reads many fields from `analysis(...)` and may format MultiPV output.
 ################################################################################
 proc updateAnalysisText {{n 1}} {
     global analysis
@@ -2759,8 +3236,17 @@ proc updateAnalysisText {{n 1}} {
     updateAnalysisBoard $n $analysis(moves$n)
 }
 ################################################################################
-# args = score, pv
-# returns M X if mate detected (# or ++) or original score
+# scoreToMate
+# Visibility:
+#   Public.
+# Inputs:
+#   - score (double): Evaluation score in pawns (used when not mate).
+#   - pv (list|string): PV moves; mate detection uses a trailing `#` or `++`.
+#   - n (int): Analysis engine slot (for lock state).
+# Returns:
+#   - string: "M<sign><plies>" when mate is detected, otherwise a formatted score.
+# Side effects:
+#   - Reads `analysis(lockEngine$n)` and queries `sc_pos side` for sign logic.
 ################################################################################
 proc scoreToMate { score pv n } {
     
@@ -2799,8 +3285,17 @@ proc scoreToMate { score pv n } {
     return $ret
 }
 ################################################################################
-# returns the pv with move numbers added
-# ::pgn::moveNumberSpaces controls space between number and move
+# addMoveNumbers
+# Visibility:
+#   Public.
+# Inputs:
+#   - e (int): Analysis engine slot (used for lock state).
+#   - pv (list): List of SAN moves (already translated if desired).
+# Returns:
+#   - string: PV with move numbers inserted, respecting `::pgn::moveNumberSpaces`.
+# Side effects:
+#   - Reads `analysis(lockEngine$e)`; if locked, uses `analysis(lockN$e)` and
+#     `analysis(lockSide$e)`, otherwise queries `sc_pos`.
 ################################################################################
 proc addMoveNumbers { e pv } {
     global analysis
@@ -2839,7 +3334,15 @@ proc addMoveNumbers { e pv } {
 }
 ################################################################################
 # toggleAnalysisBoard
-#   Toggle whether the small analysis board is shown.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows/hides the analysis board widget and updates window geometry.
+#   - Toggles the evaluation bar.
 ################################################################################
 proc toggleAnalysisBoard {n} {
     global analysis
@@ -2866,7 +3369,15 @@ proc toggleAnalysisBoard {n} {
 }
 ################################################################################
 # toggleEngineInfo
-#   Toggle whether engine info are shown.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows/hides additional engine info in the analysis window.
+#   - Triggers `updateAnalysisText`.
 ################################################################################
 proc toggleEngineInfo {n} {
     global analysis
@@ -2882,13 +3393,18 @@ proc toggleEngineInfo {n} {
     updateAnalysisText $n
 }
 ################################################################################
-#
-################################################################################
 # updateAnalysisBoard
-#   Update the small analysis board in the analysis window,
-#   showing the position after making the specified moves
-#   from the current main board position.
-#
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int): Analysis engine slot.
+#   - moves (string|list): Moves to apply from the current position.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the analysis-board widget to show the PV continuation.
+#   - Uses a temporary game copy (`sc_game push/pop`) and applies moves.
+################################################################################
 proc updateAnalysisBoard {n moves} {
     global analysis
     # PG : this should not be commented
@@ -2911,8 +3427,16 @@ proc updateAnalysisBoard {n moves} {
 
 ################################################################################
 # updateAnalysis
-#   Update an analysis window by sending the current board
-#   to the engine.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Sends the current position/move list to the engine and (re)starts analysis.
+#   - Schedules deferred updates via `after` (non-UCI engines).
+#   - Updates multiple `analysis(...)` fields (e.g. `fen`, `movelist`, `nodes`).
 ################################################################################
 proc updateAnalysis {{n 1}} {
     global analysis
@@ -3070,8 +3594,17 @@ proc updateAnalysis {{n 1}} {
         }
     }
 }
+
 ################################################################################
-#
+# setAutomoveTime
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - int (0|1): 1 if the user confirmed, 0 if cancelled.
+# Side effects:
+#   - Opens a Tk dialog to configure `analysis(automoveTime$n)` (milliseconds).
 ################################################################################
 
 set temptime 0
@@ -3129,6 +3662,19 @@ proc setAutomoveTime {{n 1}} {
     return 1
 }
 
+################################################################################
+# toggleAutomove
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Enables/disables automove mode and updates the UI toggle state.
+#   - May prompt for a move time via `setAutomoveTime`.
+#   - Schedules `automove` ticks via `after`.
+################################################################################
 proc toggleAutomove {{n 1}} {
     global analysis
     .analysisWin1.b1.automove state !pressed
@@ -3146,6 +3692,17 @@ proc toggleAutomove {{n 1}} {
     }
 }
 
+################################################################################
+# cancelAutomove
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels pending automove timers and disables automove mode.
+################################################################################
 proc cancelAutomove {{n 1}} {
     global analysis
     set analysis(automove$n) 0
@@ -3153,6 +3710,17 @@ proc cancelAutomove {{n 1}} {
     after cancel "automove_go $n"
 }
 
+################################################################################
+# automove
+# Visibility:
+#   Public.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules a move after `analysis(automoveTime$n)` and updates state flags.
+################################################################################
 proc automove {{n 1}} {
     global analysis autoplayDelay
     if {! $analysis(automove$n)} { return }
@@ -3161,6 +3729,18 @@ proc automove {{n 1}} {
     after $analysis(automoveTime$n) "automove_go $n"
 }
 
+################################################################################
+# automove_go
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (int, optional): Analysis engine slot (default 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Attempts to add the current best move and updates the board/training mode.
+#   - Reschedules `automove` if no move is available yet.
+################################################################################
 proc automove_go {{n 1}} {
     global analysis
     if {$analysis(automove$n)} {
@@ -3175,8 +3755,17 @@ proc automove_go {{n 1}} {
     }
 }
 ################################################################################
-# If UCI engine, add move through a dedicated function in uci namespace
-# returns the error caught by catch
+# sc_move_add
+# Visibility:
+#   Public.
+# Inputs:
+#   - moves (string|list): Moves to add (SAN or UCI, depending on engine type).
+#   - n (int): Analysis engine slot.
+# Returns:
+#   - int: Error code from `catch` for non-UCI engines; UCI path returns whatever
+#     `::uci::sc_move_add` returns.
+# Side effects:
+#   - Adds moves to the current game via `sc_move addSan` (non-UCI) or UCI helper.
 ################################################################################
 proc sc_move_add { moves n } {
     if { $::analysis(uci$n) } {
@@ -3186,7 +3775,15 @@ proc sc_move_add { moves n } {
     }
 }
 ################################################################################
-# append scid directory if path starts with .
+# toAbsPath
+# Visibility:
+#   Public.
+# Inputs:
+#   - path (string): Path that may begin with `.`.
+# Returns:
+#   - string: Path with a leading `.` replaced by the executable directory.
+# Side effects:
+#   - None.
 ################################################################################
 proc toAbsPath { path } {
     set new $path
@@ -3196,9 +3793,6 @@ proc toAbsPath { path } {
     }
     return $new
 }
-################################################################################
-#
-################################################################################
 
 ###
 ### End of file: analysis.tcl
