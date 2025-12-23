@@ -58,7 +58,18 @@ namespace eval fics {
   set sortPlayersColumn 4 ;# sort blitz rating
   set sortPlayersOrder "-decreasing" ;# sort blitz rating
   ################################################################################
-  #
+  # config
+  #   Opens the FICS configuration/login dialog (or focuses an existing window).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates and configures the `.ficsConfig` Tk window and widgets.
+  #   - May resolve `::fics::server_ip` via `getIP` when unset ("0.0.0.0").
+  #   - Updates `::fics::logged` and other `::fics::*` configuration variables.
   ################################################################################
   proc config {} {
     variable logged
@@ -172,7 +183,21 @@ namespace eval fics {
 
   }
   ################################################################################
-  #
+  # getIP
+  #   Resolves the current IP address for `::fics::server` (used by Timeseal).
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Opens a socket to `::fics::server`/`::fics::port_fics`.
+  #   - Sets `::fics::server_ip` and closes the socket on success.
+  #   - Disables the refresh button in `.ficsConfig` (it is only re-enabled on
+  #     the success path).
+  #   - Shows a `tk_messageBox` and returns early on network/proxy failures (in
+  #     which case the socket may remain open).
   ################################################################################
   proc getIP {} {
     set b .ficsConfig.conf.bRefresh
@@ -206,7 +231,16 @@ namespace eval fics {
     $b configure -state normal
   }
   ################################################################################
-  #
+  # setProfileVars
+  #   Loads per-login seek preferences into `::fics::findopponent(...)`.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - login (string): Login key used to read `::fics::profileVars(...)`.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Reads `::fics::profileVars(...)` and writes `::fics::findopponent(...)`.
   ################################################################################
   proc setProfileVars { login } {
     global  ::fics::profileVars
@@ -224,7 +258,17 @@ namespace eval fics {
     set ::fics::findopponent(formula) $profileVars(formula_$login)
   }
   ################################################################################
-  #
+  # syncProfileVars
+  #   Persists the current seek preferences back into `::fics::profileVars(...)`.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - login (string): Login key under which preferences are stored.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Writes `::fics::profileVars(...)` from `::fics::findopponent(...)`.
+  #   - When logged in as a guest (`isGuestLogin`), stores under the "guest" key.
   ################################################################################
   proc syncProfileVars { login } {
     global  ::fics::profileVars
@@ -244,6 +288,17 @@ namespace eval fics {
     set profileVars(formula_$login) $::fics::findopponent(formula)
   }
   ################################################################################
+  # storeTime
+  #   Stores a time comment for the current side-to-move via `::gameclock`.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `sc_pos side`.
+  #   - Calls `::gameclock::storeTimeComment` with side id 2 for white, 1 for black.
   #
   ################################################################################
   proc storeTime { } {
@@ -251,6 +306,19 @@ namespace eval fics {
       if { [sc_pos side] == "white" } {set side 2 }
       ::gameclock::storeTimeComment $side
   }
+  ################################################################################
+  # arrangeClocks
+  #   Packs the two game clocks to match the current board orientation.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Re-packs `.fics.f.bottom.left.clock1` and `.fics.f.bottom.left.clock2`.
+  #   - Queries `::board::isFlipped .main.board`.
+  ################################################################################
   proc arrangeClocks { } {
       set w .fics.f.bottom.left
       pack forget $w.clock1 $w.clock2
@@ -261,7 +329,21 @@ namespace eval fics {
       }
   }
   ################################################################################
-  #
+  # gamespopupmenu
+  #   Builds the context menu for the games list (right-click / MB3).
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - w (widget): The games `ttk::treeview` widget.
+  #   - x, y (int): Pointer coordinates relative to `w`.
+  #   - abs_x, abs_y (int): Pointer coordinates in screen space for `tk_popup`.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates selection in `.fics.f.top.fgames.glist` and sets `::fics::gameSelection`.
+  #   - Populates and displays the `$w.menu` popup menu.
+  #   - Configures menu items that will send observe/unobserve/finger commands via
+  #     `::fics::writechan` when invoked.
   ################################################################################
   proc gamespopupmenu {{w} {x} {y} {abs_x} {abs_y} } {
       lassign [$w identify $x $y] what
@@ -290,7 +372,21 @@ namespace eval fics {
       tk_popup $w.menu $abs_x $abs_y
   }
   ################################################################################
-  #
+  # playerpopupmenu
+  #   Builds the context menu for the players list (right-click / MB3).
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - w (widget): The players `ttk::treeview` widget.
+  #   - x, y (int): Pointer coordinates relative to `w`.
+  #   - abs_x, abs_y (int): Pointer coordinates in screen space for `tk_popup`.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates selection in `.fics.f.top.fplayer.plist` and sets `::fics::playerSelection`.
+  #   - Populates and displays the `$w.menu` popup menu.
+  #   - Configures menu items that will send observe/match/finger commands via
+  #     `::fics::writechan` when invoked.
   ################################################################################
   proc playerpopupmenu {{w} {x} {y} {abs_x} {abs_y} } {
       lassign [$w identify $x $y] what
@@ -318,7 +414,22 @@ namespace eval fics {
       tk_popup $w.menu $abs_x $abs_y
   }
   ################################################################################
-  #
+  # connect
+  #   Connects to the configured server and opens the main FICS window.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - login (string): User login name (or "guest").
+  #   - passwd (string): Password for non-guest logins.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Builds and shows `.fics` and its widgets (console, offers graph, lists).
+  #   - Optionally launches Timeseal (PID currently assigned to a local variable
+  #     `timeseal_pid`).
+  #   - Opens and configures `::fics::sockchan`, installs `fileevent` readable handler.
+  #   - Updates a variety of `::fics::*` state variables and UI bindings.
+  #   - Shows `tk_messageBox` and returns early on configuration/network errors.
   ################################################################################
   proc connect { login passwd } {
     global ::fics::sockchan ::fics::seeklist ::fics::width ::fics::height ::fics::off
@@ -588,7 +699,19 @@ namespace eval fics {
     setState disabled
   }
   ################################################################################
-  #
+  # cmd
+  #   Sends the current console command line to FICS.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Reads and clears `.fics.f.top.fconsole.f2.cmd`.
+  #   - Calls `writechan` (with echo) for non-empty commands.
+  #   - Appends to `::fics::history` and updates `::fics::history_pos`.
+  #   - If the command is "quit", closes the FICS window via `::fics::close`.
   ################################################################################
   proc cmd {} {
     set l [.fics.f.top.fconsole.f2.cmd get]
@@ -604,7 +727,16 @@ namespace eval fics {
     set ::fics::history_pos [llength $::fics::history]
   }
   ################################################################################
-  #
+  # cmdHistory
+  #   Navigates command history for the console entry.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - action (string): "up" or "down".
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `.fics.f.top.fconsole.f2.cmd` and `::fics::history_pos`.
   ################################################################################
   proc cmdHistory { action } {
     set t .fics.f.top.fconsole.f2.cmd
@@ -621,7 +753,18 @@ namespace eval fics {
     }
   }
   ################################################################################
-  #
+  # findOpponent
+  #   Opens the seek configuration dialog and optionally issues a "seek" command.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates and configures `.ficsfindopp`.
+  #   - Reads/writes `::fics::findopponent(...)` and `::fics::profileVars(...)`.
+  #   - Sends a "seek ..." command via `::fics::writechan` on confirmation.
   ################################################################################
   proc findOpponent {} {
     set w .ficsfindopp
@@ -683,7 +826,17 @@ namespace eval fics {
     packdlgbuttons $w.cancel $w.seek
   }
   ################################################################################
-  #
+  # readchan
+  #   Socket readable event handler; reads incoming data and dispatches lines.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Reads from `::fics::sockchan` and calls `readparse` per line.
+  #   - On EOF, removes the `fileevent`, shows a `tk_messageBox`, and closes.
   ################################################################################
   proc readchan {} {
     variable logged
@@ -709,8 +862,16 @@ namespace eval fics {
   }
 
   ################################################################################
-  # Appends an array to soughtlist if the parameter is correct
-  # returns 0 if the line is not parsed and so it is still pending for use
+  # parseSoughtLine
+  #   Parses a "sought" listing line and appends it to `::fics::soughtlist`.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - l (string|list): FICS "sought" output line (may include "fics% " prompt).
+  # Returns:
+  #   - 1 if the line was parsed and appended; otherwise 0.
+  # Side effects:
+  #   - Appends an array serialisation to `::fics::soughtlist`.
   ################################################################################
   proc parseSoughtLine { l } {
     global ::fics::offers_minelo ::fics::offers_maxelo ::fics::offers_mintime ::fics::offers_maxtime
@@ -757,8 +918,16 @@ namespace eval fics {
     return 1
   }
   ################################################################################
-  # Appends an array to gamesList if the parameter is correct
-  # returns 0 if the line is not parsed and so it is still pending for use
+  # parseGamesLine
+  #   Parses a "games" listing line and appends it to `::fics::gamesList`.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - l (string|list): FICS "games" output line (may include "fics% " prompt).
+  # Returns:
+  #   - 1 if the line was parsed and appended; otherwise 0.
+  # Side effects:
+  #   - Appends a structured list row to `::fics::gamesList`.
   ################################################################################
   proc parseGamesLine { l } {
     # it seems that the first offer starts with a prompt
@@ -777,8 +946,17 @@ namespace eval fics {
     return $ret
   }
   ################################################################################
-  # Appends an array to playerList if the parameter is correct
-  # returns 0 if the line is not parsed and so it is still pending for use
+  # parseWhoLine
+  #   Parses a "who" listing line and appends it to `::fics::playerList`.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - l (string): A single line from the `who` output (may include "fics% " prompt).
+  # Returns:
+  #   - 1 if the line was handled (including ignorable frame/header lines).
+  #   - 0 if the line is not recognised as a `who` row.
+  # Side effects:
+  #   - Appends a structured list row to `::fics::playerList` on parsed player rows.
   ################################################################################
   proc parseWhoLine { l } {
     # it seems that the first offer starts with a prompt
@@ -820,7 +998,20 @@ namespace eval fics {
     return 1
   }
   ################################################################################
-  #
+  # readparse
+  #   Parses a single incoming line and applies the relevant UI/game updates.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - line (string): One line read from the socket (may be empty).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::fics::*` state (login state, list fetch flags, selections, etc.).
+  #   - Routes protocol messages to parsers (`parseSeek`, `removeSeek`, `parseStyle12`).
+  #   - Updates the console text widget via `updateConsole`.
+  #   - May create/update games in Scid (`sc_game`, `sc_move`, `sc_base`, tags).
+  #   - May show confirmation dialogs and respond via `writechan`.
   ################################################################################
   proc readparse {line} {
     variable logged
@@ -1112,7 +1303,17 @@ namespace eval fics {
 
   }
   ################################################################################
-  #  Set the state of user interface related to connection state
+  # setState
+  #   Sets the connection-related enabled/disabled state of the FICS UI.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - state (string): Widget state ("normal" or "disabled").
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Enables/disables buttons and entry widgets under `.fics`.
+  #   - Shows/hides the notebook tabs for offers/games/players.
   ################################################################################
   proc setState { state } {
     set w .fics
@@ -1138,7 +1339,16 @@ namespace eval fics {
     }
   }
   ################################################################################
-  #
+  # updateConsole
+  #   Appends a line to the console text widget, with basic tagging and autoscroll.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - line (string): Line to display.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Inserts into `.fics.f.top.fconsole.f1.console` and may scroll to the end.
   ################################################################################
   proc updateConsole {line} {
     set t .fics.f.top.fconsole.f1.console
@@ -1164,7 +1374,17 @@ namespace eval fics {
 
   }
   ################################################################################
-  #
+  # removeSeek
+  #   Removes one or more seeks from `::fics::seeklist` and (optionally) the graph.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - line (string|list): The "<sr> ..." line (iterated as a Tcl list).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Mutates `::fics::seeklist`.
+  #   - When `::fics::graphon` is true, deletes canvas items from offers graph.
   ################################################################################
   proc removeSeek {line} {
     global ::fics::seeklist
@@ -1196,7 +1416,19 @@ namespace eval fics {
     }
   }
   ################################################################################
-  #
+  # parseStyle12
+  #   Parses a FICS "<12>" (style 12) position update and synchronises Scid state.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - line (list): Tokenised style-12 message (`readparse` passes the raw line).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::fics::playing` / `::fics::observedGame` and updates clocks.
+  #   - Attempts to apply the last move locally; otherwise resets/reconstructs a game.
+  #   - May create a new Scid game, set tags, and issue "finger"/"moves" requests.
+  #   - Calls `::fics::makePremove` at the end to execute any queued premove.
   ################################################################################
   proc parseStyle12 {line} {
     set color [lindex $line 9]
@@ -1352,7 +1584,16 @@ namespace eval fics {
     ::fics::makePremove
   }
   ################################################################################
-  #
+  # parseSeek
+  #   Parses an "<s>" seek message and appends it to `::fics::seeklist`.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - line (string|list): The seek message (iterated over as a list of tokens).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Appends an array serialisation to `::fics::seeklist`.
   ################################################################################
   proc parseSeek {line} {
     array set seekelt {}
@@ -1373,7 +1614,18 @@ namespace eval fics {
     lappend ::fics::seeklist [array get seekelt]
   }
   ################################################################################
-  #
+  # updateOffers
+  #   Refreshes the offers list by issuing "sought" and scheduling the next refresh.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sets `::fics::sought` and clears `::fics::soughtlist`.
+  #   - Calls `writechan "sought"` and waits via `vwaitTimed`.
+  #   - Schedules a follow-up refresh via `after`.
   ################################################################################
   proc updateOffers { } {
     set ::fics::sought 1
@@ -1383,7 +1635,18 @@ namespace eval fics {
     after 3000 ::fics::updateOffers
   }
   ################################################################################
-  #
+  # updateGames
+  #   Refreshes the games list by issuing "games" when the games tab is visible.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sets `::fics::games` and clears `::fics::gamesList`.
+  #   - Calls `writechan "games"` and waits via `vwaitTimed`.
+  #   - Schedules a follow-up refresh via `after`.
   ################################################################################
   proc updateGames { } {
     if { ![winfo exists .fics] ||
@@ -1395,7 +1658,18 @@ namespace eval fics {
     after 20000 ::fics::updateGames
   }
   ################################################################################
-  #
+  # updatePlayer
+  #   Refreshes the players list by issuing "who" when the players tab is visible.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sets `::fics::player` and clears `::fics::playerList`.
+  #   - Calls `writechan "who ..."` and waits via `vwaitTimed`.
+  #   - Schedules a follow-up refresh via `after`.
   ################################################################################
   proc updatePlayer { } {
     if { ![winfo exists .fics] ||
@@ -1412,7 +1686,17 @@ namespace eval fics {
     after 40000 ::fics::updatePlayer
   }
   ################################################################################
-  #
+  # configureCanvas
+  #   Updates offers canvas dimensions and triggers a redraw.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::fics::width` / `::fics::height`, configures the canvas, and
+  #     calls `displayOffers`.
   ################################################################################
   proc configureCanvas {} {
     set w .fics.f.top.foffers
@@ -1422,7 +1706,17 @@ namespace eval fics {
     displayOffers
   }
   ################################################################################
-  #
+  # displayOffers
+  #   Renders the offers graph on the offers canvas.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Cancels `::fics::updateOffers` and redraws `.fics.f.top.foffers.c`.
+  #   - Binds hover/click handlers for each offer point to show status and play.
   ################################################################################
   proc displayOffers { } {
     global ::fics::width ::fics::height ::fics::off \
@@ -1498,7 +1792,18 @@ namespace eval fics {
 
   }
   ################################################################################
-  #
+  # clickGames
+  #   Handles mouse clicks in the games list (primarily heading clicks for sorting).
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - w (widget): Games `ttk::treeview`.
+  #   - x, y (int): Pointer coordinates relative to `w`.
+  #   - layout (list): Per-column sort direction (or "nosort").
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - May call `sortGames` and `displayGames`.
   ################################################################################
   proc clickGames {{w} {x} {y} {layout}} {
       lassign [$w identify $x $y] what
@@ -1513,12 +1818,37 @@ namespace eval fics {
       }
   }
 
+  ################################################################################
+  # sortGames
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - column (int): Column index to sort by.
+  #   - sort (string): `lsort` order flag (e.g. "-increasing", "-decreasing").
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::fics::sortGamesColumn`, `::fics::sortGamesOrder`, and sorts
+  #     `::fics::gamesList` in place.
+  ################################################################################
   proc sortGames { column sort } {
       set ::fics::sortGamesColumn $column
       set ::fics::sortGamesOrder $sort
       set ::fics::gamesList [lsort -dictionary $::fics::sortGamesOrder -index $::fics::sortGamesColumn $::fics::gamesList]
   }
 
+  ################################################################################
+  # displayGames
+  #   Populates the games treeview from `::fics::gamesList`, applying filters.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Mutates `.fics.f.top.fgames.glist` contents and selection.
+  ################################################################################
   proc displayGames { } {
       set w .fics.f.top.fgames
       set i 1
@@ -1559,7 +1889,18 @@ namespace eval fics {
       }
   }
   ################################################################################
-  #
+  # clickPlayers
+  #   Handles mouse clicks in the players list (primarily heading clicks for sorting).
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - w (widget): Players `ttk::treeview`.
+  #   - x, y (int): Pointer coordinates relative to `w`.
+  #   - layout (list): Per-column sort direction.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `sortPlayers` and `displayPlayers` for heading clicks.
   ################################################################################
   proc clickPlayers {{w} {x} {y} {layout}} {
       lassign [$w identify $x $y] what
@@ -1572,12 +1913,37 @@ namespace eval fics {
       }
   }
 
+  ################################################################################
+  # sortPlayers
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - column (int): Column index to sort by.
+  #   - sort (string): `lsort` order flag (e.g. "-increasing", "-decreasing").
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::fics::sortPlayersColumn`, `::fics::sortPlayersOrder`, and sorts
+  #     `::fics::playerList` in place.
+  ################################################################################
   proc sortPlayers { column sort } {
       set ::fics::sortPlayersColumn $column
       set ::fics::sortPlayersOrder $sort
       set ::fics::playerList [lsort -dictionary $::fics::sortPlayersOrder -index $::fics::sortPlayersColumn $::fics::playerList]
   }
 
+  ################################################################################
+  # displayPlayers
+  #   Populates the players treeview from `::fics::playerList`, applying filters.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Mutates `.fics.f.top.fplayer.plist` contents and selection.
+  ################################################################################
   proc displayPlayers { } {
       set w .fics.f.top.fplayer
       set i 1
@@ -1596,14 +1962,33 @@ namespace eval fics {
       }
   }
   ################################################################################
-  # Play the selected game
+  # getOffersGame
+  #   Issues a "play" command for the selected offer point in the offers graph.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - idx (int): Index into `::fics::soughtlist`.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `writechan "play <game>"` (errors ignored via `catch`).
   ################################################################################
   proc getOffersGame { idx } {
     array set ga [lindex $::fics::soughtlist $idx]
     catch { writechan "play $ga(game)" }
   }
   ################################################################################
-  #
+  # setOfferStatus
+  #   Shows or clears the hover status text for an offer point on the canvas.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - idx (int): Index into `::fics::soughtlist`, or -1 to clear.
+  #   - x, y (int): Pointer coordinates relative to the offers canvas.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates or deletes the "status" text item in `.fics.f.top.foffers.c`.
   ################################################################################
   proc setOfferStatus { idx x y } {
     global ::fics::height ::fics::width ::fics::off
@@ -1634,7 +2019,16 @@ namespace eval fics {
     }
   }
   ################################################################################
-  #
+  # play
+  #   Sends "play <index>" to FICS and records the observed game id.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - index (int|string): Game id.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `writechan "play <index>"` and updates `::fics::observedGame`.
   ################################################################################
   proc play {index} {
     writechan "play $index"
@@ -1642,7 +2036,19 @@ namespace eval fics {
     set ::fics::observedGame $index
   }
   ################################################################################
-  #
+  # writechan
+  #   Writes a command line to the FICS socket (and optionally echoes it to console).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - line (string): Command to send.
+  #   - echo (string): "echo" to mirror to console; otherwise "noecho" (default).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Writes to `::fics::sockchan`.
+  #   - Cancels and schedules `::fics::stayConnected` keep-alive timer.
+  #   - Shows a `tk_messageBox` and calls `::fics::close` on socket EOF.
   ################################################################################
   proc writechan {line {echo "noecho"}} {
     if { $::fics::sockchan == "" } { return }
@@ -1659,8 +2065,16 @@ namespace eval fics {
     after 2700000 ::fics::stayConnected
   }
   ################################################################################
-  # FICS seems to close connexion after 1 hr idle. So send a dummy command
-  # every 45 minutes
+  # stayConnected
+  #   Sends a keep-alive command to avoid server-side idle disconnects.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `writechan "date"` and schedules itself via `after`.
   ################################################################################
   proc stayConnected {} {
     catch {
@@ -1669,7 +2083,18 @@ namespace eval fics {
     }
   }
   ################################################################################
-  #  returns 1 if premove is set
+  # setPremove
+  #   Queues a premove when observing (not playing) and premove support is enabled.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - sq1 (int): From-square id.
+  #   - sq2 (int): To-square id (must not be -1).
+  # Returns:
+  #   - 1 if the premove was accepted and queued; otherwise 0.
+  # Side effects:
+  #   - Updates `::fics::premoveSq1` / `::fics::premoveSq2`.
+  #   - Draws an arrow marker on `.main.board.bd`.
   ################################################################################
   proc setPremove {sq1 sq2} {
       if { $::fics::premoveEnabled && $::fics::playing == -1 && $sq2 != -1 } {
@@ -1681,7 +2106,16 @@ namespace eval fics {
       return 0
   }
   ################################################################################
-  #  execute FICS premove if possible
+  # makePremove
+  #   Executes the queued premove when it becomes the player's turn.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `addMove` and clears `::fics::premoveSq1` when applicable.
   ################################################################################
   proc makePremove {} {
     if { $::fics::premoveEnabled && $::fics::playing == 1 && $::fics::premoveSq1 != -1 } {
@@ -1690,7 +2124,16 @@ namespace eval fics {
     }
   }
   ################################################################################
-  #   returns 1 if the player is allowed to enter a move (either playing or using puzzlebot)
+  # playerCanMove
+  #   Returns whether the user is allowed to enter a move in the current state.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - 1 if the user may enter a move; otherwise 0.
+  # Side effects:
+  #   - If premove is enabled while observing, clears board markers and resets premove.
   ################################################################################
   proc playerCanMove {} {
 
@@ -1710,8 +2153,19 @@ namespace eval fics {
     return 0
   }
   ################################################################################
-  # Handle mouse button 1 on console : observe the selected game
-  # or handle commands (like <next>)
+  # consoleClick
+  #   Handles a click on the console output (e.g. observe a listed game or "next").
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - x, y (int): Pointer coordinates in the console widget.
+  #   - win (widget): Console text widget.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - May issue "next", "unobserve", and "observe" commands via `writechan`.
+  #   - May show a confirmation `tk_messageBox`.
+  #   - Writes to stdout (`puts`) when a line cannot be parsed as a game listing.
   ################################################################################
   proc consoleClick { x y win } {
     set idx [ $win index @$x,$y ]
@@ -1773,7 +2227,17 @@ namespace eval fics {
 
   }
   ################################################################################
-  # updates the offers view if it is visible
+  # tabchanged
+  #   Handles notebook tab changes by starting/stopping the relevant refresh loops.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Cancels scheduled `after` refreshes and schedules the appropriate update.
+  #   - Updates `::fics::graphon`, `::fics::sought`, `::fics::games`, `::fics::player`.
   ################################################################################
   proc tabchanged {} {
     after cancel ::fics::updateGames
@@ -1797,7 +2261,20 @@ namespace eval fics {
     }
   }
   ################################################################################
-  #
+  # close
+  #   Closes the FICS connection and tears down the UI window.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - mode (string): Optional mode; when "error" skips sending "exit".
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Cancels outstanding timers (`updateOffers`, `updateGames`, `updatePlayer`, keepalive).
+  #   - Resets `::fics::*` connection state and closes `::fics::sockchan`.
+  #   - Attempts to terminate Timeseal on non-Windows platforms by sending SIGINT
+  #     to `::fics::timeseal_pid` (best-effort).
+  #   - Closes the `.fics` window.
   ################################################################################
   proc close { {mode ""} } {
     variable logged
