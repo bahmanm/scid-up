@@ -2,7 +2,7 @@ namespace eval ::scid_test {}
 
 # Stub Scid config path resolution for modules that do config I/O at load time.
 # In the full application this is provided elsewhere after `InitDirs`.
-if {![llength [info procs scidConfigFile]]} {
+if {![llength [info commands scidConfigFile]]} {
     proc scidConfigFile {name} {
         return [file join [::scid_test::tempDir] $name]
     }
@@ -10,7 +10,7 @@ if {![llength [info procs scidConfigFile]]} {
 
 # Minimal `sc_info` stub required to source modules under `tclsh`.
 # The real command is provided by the C++ core when running Scid.
-if {![llength [info procs sc_info]]} {
+if {![llength [info commands sc_info]]} {
     proc sc_info {subcmd args} {
         switch -- $subcmd {
             limit {
@@ -29,7 +29,7 @@ if {![llength [info procs sc_info]]} {
 
 # Minimal `sc_pos` stub required by helpers that query side/move number.
 # The real command is provided by the C++ core when running Scid.
-if {![llength [info procs sc_pos]]} {
+if {![llength [info commands sc_pos]]} {
     proc sc_pos {subcmd args} {
         switch -- $subcmd {
             side {
@@ -59,7 +59,7 @@ if {![llength [info procs sc_pos]]} {
 
 # Minimal `winfo` stub so procs can early-return in headless tests.
 # The real command is provided by Tk (`wish`).
-if {![llength [info procs winfo]]} {
+if {![llength [info commands winfo]]} {
     proc winfo {subcmd args} {
         switch -- $subcmd {
             exists { return 0 }
@@ -70,7 +70,7 @@ if {![llength [info procs winfo]]} {
 
 # `strIsPrefix` is normally provided by Scid's Tcl runtime; keep a tiny local
 # implementation for pure formatting helpers such as `formatAnalysisMoves`.
-if {![llength [info procs strIsPrefix]]} {
+if {![llength [info commands strIsPrefix]]} {
     proc strIsPrefix {prefix text} {
         expr {[string first $prefix $text] == 0}
     }
@@ -78,7 +78,7 @@ if {![llength [info procs strIsPrefix]]} {
 
 # Minimal message box stub (for headless tests). Tests can override by setting
 # `::scid_test::tk_messageBox_answer`.
-if {![llength [info procs tk_messageBox]]} {
+if {![llength [info commands tk_messageBox]]} {
     proc tk_messageBox {args} {
         if {[info exists ::scid_test::tk_messageBox_answer]} {
             return $::scid_test::tk_messageBox_answer
@@ -99,7 +99,7 @@ if {![llength [info procs tk_messageBox]]} {
 }
 
 # Minimal `sc_game` stub for tag manipulation helpers.
-if {![llength [info procs sc_game]]} {
+if {![llength [info commands sc_game]]} {
     if {![info exists ::scid_test::sc_game_extra]} {
         set ::scid_test::sc_game_extra {}
     }
@@ -137,7 +137,7 @@ if {![llength [info procs sc_game]]} {
 }
 
 # Minimal `sc_move` stub for exercising `sc_move_add`.
-if {![llength [info procs sc_move]]} {
+if {![llength [info commands sc_move]]} {
     proc sc_move {subcmd args} {
         switch -- $subcmd {
             addSan {
@@ -170,7 +170,7 @@ if {![info exists ::scidShareDir]} { set ::scidShareDir [::scid_test::repoRoot] 
 if {![info exists ::scidUserDir]} { set ::scidUserDir [::scid_test::tempDir] }
 
 # Stub options persistence registration used by various modules at load time.
-if {![llength [info procs ::options.store]]} {
+if {![llength [info commands ::options.store]]} {
     # Mirror Scid’s real contract (see `tcl/options.tcl`):
     # - If the variable does not exist, initialises it (defaulting to "").
     # - Registers the variable for persistence via `::autosave_opt`.
