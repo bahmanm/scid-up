@@ -1,5 +1,38 @@
 namespace eval ::scid_test {}
 
+# Minimal `font` stub for sourcing modules that assume Tk is present.
+# The real command is provided by Tk (`wish`).
+if {![llength [info commands font]]} {
+    if {![info exists ::scid_test::font_counter]} {
+        set ::scid_test::font_counter 0
+    }
+
+    proc font {subcmd args} {
+        switch -- $subcmd {
+            create {
+                # `font create name ?options...?`
+                set name ""
+                if {[llength $args] > 0} {
+                    set candidate [lindex $args 0]
+                    if {![string match "-*" $candidate]} {
+                        set name $candidate
+                    }
+                }
+
+                if {$name eq ""} {
+                    incr ::scid_test::font_counter
+                    set name "scid_test_font$::scid_test::font_counter"
+                }
+
+                return $name
+            }
+            default {
+                error "font $subcmd not stubbed in tests"
+            }
+        }
+    }
+}
+
 # Stub Scid config path resolution for modules that do config I/O at load time.
 # In the full application this is provided elsewhere after `InitDirs`.
 if {![llength [info commands scidConfigFile]]} {
@@ -103,9 +136,26 @@ if {![llength [info commands sc_game]]} {
     if {![info exists ::scid_test::sc_game_extra]} {
         set ::scid_test::sc_game_extra {}
     }
+    if {![info exists ::scid_test::sc_game_info]} {
+        # `sc_game info <field>` returns values from this dict in headless tests.
+        # Expected keys depend on the suite; common keys include: `white`, `black`,
+        # `welo`, `belo`, `previousMoveNT`. Tests should set these explicitly to keep
+        # each case deterministic.
+        set ::scid_test::sc_game_info [dict create]
+    }
 
     proc sc_game {subcmd args} {
         switch -- $subcmd {
+            info {
+                set field [lindex $args 0]
+                if {$field eq ""} {
+                    error "sc_game info missing field"
+                }
+                if {![dict exists $::scid_test::sc_game_info $field]} {
+                    error "sc_game info $field not stubbed in tests"
+                }
+                return [dict get $::scid_test::sc_game_info $field]
+            }
             tags {
                 set op [lindex $args 0]
                 switch -- $op {

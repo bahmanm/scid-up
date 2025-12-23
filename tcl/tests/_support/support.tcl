@@ -8,5 +8,6 @@ set _supportDir [file dirname [info script]]
 source [file join $_supportDir scid_test_paths.tcl]
 source [file join $_supportDir scid_test_stubs.tcl]
 source [file join $_supportDir scid_test_fixtures.tcl]
+source [file join $_supportDir scid_test_mocks.tcl]
 
 unset _supportDir
