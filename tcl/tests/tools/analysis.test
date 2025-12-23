@@ -1,0 +1,269 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Prevent `analysis.tcl` from trying to auto-discover engines at load time.
+::scid_test::ensureEngineListFile
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools analysis.tcl]
+
+namespace eval ::pgn {}
+set ::pgn::moveNumberSpaces 0
+
+set ::informant("+=") 0.20
+set ::informant("+/-") 0.40
+set ::informant("+-") 0.80
+set ::informant("+--") 1.60
+
+namespace eval ::analysis_test {}
+
+proc ::analysis_test::setup {} {
+    set ::analysis(lockEngine1) 0
+    set ::analysis(lockN1) 0
+    set ::analysis(lockSide1) white
+
+    set ::pgn::moveNumberSpaces 0
+
+    set ::scid_test::sc_pos_side white
+    set ::scid_test::sc_pos_moveNumber 1
+}
+
+proc ::analysis_test::cleanup {} {
+    set ::analysis(lockEngine1) 0
+    set ::analysis(lockN1) 0
+    set ::analysis(lockSide1) white
+
+    set ::pgn::moveNumberSpaces 0
+
+    set ::scid_test::sc_pos_side white
+    set ::scid_test::sc_pos_moveNumber 1
+}
+
+test analysis-scoreToNag-1.0 {scoreToNag maps near-equal to "="} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set score 0.0
+
+        # Act
+        set actual [scoreToNag $score]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {=}
+
+test analysis-scoreToNag-2.0 {scoreToNag maps small advantage to "+="} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set score 0.30
+
+        # Act
+        set actual [scoreToNag $score]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {+=}
+
+test analysis-scoreToNag-3.0 {scoreToNag maps small disadvantage to "=+"} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set score -0.30
+
+        # Act
+        set actual [scoreToNag $score]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {=+}
+
+test analysis-scoreToMate-1.0 {scoreToMate returns formatted numeric when not mate} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {+0.12}
+
+test analysis-scoreToMate-2.0 {scoreToMate ignores mate when engine is locked} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::analysis(lockEngine1) 1
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5#}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {+0.12}
+
+test analysis-scoreToMate-3.0 {scoreToMate detects mate via "#": white to move (odd plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5#}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M2}
+
+test analysis-scoreToMate-4.0 {scoreToMate detects mate via "#": black to move (even plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::sc_pos_side black
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5 Nc6#}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M2}
+
+test analysis-scoreToMate-5.0 {scoreToMate detects mate via "++": black to move (odd plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::sc_pos_side black
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5++}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M-2}
+
+test analysis-scoreToMate-6.0 {scoreToMate detects mate via "++": white to move (even plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5 Nc6++}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M-2}
+
+test analysis-addMoveNumbers-1.0 {addMoveNumbers prefixes white-to-move PV with move numbers} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6 Bb5}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {2.Nf6 Nf3 3.Nc6 Bb5 }
+
+test analysis-addMoveNumbers-2.0 {addMoveNumbers prefixes black-to-move PV with ellipsis} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::scid_test::sc_pos_side black
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6 Bb5}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {2.... Nf6 3.Nf3 Nc6 4.Bb5 }
+
+test analysis-addMoveNumbers-3.0 {addMoveNumbers honours ::pgn::moveNumberSpaces} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::pgn::moveNumberSpaces 1
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6 Bb5}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {2. Nf6 Nf3 3. Nc6 Bb5 }
+
+test analysis-addMoveNumbers-4.0 {addMoveNumbers uses locked side/move number when engine is locked} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::analysis(lockEngine1) 1
+        set ::analysis(lockN1) 7
+        set ::analysis(lockSide1) black
+        set ::pgn::moveNumberSpaces 0
+        set ::scid_test::sc_pos_side white
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {7.... Nf6 8.Nf3 Nc6 }
+
+tcltest::cleanupTests
