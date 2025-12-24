@@ -1,0 +1,274 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Minimal utils stubs required by `optable::setupRatios`.
+namespace eval ::utils {}
+namespace eval ::utils::date {}
+if {![llength [info commands ::utils::date::today]]} {
+    proc ::utils::date::today {field} {
+        switch -- $field {
+            year { return 2020 }
+            month { return 1 }
+            day { return 2 }
+            default { error "::utils::date::today $field not stubbed in tests" }
+        }
+    }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools optable.tcl]
+
+namespace eval ::optable_test {
+    variable stubbedCommands {}
+}
+
+proc ::optable_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::optable_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::optable_test::setup {} {
+    ::optable_test::restoreStubs
+
+    # Arrange: reset shared state.
+    array unset ::tr
+    array set ::tr {
+        OprepTitle "Opening Report"
+    }
+
+    set ::reportFavorites {}
+
+    # Ensure the favourites file does not leak between tests.
+    catch {file delete -force [::optable::favoritesFilename]}
+
+    # `optable::_percent` depends on `sc_info decimal`.
+    ::optable_test::stubCommand sc_info {subcmd args} {
+        if {$subcmd eq "decimal"} { return "." }
+        return ""
+    }
+}
+
+proc ::optable_test::cleanup {} {
+    ::optable_test::restoreStubs
+    catch {file delete -force [::optable::favoritesFilename]}
+    unset -nocomplain ::optable::_data(sec)
+    unset -nocomplain ::optable::_data(subsec)
+}
+
+proc ::optable_test::fit {text width} {
+    set padded [format "%-*s" $width $text]
+    return [string range $padded 0 [expr {$width - 1}]]
+}
+
+proc ::optable_test::makeTreeLine {num2 move eco freq fpct score avElo perf avYear pctDraw} {
+    set line [string repeat " " 70]
+    set line [string replace $line 0 1 [::optable_test::fit $num2 2]]
+    set line [string replace $line 4 9 [::optable_test::fit $move 6]]
+    set line [string replace $line 11 15 [::optable_test::fit $eco 5]]
+    set line [string replace $line 17 23 [::optable_test::fit $freq 7]]
+    set line [string replace $line 25 29 [::optable_test::fit $fpct 5]]
+    set line [string replace $line 33 37 [::optable_test::fit $score 5]]
+    set line [string replace $line 41 44 [::optable_test::fit $avElo 4]]
+    set line [string replace $line 47 50 [::optable_test::fit $perf 4]]
+    set line [string replace $line 53 56 [::optable_test::fit $avYear 4]]
+    set line [string replace $line 59 61 [::optable_test::fit $pctDraw 3]]
+    return $line
+}
+
+test optable-_percent-1.0 {optable::_percent formats percent with decimal separator} -setup {
+    ::optable_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set textFmt [::optable::_percent 123 text]
+    set latexFmt [::optable::_percent 123 latex]
+
+    # Assert
+    list $textFmt $latexFmt
+} -cleanup {
+    ::optable_test::cleanup
+} -result {12.3% {12.3\%}}
+
+test optable-_reset-1.0 {optable::_reset initialises section counters} -setup {
+    ::optable_test::setup
+} -body {
+    # Arrange
+    set ::optable::_data(sec) 9
+    set ::optable::_data(subsec) 7
+
+    # Act
+    ::optable::_reset
+
+    # Assert
+    list $::optable::_data(sec) $::optable::_data(subsec)
+} -cleanup {
+    ::optable_test::cleanup
+} -result {0 0}
+
+test optable-_sec-_subsec-1.0 {optable::_sec and _subsec number sections in html format} -setup {
+    ::optable_test::setup
+} -body {
+    # Arrange
+    set ::optable::_data(fmt) "html"
+    ::optable::_reset
+
+    # Act
+    set sec [::optable::_sec "Statistics"]
+    set sub1 [::optable::_subsec "Results"]
+    set sub2 [::optable::_subsec "Themes"]
+
+    # Assert
+    list \
+        $sec \
+        $sub1 \
+        $sub2 \
+        $::optable::_data(sec) \
+        $::optable::_data(subsec)
+} -cleanup {
+    ::optable_test::cleanup
+} -result [list \
+    "\n<h2>1. Statistics</h2>\n" \
+    "\n<h3>1.1 Results</h3>\n\n" \
+    "\n<h3>1.2 Themes</h3>\n\n" \
+    1 \
+    2 \
+]
+
+test optable-_title-1.0 {optable::_title formats title per output format} -setup {
+    ::optable_test::setup
+} -body {
+    # Arrange
+    set ::optable::_data(fmt) "latex"
+
+    # Act
+    set latexTitle [::optable::_title]
+    set ::optable::_data(fmt) "text"
+    set textTitle [::optable::_title]
+
+    # Assert
+    list \
+        [string match "*\\\\begin{center}*Opening Report*\\\\end{center}*" $latexTitle] \
+        [string match "*OPENING REPORT*" $textTitle]
+} -cleanup {
+    ::optable_test::cleanup
+} -result {1 1}
+
+test optable-latexifyTree-1.0 {optable::latexifyTree converts tree output to LaTeX tabular} -setup {
+    ::optable_test::setup
+} -body {
+    # Arrange
+    set line1 [::optable_test::makeTreeLine " 1" "Nf3" "C00" "123" "10" "55.5" "2400" "2500" "1999" "33"]
+    set sep [string replace [string repeat " " 70] 0 0 "_"]
+    set total [::optable_test::makeTreeLine "T " "" "" "999" "99" "50.0" "2300" "2350" "2001" "10"]
+    set ::optable::_data(tree) [join [list "Header" $line1 $sep $total] "\n"]
+
+    # Act
+    ::optable::latexifyTree
+
+    # Assert
+    set moves $::optable::_data(moves)
+    set latexTree $::optable::_data(latexTree)
+    list \
+        $moves \
+        [string match "*\\\\begin{tabular}*" $latexTree] \
+        [string match "*{\\\\N}f3*" $latexTree] \
+        [string match "*\\\\hline*" $latexTree] \
+        [string match "*\\\\multicolumn{2}{l}{Total}*" $latexTree]
+} -cleanup {
+    ::optable_test::cleanup
+    unset -nocomplain ::optable::_data(tree)
+    unset -nocomplain ::optable::_data(moves)
+    unset -nocomplain ::optable::_data(latexTree)
+} -result [list {Nf3} 1 1 1 1]
+
+test optable-setupRatios-1.0 {optable::setupRatios computes ratios and deltas from sc_filter freq} -setup {
+    ::optable_test::setup
+
+    ::optable_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd eq "current"} { return 7 }
+        error "sc_base $subcmd not stubbed in optable tests"
+    }
+
+    ::optable_test::stubCommand sc_filter {subcmd args} {
+        if {$subcmd ne "freq"} { error "sc_filter $subcmd not stubbed in optable tests" }
+
+        # Expected signature used by setupRatios:
+        #   sc_filter freq <base> tree date <startDate> ?<endDate>?
+        set base [lindex $args 0]
+        set mode [lindex $args 1]
+        set type [lindex $args 2]
+        set start [lindex $args 3]
+        set end [lindex $args 4]
+
+        if {$base != 7 || $mode ne "tree" || $type ne "date"} {
+            error "Unexpected sc_filter freq args: $args"
+        }
+
+        switch -- $start {
+            0000.00.00 { return {100 300} }
+            1800.00.00 { return {10 30} }
+            1900.00.00 { return {0 0} }
+            1950.00.00 { return {1 1} }
+            2019.1.2 { return {50 75} }
+            2015.1.2 { return {0 0} }
+            2010.1.2 { return {20 120} }
+            default {
+                # Other ranges are not asserted by this test; return a benign value.
+                if {$end ne ""} { return {1 1} }
+                return {1 1}
+            }
+        }
+    }
+} -body {
+    # Arrange
+
+    # Act
+    ::optable::setupRatios
+
+    # Assert
+    list \
+        $::optable::_data(ratioAll) \
+        $::optable::_data(range1800) \
+        $::optable::_data(range1900) \
+        $::optable::_data(ratio1) \
+        $::optable::_data(delta1) \
+        $::optable::_data(ratio5) \
+        $::optable::_data(delta5) \
+        $::optable::_data(ratio10) \
+        $::optable::_data(delta10)
+} -cleanup {
+    ::optable_test::cleanup
+} -result [list 3 3 --- 1 200 0 0 6 -49]
+
+test optable-favorites-1.0 {optable favourites persist and reload via reports file} -setup {
+    ::optable_test::setup
+} -body {
+    # Arrange
+    set ::reportFavorites [list \
+        [list "Sicilian" {e4 c5}] \
+        [list "French" {e4 e6}] \
+    ]
+
+    # Act
+    set names [::optable::favoriteReportNames]
+    ::optable::saveFavorites
+    set ::reportFavorites {}
+    ::optable::loadFavorites
+
+    # Assert
+    list \
+        $names \
+        $::reportFavorites \
+        [file exists [::optable::favoritesFilename]]
+} -cleanup {
+    ::optable_test::cleanup
+} -result [list [list Sicilian French] [list [list Sicilian {e4 c5}] [list French {e4 e6}]] 1]
+
