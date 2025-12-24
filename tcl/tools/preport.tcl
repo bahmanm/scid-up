@@ -11,10 +11,21 @@ set ::preport::_color white
 set ::preport::_pos start
 set ::preport::_clipbase 0
 
-# preportDlg
-#   Present a dialog allowing the user to select the
-#   player and color for which to generate a player report.
+# ::preport::preportDlg
 #
+# Visibility: Public
+# Inputs:
+#   - args: Optional positional arguments:
+#       - args[0]: Player name to preselect.
+#       - args[1]: Colour to preselect ("white" or "black").
+# Returns:
+#   - Nothing.
+# Side effects:
+#   - Shows a modal dialogue at `.preportDlg` (grabbed).
+#   - Updates `::preport::_player`, `::preport::_color`, `::preport::_pos`,
+#     and `::preport::_clipbase`.
+#   - Reads game metadata via `sc_base` and `sc_game`.
+#   - Shows a warning `tk_messageBox` if the current database is empty.
 proc ::preport::preportDlg {args} {
   if {[sc_base numGames $::curr_db] == 0} {
     tk_messageBox -title "Scid" -type ok -icon warning -message "No games in current base"
@@ -112,6 +123,16 @@ proc ::preport::preportDlg {args} {
   focus $w.g.player
 }
 
+# ::preport::ConfigMenus
+#
+# Visibility: Public
+# Inputs:
+#   - lang: Optional language code. If empty, defaults to `::language`.
+# Returns:
+#   - Nothing.
+# Side effects:
+#   - Updates the translated menu labels under `.preportWin.menu`.
+#   - No-ops if `.preportWin` does not exist.
 proc ::preport::ConfigMenus {{lang ""}} {
   if {! [winfo exists .preportWin]} { return }
   if {$lang == ""} { set lang $::language }
@@ -128,6 +149,28 @@ proc ::preport::ConfigMenus {{lang ""}} {
 
 }
 
+# ::preport::makeReportWin
+#
+# Visibility: Public
+# Inputs:
+#   - args: Optional flags:
+#       - "-noprogress": Do not show the progress dialogue.
+#       - "-nodisplay": Generate report data but do not show `.preportWin`.
+# Returns:
+#   - Nothing.
+# Side effects:
+#   - Searches and filters games via `sc_search` and generates report data
+#     via `sc_report player create`.
+#   - Adds the selected player to the history via
+#     `::utils::history::AddEntry`.
+#   - Optionally updates the clipbase via `sc_clipbase` and
+#     `::windows::gamelist::CopyGames`.
+#   - Creates/updates `.preportWin` and populates its text widget via
+#     `::htext::display`.
+#   - May create a modal `.progress` window and honours cancellation via
+#     `::preport::_interrupt`.
+#   - Triggers a database filter notification via
+#     `::notify::filter $::curr_db dbfilter`.
 proc ::preport::makeReportWin {args} {
   set showProgress 1
   set args [linsert $args 0 "args"]
@@ -282,6 +325,18 @@ proc ::preport::makeReportWin {args} {
 }
 
 
+# ::preport::setOptions
+#
+# Visibility: Public
+# Inputs:
+#   - None.
+# Returns:
+#   - Nothing.
+# Side effects:
+#   - Creates and shows the options dialogue `.preportOptions`.
+#   - Mutates values in the `::preport` array.
+#   - On OK: regenerates the report by calling `::preport::makeReportWin`.
+#   - On Cancel: restores `::preport` from `::preport::backup`.
 proc ::preport::setOptions {} {
   set w .preportOptions
   if {[winfo exists $w]} { return }
@@ -343,10 +398,17 @@ proc ::preport::setOptions {} {
 }
 
 
-# previewHTML:
-#   Saves the report to a temporary file, and invokes the user's web
-#   browser to display it.
+# ::preport::previewHTML
 #
+# Visibility: Public
+# Inputs:
+#   - None.
+# Returns:
+#   - Nothing.
+# Side effects:
+#   - Writes an HTML report to a temporary file under `::scidLogDir`.
+#   - Attempts to launch the default browser to open that file.
+#   - Shows a warning `tk_messageBox` if the report cannot be written.
 proc ::preport::previewHTML {} {
   busyCursor .
   set tmpdir $::scidLogDir
@@ -366,6 +428,18 @@ proc ::preport::previewHTML {} {
   unbusyCursor .
 }
 
+# ::preport::saveReport
+#
+# Visibility: Public
+# Inputs:
+#   - fmt: Output format ("text", "html", or "latex").
+# Returns:
+#   - Nothing.
+# Side effects:
+#   - Prompts for a destination file via `tk_getSaveFile`.
+#   - Writes the generated report to disk.
+#   - May convert the output to the current UI encoding (if configured).
+#   - Shows a warning `tk_messageBox` if the report cannot be written.
 proc ::preport::saveReport {fmt} {
   set default ".txt"
   set ftype {
@@ -405,11 +479,30 @@ proc ::preport::saveReport {fmt} {
   unbusyCursor .
 }
 
+# ::preport::_reset
+#
+# Visibility: Private
+# Inputs:
+#   - None.
+# Returns:
+#   - Nothing.
+# Side effects:
+#   - Initialises section numbering counters in `::preport::_data`.
 proc ::preport::_reset {} {
   set ::preport::_data(sec) 0
   set ::preport::_data(subsec) 0
 }
 
+# ::preport::_title
+#
+# Visibility: Private
+# Inputs:
+#   - None.
+# Returns:
+#   - A formatted title string for the report, according to
+#     `::preport::_data(fmt)`.
+# Side effects:
+#   - None.
 proc ::preport::_title {} {
   set fmt $::preport::_data(fmt)
   set title $::tr(PReportTitle)
@@ -427,6 +520,15 @@ proc ::preport::_title {} {
   return $r
 }
 
+# ::preport::_sec
+#
+# Visibility: Private
+# Inputs:
+#   - text: Section title.
+# Returns:
+#   - A formatted section heading string for the current output format.
+# Side effects:
+#   - Increments `::preport::_data(sec)` and resets `::preport::_data(subsec)`.
 proc ::preport::_sec {text} {
   set fmt $::preport::_data(fmt)
   incr ::preport::_data(sec)
@@ -443,6 +545,15 @@ proc ::preport::_sec {text} {
   return "\n\n$line\n[string range $underline 1 [string length $line]]\n"
 }
 
+# ::preport::_subsec
+#
+# Visibility: Private
+# Inputs:
+#   - text: Subsection title.
+# Returns:
+#   - A formatted subsection heading string for the current output format.
+# Side effects:
+#   - Increments `::preport::_data(subsec)`.
 proc ::preport::_subsec {text} {
   set fmt $::preport::_data(fmt)
   incr ::preport::_data(subsec)
@@ -457,6 +568,23 @@ proc ::preport::_subsec {text} {
 }
 
 
+# ::preport::report
+#
+# Visibility: Public
+# Inputs:
+#   - fmt: Output format (case-insensitive): "text", "html", "latex", or "ctext".
+#   - withTable: Optional boolean flag indicating whether to include the
+#     theory table section. Defaults to 1.
+# Returns:
+#   - The generated player report as a string in the requested format.
+# Side effects:
+#   - Updates internal report formatting state under `::preport::_data`,
+#     including `::preport::_data(fmt)` and section counters.
+#   - Calls `sc_report player format` and `sc_report player notes`.
+#   - Reads from `::preport`, `::preport::_player`, `::preport::_color`,
+#     `::preport::_pos`, and translation globals.
+#   - Reads database information via `sc_base`.
+#   - Reads position information via `sc_pos`.
 proc ::preport::report {fmt {withTable 1}} {
   global tr preport
   sc_report player format $fmt
