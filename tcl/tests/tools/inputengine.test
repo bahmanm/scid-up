@@ -1,0 +1,545 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# `tcl/tools/inputengine.tcl` expects board image mappings at load time.
+namespace eval ::board {}
+if {![info exists ::board::letterToPiece(.)]} {
+    array set ::board::letterToPiece {
+        . pieceEmpty
+        K pieceK
+        k piecek
+        Q pieceQ
+        q pieceq
+    }
+}
+
+# Prevent `tcl/tools/inputengine.tcl` from loading user hardware options (which
+# would try to create Tk widgets at load time).
+catch {file delete -force [scidConfigFile ExtHardware]}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools inputengine.tcl]
+
+namespace eval ::inputengine_test {
+    variable stubbedCommands {}
+
+    variable calls {}
+    variable widgetCalls {}
+    variable sendCalls {}
+    variable updateBoardCalls {}
+    variable playSoundCalls {}
+    variable scGameCalls {}
+    variable scFilterCalls {}
+    variable gameAddCalls 0
+    variable setCommentCalls {}
+    variable gameclockCalls {}
+
+    variable pipeRead ""
+    variable pipeWrite ""
+}
+
+proc ::inputengine_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::inputengine_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::inputengine_test::resetRecordedState {} {
+    set ::inputengine_test::calls {}
+    set ::inputengine_test::widgetCalls {}
+    set ::inputengine_test::sendCalls {}
+    set ::inputengine_test::updateBoardCalls {}
+    set ::inputengine_test::playSoundCalls {}
+    set ::inputengine_test::scGameCalls {}
+    set ::inputengine_test::scFilterCalls {}
+    set ::inputengine_test::gameAddCalls 0
+    set ::inputengine_test::setCommentCalls {}
+    set ::inputengine_test::gameclockCalls {}
+}
+
+proc ::inputengine_test::defineWidget {path} {
+    set fqName $path
+    if {![string match "::*" $fqName]} {
+        set fqName "::$fqName"
+    }
+    if {[llength [info commands $fqName]]} { return }
+
+    proc $fqName {subcmd args} {
+        set widgetName [lindex [info level 0] 0]
+        if {[string match "::*" $widgetName]} {
+            set widgetName [string range $widgetName 2 end]
+        }
+        lappend ::inputengine_test::widgetCalls [list $widgetName $subcmd {*}$args]
+
+        switch -- $subcmd {
+            configure { return }
+            default { error "Unexpected widget command: $widgetName $subcmd" }
+        }
+    }
+}
+
+proc ::inputengine_test::setPipeLine {line} {
+    variable pipeRead
+    variable pipeWrite
+
+    if {$pipeRead ne ""} { catch {close $pipeRead} }
+    if {$pipeWrite ne ""} { catch {close $pipeWrite} }
+
+    lassign [chan pipe] pipeRead pipeWrite
+    puts $pipeWrite $line
+    flush $pipeWrite
+
+    set ::inputengine::InputEngine(pipe) $pipeRead
+}
+
+proc ::inputengine_test::closePipe {} {
+    variable pipeRead
+    variable pipeWrite
+
+    if {$pipeRead ne ""} { catch {close $pipeRead} }
+    if {$pipeWrite ne ""} { catch {close $pipeWrite} }
+    set pipeRead ""
+    set pipeWrite ""
+}
+
+proc ::inputengine_test::setup {} {
+    ::inputengine_test::restoreStubs
+    ::inputengine_test::resetRecordedState
+    ::inputengine_test::closePipe
+
+    # Arrange: required widgets for `readFromEngine`.
+    foreach w {
+        .inputengineconsole.bPiece
+        .inputengineconsole.bMove
+        .inputengineconsole.wClock
+        .inputengineconsole.bClock
+        .inputengineconsole.bd
+    } {
+        ::inputengine_test::defineWidget $w
+    }
+
+    # Arrange: deterministic globals used by the module.
+    set ::inputengine::InputEngine(init) 0
+    set ::inputengine::StoreClock 0
+    set ::inputengine::NoClockTime "--:--"
+    set ::inputengine::WhiteClock $::inputengine::NoClockTime
+    set ::inputengine::BlackClock $::inputengine::NoClockTime
+    set ::inputengine::oldWhiteClock $::inputengine::NoClockTime
+    set ::inputengine::oldBlackClock $::inputengine::NoClockTime
+
+    # Avoid `logEngine` calling into a real Tk console text widget.
+    ::inputengine_test::stubCommand ::inputengine::logEngine {msg} {
+        lappend ::inputengine_test::calls [list logEngine $msg]
+        return
+    }
+
+    ::inputengine_test::stubCommand ::inputengine::sendToEngine {msg} {
+        lappend ::inputengine_test::sendCalls $msg
+        return
+    }
+
+    ::inputengine_test::stubCommand updateBoard {args} {
+        lappend ::inputengine_test::updateBoardCalls $args
+        return
+    }
+
+    namespace eval ::utils {}
+    namespace eval ::utils::sound {}
+    ::inputengine_test::stubCommand ::utils::sound::PlaySound {name} {
+        lappend ::inputengine_test::playSoundCalls $name
+        return
+    }
+
+    # `readFromEngine` always updates the wooden board view.
+    ::inputengine_test::stubCommand ::board::update {w pos} {
+        lappend ::inputengine_test::calls [list boardUpdate $w $pos]
+        return
+    }
+
+    # Minimal `sc_pos` behaviour for inputengine tests.
+    ::inputengine_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            board { return "TEST_BOARD" }
+            fen {
+                if {![info exists ::scid_test::sc_pos_fen]} {
+                    return "TEST_FEN"
+                }
+                return $::scid_test::sc_pos_fen
+            }
+            setComment {
+                lappend ::inputengine_test::setCommentCalls [lindex $args 0]
+                return
+            }
+            default {
+                error "sc_pos $subcmd not stubbed in inputengine tests"
+            }
+        }
+    }
+
+    # `newgame` / `endgame` dependencies.
+    namespace eval ::game {}
+    ::inputengine_test::stubCommand ::game::Clear {} {
+        lappend ::inputengine_test::calls [list gameClear]
+        return
+    }
+
+    namespace eval ::utils::date {}
+    ::inputengine_test::stubCommand ::utils::date::today {} { return "2025.01.01" }
+
+    ::inputengine_test::stubCommand sc_game {subcmd args} {
+        switch -- $subcmd {
+            tags {
+                if {[lindex $args 0] ne "set"} {
+                    error "sc_game tags [lindex $args 0] not stubbed"
+                }
+                lappend ::inputengine_test::scGameCalls [list tags set {*}[lrange $args 1 end]]
+                return
+            }
+            startBoard {
+                lappend ::inputengine_test::scGameCalls [list startBoard [lindex $args 0]]
+                return
+            }
+            default {
+                error "sc_game $subcmd not stubbed in inputengine tests"
+            }
+        }
+    }
+
+    ::inputengine_test::stubCommand sc_filter {subcmd args} {
+        switch -- $subcmd {
+            first {
+                lappend ::inputengine_test::scFilterCalls [list first]
+                return 1
+            }
+            default {
+                error "sc_filter $subcmd not stubbed in inputengine tests"
+            }
+        }
+    }
+
+    ::inputengine_test::stubCommand gameAdd {} {
+        incr ::inputengine_test::gameAddCalls
+        return
+    }
+
+    namespace eval ::gameclock {}
+    ::inputengine_test::stubCommand ::gameclock::setSec {side seconds} {
+        lappend ::inputengine_test::gameclockCalls [list setSec $side $seconds]
+        return
+    }
+}
+
+proc ::inputengine_test::cleanup {} {
+    ::inputengine_test::closePipe
+    ::inputengine_test::restoreStubs
+    ::inputengine_test::resetRecordedState
+}
+
+test inputengine-strreverse-1.0 {strreverse reverses a string} -setup {
+    ::inputengine_test::setup
+} -body {
+    # Arrange
+    set s "abc"
+
+    # Act
+    set result [::inputengine::strreverse $s]
+
+    # Assert
+    set result
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result "cba"
+
+test inputengine-connectdisconnect-1.0 {connectdisconnect connects when not connected} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::stubCommand ::inputengine::consoleWindow {} {
+        lappend ::inputengine_test::calls [list consoleWindow]
+        return
+    }
+    ::inputengine_test::stubCommand ::inputengine::connect {} {
+        lappend ::inputengine_test::calls [list connect]
+        return
+    }
+    ::inputengine_test::stubCommand ::inputengine::disconnect {} {
+        lappend ::inputengine_test::calls [list disconnect]
+        return
+    }
+} -body {
+    # Arrange
+    set ::inputengine::InputEngine(pipe) ""
+
+    # Act
+    ::inputengine::connectdisconnect
+
+    # Assert
+    set ::inputengine_test::calls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {consoleWindow connect}
+
+test inputengine-connectdisconnect-2.0 {connectdisconnect disconnects when connected} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::stubCommand ::inputengine::consoleWindow {} {
+        lappend ::inputengine_test::calls [list consoleWindow]
+        return
+    }
+    ::inputengine_test::stubCommand ::inputengine::connect {} {
+        lappend ::inputengine_test::calls [list connect]
+        return
+    }
+    ::inputengine_test::stubCommand ::inputengine::disconnect {} {
+        lappend ::inputengine_test::calls [list disconnect]
+        return
+    }
+} -body {
+    # Arrange
+    set ::inputengine::InputEngine(pipe) "TEST_PIPE"
+
+    # Act
+    ::inputengine::connectdisconnect
+
+    # Assert
+    set ::inputengine_test::calls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result disconnect
+
+test inputengine-readFromEngine-move-1.0 {readFromEngine applies a legal move and requests sync} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::setPipeLine "move e4"
+} -body {
+    # Arrange
+    unset -nocomplain ::scid_test::last_addSan
+
+    # Act
+    ::inputengine::readFromEngine
+
+    # Assert
+    list \
+        $::scid_test::last_addSan \
+        $::inputengine_test::updateBoardCalls \
+        $::inputengine_test::sendCalls \
+        $::inputengine_test::widgetCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {e4 {{-pgn -animate}} {getposition getclock} {{.inputengineconsole.bPiece configure -background green} {.inputengineconsole.bMove configure -background green -text e4}}}
+
+test inputengine-readFromEngine-move-2.0 {readFromEngine rejects an illegal move and alerts user} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::stubCommand sc_move {subcmd args} {
+        if {$subcmd eq "addSan"} { error "illegal move" }
+        error "sc_move $subcmd not stubbed"
+    }
+
+    ::inputengine_test::setPipeLine "move e9"
+} -body {
+    # Arrange
+    unset -nocomplain ::scid_test::last_addSan
+
+    # Act
+    ::inputengine::readFromEngine
+
+    # Assert
+    list \
+        $::inputengine_test::playSoundCalls \
+        $::inputengine_test::sendCalls \
+        $::inputengine_test::widgetCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {sound_alert {} {{.inputengineconsole.bPiece configure -background red} {.inputengineconsole.bMove configure -background red -text e9}}}
+
+test inputengine-readFromEngine-fen-1.0 {readFromEngine initialises from FEN once} -setup {
+    ::inputengine_test::setup
+
+    set ::inputengine::InputEngine(init) 0
+    ::inputengine_test::setPipeLine "info FEN rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+} -body {
+    # Arrange
+    set ::scid_test::sc_pos_fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+    # Act
+    ::inputengine::readFromEngine
+
+    # Assert
+    list $::inputengine::InputEngine(init) $::inputengine_test::scGameCalls $::inputengine_test::updateBoardCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {1 {{startBoard {rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1}}} -pgn}
+
+test inputengine-readFromEngine-fen-2.0 {readFromEngine alerts when board and internal position differ} -setup {
+    ::inputengine_test::setup
+
+    set ::inputengine::InputEngine(init) 1
+    set ::scid_test::sc_pos_fen "8/8/8/8/8/8/8/8 w - - 0 1"
+    ::inputengine_test::setPipeLine "info FEN rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"
+} -body {
+    # Arrange
+
+    # Act
+    ::inputengine::readFromEngine
+
+    # Assert
+    set ::inputengine_test::playSoundCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {sound_alert}
+
+test inputengine-readFromEngine-newgame-1.0 {readFromEngine handles !new game! event} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::setPipeLine "info !new game!"
+} -body {
+    # Arrange
+
+    # Act
+    ::inputengine::readFromEngine
+
+    # Assert
+    set didClear [expr {[lsearch -exact $::inputengine_test::calls {gameClear}] != -1}]
+    list $didClear $::inputengine_test::scGameCalls $::inputengine_test::widgetCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {1 {{tags set -event {InputEngine Input}} {tags set -date 2025.01.01}} {{.inputengineconsole.bPiece configure -background blue} {.inputengineconsole.bMove configure -background blue -text OK} {.inputengineconsole.bPiece configure -image pieceK80}}}
+
+test inputengine-readFromEngine-timewhite-1.0 {readFromEngine parses Time White and updates clock display} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::setPipeLine "info Time White: 100"
+} -body {
+    # Arrange
+
+    # Act
+    ::inputengine::readFromEngine
+
+    # Assert
+    list $::inputengine::WhiteClock $::inputengine_test::gameclockCalls $::inputengine_test::widgetCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {100 {{setSec 1 -100}} {{.inputengineconsole.wClock configure -text {1:40 (EXT)}}}}
+
+test inputengine-readFromEngine-whitetomove-1.0 {readFromEngine stores clock comment on !white to move! when enabled} -setup {
+    ::inputengine_test::setup
+
+    set ::inputengine::StoreClock 1
+    set ::inputengine::NoClockTime "--:--"
+    set ::inputengine::oldWhiteClock 120
+    set ::inputengine::WhiteClock 100
+
+    ::inputengine_test::setPipeLine "info !white to move!"
+} -body {
+    # Arrange
+
+    # Act
+    ::inputengine::readFromEngine
+
+    # Assert
+    list $::inputengine::oldWhiteClock $::inputengine_test::setCommentCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {100 {{[%ct 0:1:40] [%emt 20]}}}
+
+test inputengine-ExtHardware-saveHardwareOptions-1.0 {saveHardwareOptions returns cleanly when options file cannot be opened} -setup {
+    ::inputengine_test::setup
+
+    set ::ExtHardware::showbutton 0
+    set ::scid_test::tk_messageBox_answer "ok"
+
+    ::inputengine_test::stubCommand open {args} { error "open failed" }
+} -body {
+    # Arrange
+
+    # Act
+    ::ExtHardware::saveHardwareOptions
+
+    # Assert
+    set expected "Unable to write external hardware options: [scidConfigFile ExtHardware]"
+    expr {$::statusBar eq $expected}
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result 1
+
+test inputengine-ExtHardware-HWbuttonBind-1.0 {HWbuttonBind updates existing button command when enabled} -setup {
+    ::inputengine_test::setup
+
+    set ::ExtHardware::showbutton 1
+    ::inputengine_test::defineWidget .main.fbutton.button.exthardware
+
+    ::inputengine_test::stubCommand winfo {subcmd widget} {
+        if {$subcmd ne "exists"} { return 0 }
+        if {$widget eq ".main.fbutton.button.exthardware"} { return 1 }
+        return 0
+    }
+} -body {
+    # Arrange
+    set cmd "::novag::connect"
+
+    # Act
+    ::ExtHardware::HWbuttonBind $cmd
+
+    # Assert
+    list $::ExtHardware::bindbutton $::inputengine_test::widgetCalls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {::novag::connect {{.main.fbutton.button.exthardware configure -command ::novag::connect}}}
+
+test inputengine-disconnect-1.0 {disconnect sends stop/quit and destroys the console window when present} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::stubCommand winfo {subcmd widget} {
+        if {$subcmd ne "exists"} { return 0 }
+        if {$widget eq ".inputengineconsole"} { return 1 }
+        return 0
+    }
+
+    ::inputengine_test::stubCommand destroy {w} {
+        lappend ::inputengine_test::calls [list destroy $w]
+        return
+    }
+
+    set ::inputengine::InputEngine(pipe) "TEST_PIPE"
+} -body {
+    # Arrange
+
+    # Act
+    ::inputengine::disconnect
+
+    # Assert
+    list $::inputengine_test::sendCalls $::inputengine_test::calls
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {{stop quit} {{destroy .inputengineconsole}}}
+
+test inputengine-resetEngine-1.0 {resetEngine does not attempt to destroy console when not present} -setup {
+    ::inputengine_test::setup
+
+    ::inputengine_test::stubCommand winfo {subcmd widget} {
+        if {$subcmd ne "exists"} { return 0 }
+        return 0
+    }
+    ::inputengine_test::stubCommand destroy {w} { error "unexpected destroy $w" }
+
+    set ::inputengine::InputEngine(pipe) "TEST_PIPE"
+    set ::inputengine::InputEngine(log) "LOG"
+    set ::inputengine::InputEngine(logCount) 1
+    set ::inputengine::InputEngine(init) 1
+} -body {
+    # Arrange
+
+    # Act
+    ::inputengine::resetEngine
+
+    # Assert
+    list $::inputengine::InputEngine(pipe) $::inputengine::InputEngine(log) $::inputengine::InputEngine(logCount) $::inputengine::InputEngine(init)
+} -cleanup {
+    ::inputengine_test::cleanup
+} -result {{} {} 0 0}
