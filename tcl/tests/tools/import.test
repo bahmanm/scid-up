@@ -1,0 +1,437 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools import.tcl]
+
+namespace eval ::import_test {
+    variable stubbedCommands {}
+
+    variable calls {}
+    variable scMoveCalls {}
+    variable updateBoardCalls {}
+    variable scBaseImportCalls {}
+    variable destroyCalls {}
+    variable afterCalls {}
+    variable notifyDbModifiedCalls {}
+
+    variable tkAnswer ""
+    variable firstMovesReturn {}
+}
+
+proc ::import_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::import_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::import_test::resetRecordedState {} {
+    set ::import_test::calls {}
+    set ::import_test::scMoveCalls {}
+    set ::import_test::updateBoardCalls {}
+    set ::import_test::scBaseImportCalls {}
+    set ::import_test::destroyCalls {}
+    set ::import_test::afterCalls {}
+    set ::import_test::notifyDbModifiedCalls {}
+
+    set ::import_test::tkAnswer ""
+    set ::import_test::firstMovesReturn {}
+}
+
+proc ::import_test::defineWidget {path} {
+    set fqName $path
+    if {![string match "::*" $fqName]} {
+        set fqName "::$fqName"
+    }
+    if {[llength [info commands $fqName]]} { return }
+
+    proc $fqName {subcmd args} {
+        set widgetName [lindex [info level 0] 0]
+        if {[string match "::*" $widgetName]} {
+            set widgetName [string range $widgetName 2 end]
+        }
+        lappend ::import_test::calls [list $widgetName $subcmd {*}$args]
+
+        switch -- $subcmd {
+            configure { return }
+            insert { return }
+            delete { return }
+            tag { return }
+            create { return }
+            default { error "Unexpected widget command: $widgetName $subcmd" }
+        }
+    }
+}
+
+proc ::import_test::stubTkForImportPgnFile {} {
+    # Arrange: headless, deterministic globals.
+    set ::MB3 3
+
+    array set ::tr {
+        ImportingIn ImportingIn
+        ImportingFiles ImportingFiles
+        ImportingFrom ImportingFrom
+        Stop Stop
+        Close Close
+    }
+
+    namespace eval ::ttk {}
+    namespace eval ::win {}
+    namespace eval ::ERROR {}
+    namespace eval ::notify {}
+
+    ::import_test::stubCommand win::createDialog {w} {
+        lappend ::import_test::calls [list win::createDialog $w]
+        return
+    }
+    ::import_test::stubCommand wm {subcmd args} {
+        lappend ::import_test::calls [list wm $subcmd {*}$args]
+        return
+    }
+    ::import_test::stubCommand winfo {subcmd widget} {
+        if {$subcmd ne "exists"} { return 0 }
+        return 0
+    }
+    ::import_test::stubCommand ttk::frame {path args} {
+        ::import_test::defineWidget $path
+        return $path
+    }
+    ::import_test::stubCommand canvas {path args} {
+        ::import_test::defineWidget $path
+        return $path
+    }
+    ::import_test::stubCommand ttk::button {path args} {
+        ::import_test::defineWidget $path
+        return $path
+    }
+    ::import_test::stubCommand grid {args} { return }
+    ::import_test::stubCommand pack {args} { return }
+    ::import_test::stubCommand grab {args} { return }
+    ::import_test::stubCommand busyCursor {w} { return }
+    ::import_test::stubCommand unbusyCursor {w} { return }
+    ::import_test::stubCommand progressBarSet {canvas w h} {
+        lappend ::import_test::calls [list progressBarSet $canvas $w $h]
+        return
+    }
+    ::import_test::stubCommand progressBarCancel {} { return }
+    ::import_test::stubCommand autoscrollText {orient frame text style} {
+        ::import_test::defineWidget $frame
+        ::import_test::defineWidget $text
+        return
+    }
+    ::import_test::stubCommand destroy {w} {
+        lappend ::import_test::destroyCalls $w
+        return
+    }
+    ::import_test::stubCommand focus {w} { return }
+    ::import_test::stubCommand update {} { return }
+
+    ::import_test::stubCommand ERROR::getErrorMsg {} { return "TEST_ERROR" }
+    ::import_test::stubCommand ::notify::DatabaseModified {base} {
+        lappend ::import_test::notifyDbModifiedCalls $base
+        return
+    }
+
+    ::import_test::stubCommand after {args} {
+        lappend ::import_test::afterCalls $args
+        return
+    }
+}
+
+proc ::import_test::setup {} {
+    ::import_test::restoreStubs
+    ::import_test::resetRecordedState
+
+    # Minimal translation proc used by importMoveListTrans.
+    ::import_test::stubCommand ::tr {key} { return $key }
+
+    ::import_test::stubCommand untrans {line} {
+        lappend ::import_test::calls [list untrans $line]
+        return "UNTRANS:$line"
+    }
+
+    ::import_test::stubCommand tk_messageBox {args} {
+        if {$::import_test::tkAnswer eq ""} {
+            error "tk_messageBox called without ::import_test::tkAnswer"
+        }
+        return $::import_test::tkAnswer
+    }
+
+    ::import_test::stubCommand sc_game {subcmd args} {
+        switch -- $subcmd {
+            firstMoves {
+                return $::import_test::firstMovesReturn
+            }
+            default {
+                error "sc_game $subcmd not stubbed in import tests"
+            }
+        }
+    }
+
+    ::import_test::stubCommand sc_move {subcmd args} {
+        lappend ::import_test::scMoveCalls [list $subcmd {*}$args]
+        return
+    }
+
+    ::import_test::stubCommand updateBoard {args} {
+        lappend ::import_test::updateBoardCalls $args
+        return
+    }
+}
+
+proc ::import_test::cleanup {} {
+    ::import_test::restoreStubs
+    ::import_test::resetRecordedState
+}
+
+test import-importMoveList-1.0 {importMoveList calls sc_move and updates board} -setup {
+    ::import_test::setup
+} -body {
+    # Arrange
+    set line "1. e4 e5 2. Nf3"
+
+    # Act
+    importMoveList $line
+
+    # Assert
+    list $::import_test::scMoveCalls $::import_test::updateBoardCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{start {addSan {1. e4 e5 2. Nf3}}} -pgn}
+
+test import-importMoveListTrans-1.0 {importMoveListTrans imports without prompting when game is empty} -setup {
+    ::import_test::setup
+} -body {
+    # Arrange
+    set ::import_test::firstMovesReturn {}
+    set line "1. e4 e5"
+
+    # Act
+    importMoveListTrans $line
+
+    # Assert
+    list $::import_test::calls $::import_test::scMoveCalls $::import_test::updateBoardCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{untrans {1. e4 e5}}} {start {addSan {UNTRANS:1. e4 e5}}} -pgn}
+
+test import-importMoveListTrans-2.0 {importMoveListTrans prompts and imports when confirmed} -setup {
+    ::import_test::setup
+} -body {
+    # Arrange
+    set ::import_test::firstMovesReturn {e4}
+    set ::import_test::tkAnswer "yes"
+    set line "1. e4 e5"
+
+    # Act
+    importMoveListTrans $line
+
+    # Assert
+    list $::import_test::calls $::import_test::scMoveCalls $::import_test::updateBoardCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{untrans {1. e4 e5}}} {start {addSan {UNTRANS:1. e4 e5}}} -pgn}
+
+test import-importMoveListTrans-3.0 {importMoveListTrans does nothing when prompt is rejected} -setup {
+    ::import_test::setup
+} -body {
+    # Arrange
+    set ::import_test::firstMovesReturn {e4}
+    set ::import_test::tkAnswer "no"
+    set line "1. e4 e5"
+
+    # Act
+    importMoveListTrans $line
+
+    # Assert
+    list $::import_test::calls $::import_test::scMoveCalls $::import_test::updateBoardCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{} {} {}}
+
+test import-importPgnLine-1.0 {importPgnLine populates the import text widget} -setup {
+    ::import_test::setup
+
+    # Arrange (suite-specific): fake the import window and widget.
+    ::import_test::stubCommand importPgnGame {} {
+        ::import_test::defineWidget .importWin.pane.edit.text
+        return
+    }
+    ::import_test::stubCommand focus {w} {
+        lappend ::import_test::calls [list focus $w]
+        return
+    }
+} -body {
+    # Arrange
+    set line "1. e4 e5 {comment}"
+
+    # Act
+    importPgnLine $line
+
+    # Assert
+    set widgetCalls [lsearch -all -inline $::import_test::calls ".importWin.pane.edit.text*"]
+    list $widgetCalls [lsearch -all -inline $::import_test::calls "focus*"]
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{.importWin.pane.edit.text delete 1.0 end} {.importWin.pane.edit.text insert end {1. e4 e5 {comment}}} {.importWin.pane.edit.text tag add sel 1.0 end}} {{focus .importWin.pane.edit.text}}}
+
+test import-importPgnFile-1.0 {importPgnFile autocloses when no warnings and no error} -setup {
+    ::import_test::setup
+    ::import_test::stubTkForImportPgnFile
+
+    ::import_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            filename { return "/tmp/testbase.si4" }
+            import {
+                lassign $args base fname
+                lappend ::import_test::scBaseImportCalls [list $base $fname]
+                return [list 1 ""]
+            }
+            default { error "sc_base $subcmd not stubbed in import tests" }
+        }
+    }
+} -body {
+    # Arrange
+    set base 7
+    set fnames [list "/tmp/a.pgn"]
+
+    # Act
+    importPgnFile $base $fnames
+
+    # Assert
+    set scheduledScript [lindex [lindex $::import_test::afterCalls 0] 1]
+    eval $scheduledScript
+
+    list $::import_test::scBaseImportCalls $::import_test::afterCalls $::import_test::notifyDbModifiedCalls $::import_test::destroyCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{7 /tmp/a.pgn}} {{idle {::notify::DatabaseModified 7}}} 7 .ipgnWin}
+
+test import-importPgnFile-2.0 {importPgnFile does not autoclose when warnings are present} -setup {
+    ::import_test::setup
+    ::import_test::stubTkForImportPgnFile
+
+    ::import_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            filename { return "/tmp/testbase.si4" }
+            import {
+                lassign $args base fname
+                lappend ::import_test::scBaseImportCalls [list $base $fname]
+                return [list 2 "WARNINGS"]
+            }
+            default { error "sc_base $subcmd not stubbed in import tests" }
+        }
+    }
+} -body {
+    # Arrange
+    set base 7
+    set fnames [list "/tmp/a.pgn"]
+
+    # Act
+    importPgnFile $base $fnames
+
+    # Assert
+    list $::import_test::scBaseImportCalls $::import_test::destroyCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{7 /tmp/a.pgn}} {}}
+
+test import-importPgnFile-3.0 {importPgnFile does not autoclose on import error} -setup {
+    ::import_test::setup
+    ::import_test::stubTkForImportPgnFile
+
+    ::import_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            filename { return "/tmp/testbase.si4" }
+            import {
+                lassign $args base fname
+                lappend ::import_test::scBaseImportCalls [list $base $fname]
+                error "import failed"
+            }
+            default { error "sc_base $subcmd not stubbed in import tests" }
+        }
+    }
+} -body {
+    # Arrange
+    set base 7
+    set fnames [list "/tmp/a.pgn"]
+
+    # Act
+    importPgnFile $base $fnames
+
+    # Assert
+    list $::import_test::scBaseImportCalls $::import_test::destroyCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{7 /tmp/a.pgn}} {}}
+
+test import-importPgnFile-4.0 {importPgnFile stops after interrupted import} -setup {
+    ::import_test::setup
+    ::import_test::stubTkForImportPgnFile
+
+    ::import_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            filename { return "/tmp/testbase.si4" }
+            import {
+                lassign $args base fname
+                lappend ::import_test::scBaseImportCalls [list $base $fname]
+                return -code break [list 1 ""]
+            }
+            default { error "sc_base $subcmd not stubbed in import tests" }
+        }
+    }
+} -body {
+    # Arrange
+    set base 7
+    set fnames [list "/tmp/a.pgn" "/tmp/b.pgn"]
+
+    # Act
+    importPgnFile $base $fnames
+
+    # Assert
+    list $::import_test::scBaseImportCalls $::import_test::destroyCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{7 /tmp/a.pgn}} {}}
+
+test import-importPgnFile-5.0 {importPgnFile destroys existing window before recreating} -setup {
+    ::import_test::setup
+    ::import_test::stubTkForImportPgnFile
+
+    # Arrange: pretend the import window already exists.
+    ::import_test::stubCommand winfo {subcmd widget} {
+        if {$subcmd ne "exists"} { return 0 }
+        if {$widget eq ".ipgnWin"} { return 1 }
+        return 0
+    }
+
+    ::import_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            filename { return "/tmp/testbase.si4" }
+            import {
+                lassign $args base fname
+                lappend ::import_test::scBaseImportCalls [list $base $fname]
+                return [list 1 "WARNINGS"]
+            }
+            default { error "sc_base $subcmd not stubbed in import tests" }
+        }
+    }
+} -body {
+    # Arrange
+    set base 7
+    set fnames [list "/tmp/a.pgn"]
+
+    # Act
+    importPgnFile $base $fnames
+
+    # Assert
+    list $::import_test::scBaseImportCalls $::import_test::destroyCalls
+} -cleanup {
+    ::import_test::cleanup
+} -result {{{7 /tmp/a.pgn}} .ipgnWin}
