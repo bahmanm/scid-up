@@ -37,9 +37,6 @@ source [file join [::scid_test::tclDir] tools ptracker.tcl]
 
 namespace eval ::ptracker_test {
     variable stubbedCommands {}
-    variable widgets {}
-    variable widgetState
-    variable widgetText
     variable bindCalls {}
     variable scBaseCalls {}
     variable progressCalls {}
@@ -55,68 +52,9 @@ proc ::ptracker_test::restoreStubs {} {
     ::scid_test::mocks::restoreStubs stubbedCommands
 }
 
-proc ::ptracker_test::defineWidget {path} {
-    variable widgets
-
-    if {[llength [info commands $path]]} {
-        error "Widget command already exists: $path"
-    }
-
-    interp alias {} $path {} ::ptracker_test::widgetDispatch $path
-    lappend widgets $path
-}
-
-proc ::ptracker_test::widgetDispatch {path subcmd args} {
-    variable widgetState
-    variable widgetText
-
-    switch -- $subcmd {
-        configure {
-            foreach {opt val} $args {
-                set widgetState($path,$opt) $val
-            }
-            return
-        }
-        cget {
-            set opt [lindex $args 0]
-            if {![info exists widgetState($path,$opt)]} {
-                error "Widget $path missing option $opt"
-            }
-            return $widgetState($path,$opt)
-        }
-        delete {
-            set widgetText($path) ""
-            return
-        }
-        insert {
-            # Expected: insert <index> <text>
-            set text [lindex $args 1]
-            append widgetText($path) $text
-            return
-        }
-        default {
-            error "Widget $path subcommand $subcmd not stubbed"
-        }
-    }
-}
-
-proc ::ptracker_test::cleanupWidgets {} {
-    variable widgets
-    variable widgetState
-    variable widgetText
-
-    foreach w $widgets {
-        catch {rename $w ""}
-    }
-
-    set widgets {}
-    array unset widgetState
-    array unset widgetText
-}
-
 proc ::ptracker_test::setup {} {
     ::ptracker_test::restoreStubs
-    ::ptracker_test::cleanupWidgets
+    ::scid_test::widgets::reset
 
     # Arrange
     set ::ptracker_test::bindCalls {}
@@ -133,7 +71,7 @@ proc ::ptracker_test::setup {} {
 
 proc ::ptracker_test::cleanup {} {
     ::ptracker_test::restoreStubs
-    ::ptracker_test::cleanupWidgets
+    ::scid_test::widgets::reset
     unset -nocomplain ::ptracker_test::bindCalls
     unset -nocomplain ::ptracker_test::scBaseCalls
     unset -nocomplain ::ptracker_test::progressCalls
@@ -197,7 +135,7 @@ test ptracker-refresh-color-1.0 {ptrack::refresh color repaints squares based on
     }
 
     for {set i 0} {$i < 64} {incr i} {
-        ::ptracker_test::defineWidget .ptracker.bd.sq$i
+        ::scid_test::widgets::defineWidget .ptracker.bd.sq$i
     }
 
     set ::ptrack::shade {}
@@ -214,8 +152,8 @@ test ptracker-refresh-color-1.0 {ptrack::refresh color repaints squares based on
     set expected0 [::ptrack::color 0.0]
     set expected7 [::ptrack::color 7.0]
     list \
-        [expr {$::ptracker_test::widgetState(.ptracker.bd.sq0,-background) eq $expected0}] \
-        [expr {$::ptracker_test::widgetState(.ptracker.bd.sq7,-background) eq $expected7}]
+        [expr {[::scid_test::widgets::getState .ptracker.bd.sq0 -background] eq $expected0}] \
+        [expr {[::scid_test::widgets::getState .ptracker.bd.sq7 -background] eq $expected7}]
 } -cleanup {
     ::ptracker_test::cleanup
 } -result {1 1}
@@ -236,7 +174,7 @@ test ptracker-refresh-adjusts-range-1.0 {ptrack::refresh coerces moves(end) to m
         .ptracker.t.buttons.close
         .ptracker.t.buttons.stop
     } {
-        ::ptracker_test::defineWidget $w
+        ::scid_test::widgets::defineWidget $w
     }
 
     ::ptracker_test::stubCommand sc_base {subcmd args} {
@@ -257,9 +195,9 @@ test ptracker-refresh-adjusts-range-1.0 {ptrack::refresh coerces moves(end) to m
     # Assert
     list \
         $::ptrack::moves(end) \
-        $::ptracker_test::widgetState(.ptracker.t.buttons.update,-state) \
-        $::ptracker_test::widgetState(.ptracker.t.buttons.close,-state) \
-        $::ptracker_test::widgetState(.ptracker.t.buttons.stop,-state)
+        [::scid_test::widgets::getState .ptracker.t.buttons.update -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.close -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.stop -state]
 } -cleanup {
     ::ptracker_test::cleanup
 } -result {10 normal normal disabled}
@@ -295,16 +233,16 @@ test ptracker-refresh-all-1.0 {ptrack::refresh populates shade, configures squar
         lappend ::ptracker_test::scBaseCalls [list $subcmd {*}$args]
         if {$subcmd eq "piecetrack"} {
             # Assert: UI is disabled before heavy work.
-            if {![info exists ::ptracker_test::widgetState(.ptracker.t.buttons.update,-state)] ||
-                $::ptracker_test::widgetState(.ptracker.t.buttons.update,-state) ne "disabled"} {
+            if {![::scid_test::widgets::hasState .ptracker.t.buttons.update -state] ||
+                [::scid_test::widgets::getState .ptracker.t.buttons.update -state] ne "disabled"} {
                 error "Expected update button disabled before sc_base piecetrack"
             }
-            if {![info exists ::ptracker_test::widgetState(.ptracker.t.buttons.close,-state)] ||
-                $::ptracker_test::widgetState(.ptracker.t.buttons.close,-state) ne "disabled"} {
+            if {![::scid_test::widgets::hasState .ptracker.t.buttons.close -state] ||
+                [::scid_test::widgets::getState .ptracker.t.buttons.close -state] ne "disabled"} {
                 error "Expected close button disabled before sc_base piecetrack"
             }
-            if {![info exists ::ptracker_test::widgetState(.ptracker.t.buttons.stop,-state)] ||
-                $::ptracker_test::widgetState(.ptracker.t.buttons.stop,-state) ne "normal"} {
+            if {![::scid_test::widgets::hasState .ptracker.t.buttons.stop -state] ||
+                [::scid_test::widgets::getState .ptracker.t.buttons.stop -state] ne "normal"} {
                 error "Expected stop button normal before sc_base piecetrack"
             }
             if {[llength $::ptracker_test::progressCalls] == 0} {
@@ -321,14 +259,14 @@ test ptracker-refresh-all-1.0 {ptrack::refresh populates shade, configures squar
         .ptracker.t.buttons.close
         .ptracker.t.buttons.stop
     } {
-        ::ptracker_test::defineWidget $w
+        ::scid_test::widgets::defineWidget $w
     }
 
     for {set i 0} {$i < 64} {incr i} {
-        ::ptracker_test::defineWidget .ptracker.bd.sq$i
+        ::scid_test::widgets::defineWidget .ptracker.bd.sq$i
     }
 
-    ::ptracker_test::defineWidget .ptracker.t.text.text
+    ::scid_test::widgets::defineWidget .ptracker.t.text.text
 
     set ::ptrack::moves(start) 2
     set ::ptrack::moves(end) 3
@@ -348,9 +286,9 @@ test ptracker-refresh-all-1.0 {ptrack::refresh populates shade, configures squar
     set okShade0 [expr {$shade0 == 100.0}]
 
     set expectedBg0 [::ptrack::color 100.0]
-    set okBg0 [expr {$::ptracker_test::widgetState(.ptracker.bd.sq0,-background) eq $expectedBg0}]
+    set okBg0 [expr {[::scid_test::widgets::getState .ptracker.bd.sq0 -background] eq $expectedBg0}]
 
-    set text $::ptracker_test::widgetText(.ptracker.t.text.text)
+    set text [::scid_test::widgets::getText .ptracker.t.text.text]
     set okText [expr {[string first "\t 1.\ta1" $text] == 0}]
 
     set okBindCalls [expr {[llength $::ptracker_test::bindCalls] == 128}]
@@ -379,7 +317,7 @@ test ptracker-refresh-error-restores-buttons-1.0 {ptrack::refresh restores butto
         .ptracker.t.buttons.close
         .ptracker.t.buttons.stop
     } {
-        ::ptracker_test::defineWidget $w
+        ::scid_test::widgets::defineWidget $w
     }
 
     ::ptracker_test::stubCommand sc_base {subcmd args} {
@@ -396,9 +334,9 @@ test ptracker-refresh-error-restores-buttons-1.0 {ptrack::refresh restores butto
 
     # Assert
     list \
-        $::ptracker_test::widgetState(.ptracker.t.buttons.update,-state) \
-        $::ptracker_test::widgetState(.ptracker.t.buttons.close,-state) \
-        $::ptracker_test::widgetState(.ptracker.t.buttons.stop,-state)
+        [::scid_test::widgets::getState .ptracker.t.buttons.update -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.close -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.stop -state]
 } -cleanup {
     ::ptracker_test::cleanup
 } -result {normal normal disabled}

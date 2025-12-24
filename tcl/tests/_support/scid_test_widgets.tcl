@@ -1,0 +1,144 @@
+namespace eval ::scid_test {}
+namespace eval ::scid_test::widgets {}
+
+namespace eval ::scid_test::widgets {
+    variable created {}
+
+    # Store progressbar step calls per widget, indexed by ($path).
+    array set steps {}
+
+    # Store configuration/state per widget, indexed by ($path,$option).
+    # Examples:
+    #   state(.w,-state) = "disabled"
+    #   state(.w,-maximum) = 100
+    array set state {}
+
+    # Store appended text per widget (for text-like doubles).
+    array set text {}
+}
+
+# Resets all widget doubles created via this helper.
+proc ::scid_test::widgets::reset {} {
+    variable created
+    variable steps
+    variable state
+    variable text
+
+    foreach w $created {
+        catch {rename $w ""}
+    }
+
+    set created {}
+
+    array unset steps
+    array unset state
+    array unset text
+}
+
+# Defines a lightweight widget command double.
+#
+# The resulting command supports a minimal Tk-like interface:
+#   - `$w configure -opt value ...`
+#   - `$w cget -opt`
+#   - `$w step n`                (records step calls)
+#   - `$w delete ...` / `$w insert ...` (records inserted text)
+proc ::scid_test::widgets::defineWidget {path} {
+    variable created
+
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::scid_test::widgets::dispatch $path
+    lappend created $path
+    return $path
+}
+
+proc ::scid_test::widgets::dispatch {path subcmd args} {
+    variable state
+    variable text
+    variable steps
+
+    switch -- $subcmd {
+        configure {
+            if {[llength $args] % 2 != 0} {
+                error "Widget $path configure expects option/value pairs, got: $args"
+            }
+            foreach {opt val} $args {
+                set state($path,$opt) $val
+            }
+            return
+        }
+        cget {
+            set opt [lindex $args 0]
+            if {![info exists state($path,$opt)]} {
+                error "Widget $path missing option $opt"
+            }
+            return $state($path,$opt)
+        }
+        step {
+            set amount [lindex $args 0]
+            lappend steps($path) $amount
+
+            # Maintain a `-value` for callers that query it.
+            if {[info exists state($path,-value)]} {
+                set state($path,-value) [expr {$state($path,-value) + $amount}]
+            } else {
+                set state($path,-value) $amount
+            }
+            return
+        }
+        delete {
+            set text($path) ""
+            return
+        }
+        insert {
+            # Expected: insert <index> <text>
+            set inserted [lindex $args 1]
+            append text($path) $inserted
+            return
+        }
+        default {
+            error "Widget $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::scid_test::widgets::setState {path opt val} {
+    variable state
+    set state($path,$opt) $val
+}
+
+proc ::scid_test::widgets::hasState {path opt} {
+    variable state
+    expr {[info exists state($path,$opt)]}
+}
+
+proc ::scid_test::widgets::getState {path opt} {
+    variable state
+    if {![info exists state($path,$opt)]} {
+        error "Widget $path missing option $opt"
+    }
+    return $state($path,$opt)
+}
+
+proc ::scid_test::widgets::getText {path} {
+    variable text
+    if {![info exists text($path)]} {
+        return ""
+    }
+    return $text($path)
+}
+
+proc ::scid_test::widgets::getSteps {path} {
+    variable steps
+    if {![info exists steps($path)]} {
+        return {}
+    }
+    return $steps($path)
+}
+
+proc ::scid_test::widgets::getAllSteps {} {
+    variable steps
+    return [array get steps]
+}

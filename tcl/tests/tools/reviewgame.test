@@ -1,0 +1,528 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Minimal namespaces expected by the module.
+namespace eval ::board {}
+namespace eval ::uci {}
+namespace eval ::move {}
+namespace eval ::notify {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools reviewgame.tcl]
+
+namespace eval ::reviewgame_test {
+    variable stubbedCommands {}
+
+    variable afterCalls {}
+    variable afterCancels {}
+
+    variable uciCalls {}
+    variable scGameCalls {}
+    variable scMoveCalls {}
+
+    variable tkMessageBoxCalls {}
+    variable mainLoopCalls 0
+    variable moveBackCalls 0
+    variable moveForwardCalls 0
+    variable scVarExitCalls 0
+}
+
+proc ::reviewgame_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::reviewgame_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::reviewgame_test::setup {} {
+    ::reviewgame_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::reviewgame_test::afterCalls {}
+    set ::reviewgame_test::afterCancels {}
+
+    set ::reviewgame_test::uciCalls {}
+    set ::reviewgame_test::scGameCalls {}
+    set ::reviewgame_test::scMoveCalls {}
+
+    set ::reviewgame_test::tkMessageBoxCalls {}
+    set ::reviewgame_test::mainLoopCalls 0
+    set ::reviewgame_test::moveBackCalls 0
+    set ::reviewgame_test::moveForwardCalls 0
+    set ::reviewgame_test::scVarExitCalls 0
+
+    # Minimal globals used by the module.
+    set ::reviewgame::sequence 0
+    set ::reviewgame::margin 0.3
+
+    array unset ::reviewgame::analysisEngine
+    array set ::reviewgame::analysisEngine {analyzeMode 0}
+
+    array unset ::analysis
+    set ::analysis(multiPV$::reviewgame::engineSlot) {}
+
+    set ::engines(list) {}
+
+    # Default stubs used across tests.
+    ::reviewgame_test::stubCommand after {args} {
+        if {[llength $args] >= 1 && [lindex $args 0] eq "cancel"} {
+            lappend ::reviewgame_test::afterCancels [lrange $args 1 end]
+            return
+        }
+        if {[llength $args] < 2} {
+            error "after called with unexpected args: $args"
+        }
+        set ms [lindex $args 0]
+        set script [lindex $args 1]
+        lappend ::reviewgame_test::afterCalls [list $ms $script]
+        return "afterId"
+    }
+
+    ::reviewgame_test::stubCommand tk_messageBox {args} {
+        lappend ::reviewgame_test::tkMessageBoxCalls $args
+        return "ok"
+    }
+
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} {
+        # Default: not flipped.
+        return 0
+    }
+
+    ::reviewgame_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            side { return "white" }
+            fen { return "FEN" }
+            default { error "sc_pos $subcmd not stubbed in reviewgame tests" }
+        }
+    }
+
+    ::reviewgame_test::stubCommand winfo {subcmd args} {
+        if {$subcmd eq "exists"} {
+            set w [lindex $args 0]
+            if {$w eq "$::reviewgame::window.finfo.pb"} { return 1 }
+            return 0
+        }
+        error "winfo $subcmd not stubbed in reviewgame tests"
+    }
+
+    ::reviewgame_test::stubCommand ::uci::resetUciInfo {slot} {
+        lappend ::reviewgame_test::uciCalls [list resetUciInfo $slot]
+        return
+    }
+
+    ::reviewgame_test::stubCommand ::uci::startEngine {index slot} {
+        lappend ::reviewgame_test::uciCalls [list startEngine $index $slot]
+        return
+    }
+
+    ::reviewgame_test::stubCommand ::uci::sendToEngine {slot text} {
+        lappend ::reviewgame_test::uciCalls [list sendToEngine $slot $text]
+        return
+    }
+
+    ::reviewgame_test::stubCommand sc_game {subcmd args} {
+        lappend ::reviewgame_test::scGameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            push { return }
+            pop { return }
+            info {
+                # Minimal for these tests.
+                set field [lindex $args 0]
+                switch -- $field {
+                    white { return "WhitePlayer" }
+                    black { return "BlackPlayer" }
+                    default { return "" }
+                }
+            }
+            default { error "sc_game $subcmd not stubbed in reviewgame tests" }
+        }
+    }
+
+    ::reviewgame_test::stubCommand sc_move {subcmd args} {
+        lappend ::reviewgame_test::scMoveCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            addSan { return }
+            default { error "sc_move $subcmd not stubbed in reviewgame tests" }
+        }
+    }
+
+    ::reviewgame_test::stubCommand ::reviewgame::mainLoop {} {
+        incr ::reviewgame_test::mainLoopCalls
+        return
+    }
+
+    ::reviewgame_test::stubCommand ::move::Back {} {
+        incr ::reviewgame_test::moveBackCalls
+        return
+    }
+
+    ::reviewgame_test::stubCommand ::move::Forward {} {
+        incr ::reviewgame_test::moveForwardCalls
+        return
+    }
+
+    ::reviewgame_test::stubCommand sc_var {subcmd args} {
+        if {$subcmd eq "exit"} {
+            incr ::reviewgame_test::scVarExitCalls
+            return
+        }
+        error "sc_var $subcmd not stubbed in reviewgame tests"
+    }
+
+    # Minimal widgets for analysis progress.
+    ::scid_test::widgets::defineWidget $::reviewgame::window.finfo.pb
+    ::scid_test::widgets::setState $::reviewgame::window.finfo.pb -maximum 100
+}
+
+proc ::reviewgame_test::cleanup {} {
+    ::reviewgame_test::restoreStubs
+    ::scid_test::widgets::reset
+    unset -nocomplain ::engines(list)
+    array unset ::analysis
+    array unset ::reviewgame::analysisEngine
+}
+
+# ---- Tests ----
+
+test reviewgame-isPlayerTurn-1.0 {isPlayerTurn depends on side and board flip} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange / Act / Assert
+    ::reviewgame_test::stubCommand sc_pos {subcmd args} {
+        if {$subcmd eq "side"} { return "white" }
+        error "sc_pos $subcmd not stubbed"
+    }
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 0 }
+    set a [::reviewgame::isPlayerTurn]
+
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 1 }
+    set b [::reviewgame::isPlayerTurn]
+
+    ::reviewgame_test::stubCommand sc_pos {subcmd args} {
+        if {$subcmd eq "side"} { return "black" }
+        error "sc_pos $subcmd not stubbed"
+    }
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 1 }
+    set c [::reviewgame::isPlayerTurn]
+
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 0 }
+    set d [::reviewgame::isPlayerTurn]
+
+    list $a $b $c $d
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 0 1 0}
+
+test reviewgame-isGoodScore-1.0 {isGoodScore uses margin and board flip} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::margin 0.3
+
+    # Act / Assert (white at bottom)
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 0 }
+    set w1 [::reviewgame::isGoodScore 0.5 0.3]
+    set w2 [::reviewgame::isGoodScore 0.5 0.1]
+
+    # Act / Assert (black at bottom)
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 1 }
+    set b1 [::reviewgame::isGoodScore 0.5 0.7]
+    set b2 [::reviewgame::isGoodScore 0.5 0.9]
+
+    list $w1 $w2 $b1 $b2
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 0 1 0}
+
+test reviewgame-resetValues-1.0 {resetValues initialises sequence and flags} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::sequence 2
+    set ::reviewgame::analysisEngine(analyzeMode) 1
+    set ::reviewgame::bailout 1
+    set ::reviewgame::useExtendedTime 1
+    set ::reviewgame::solutionDisplayed 1
+
+    # Act
+    ::reviewgame::resetValues
+
+    # Assert
+    list \
+        $::reviewgame::sequence \
+        $::reviewgame::analysisEngine(analyzeMode) \
+        $::reviewgame::bailout \
+        $::reviewgame::useExtendedTime \
+        $::reviewgame::solutionDisplayed
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {0 0 0 0 0}
+
+test reviewgame-callback-premove-1.0 {callback premove blocks only when engine turn at sequence 2} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::sequence 2
+
+    ::reviewgame_test::stubCommand ::reviewgame::isPlayerTurn {} { return 1 }
+    set a [::reviewgame::callback premove]
+
+    ::reviewgame_test::stubCommand ::reviewgame::isPlayerTurn {} { return 0 }
+    set b [::reviewgame::callback premove]
+
+    set ::reviewgame::sequence 1
+    set c [::reviewgame::callback premove]
+
+    list $a $b $c
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {0 1 1}
+
+test reviewgame-launchengine-1.0 {launchengine returns 0 when no enabled engine exists} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list [list a b c d e f g 0] [list a b c d e f g 0]]
+
+    # Act
+    set ok [::reviewgame::launchengine]
+
+    # Assert
+    list $ok $::reviewgame_test::uciCalls
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {0 {{resetUciInfo 6}}}
+
+test reviewgame-launchengine-2.0 {launchengine starts first enabled engine at configured slot} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list \
+        [list a b c d e f g 0] \
+        [list a b c d e f g 1] \
+        [list a b c d e f g 1]]
+
+    # Act
+    set ok [::reviewgame::launchengine]
+
+    # Assert
+    list $ok $::reviewgame_test::uciCalls $::reviewgame::analysisEngine(analyzeMode)
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 {{resetUciInfo 6} {startEngine 1 6}} 0}
+
+test reviewgame-sendToEngine-1.0 {sendToEngine forwards commands to UCI engine slot} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::reviewgame::sendToEngine "go infinite"
+
+    # Assert
+    set ::reviewgame_test::uciCalls
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {{sendToEngine 6 {go infinite}}}
+
+test reviewgame-startAnalyze-1.0 {startAnalyze sets fen, schedules timers, and sends UCI commands} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::progressBarStep 1
+    set ::reviewgame::analysisEngine(analyzeMode) 0
+
+    # Act
+    ::reviewgame::startAnalyze 2 "e4"
+
+    # Assert
+    set fenKey "fen$::reviewgame::engineSlot"
+    set okFen [expr {$::analysis($fenKey) eq "FEN"}]
+
+    # progressBarTimer = (analysisTime*1000*step)/maximum = (2*1000*1)/100 = 20
+    set okTimer [expr {$::reviewgame::progressBarTimer == 20}]
+
+    # First after should schedule updateProgressBar, second should schedule stopAnalyze.
+    set okAfter [expr {$::reviewgame_test::afterCalls eq [list [list 20 ::reviewgame::updateProgressBar] [list 2000 {::reviewgame::stopAnalyze e4}]]}]
+
+    set okCancels [expr {$::reviewgame_test::afterCancels eq [list [list ::reviewgame::stopAnalyze]]}]
+
+    set okUci [expr {$::reviewgame_test::uciCalls eq [list \
+        [list sendToEngine 6 "position fen FEN e4"] \
+        [list sendToEngine 6 "go infinite"]]}]
+
+    set okAnalyze [expr {$::reviewgame::analysisEngine(analyzeMode) == 1}]
+
+    list $okFen $okTimer $okAfter $okCancels $okUci $okAnalyze
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 1 1 1 1 1}
+
+test reviewgame-startAnalyze-2.0 {startAnalyze sends exit when already analysing} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::analysisEngine(analyzeMode) 1
+
+    # Act
+    ::reviewgame::startAnalyze 1
+
+    # Assert
+    set okExit [expr {[lindex $::reviewgame_test::uciCalls 0] eq [list sendToEngine 6 exit]}]
+    set okHasPosition [expr {[llength [lsearch -all -inline $::reviewgame_test::uciCalls [list sendToEngine 6 "position fen FEN "]]] == 1}]
+    set okHasGo [expr {[lindex $::reviewgame_test::uciCalls end] eq [list sendToEngine 6 "go infinite"]}]
+
+    set okCancels [expr {$::reviewgame_test::afterCancels eq [list [list ::reviewgame::stopAnalyze]]}]
+    set okAfterCount [expr {[llength $::reviewgame_test::afterCalls] == 2}]
+
+    list $okExit $okHasPosition $okHasGo $okCancels $okAfterCount $::reviewgame::analysisEngine(analyzeMode)
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 1 1 1 1 1}
+
+test reviewgame-stopAnalyze-1.0 {stopAnalyze stores PV score/moves and stops engine} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::analysisEngine(analyzeMode) 1
+    set ::reviewgame::sequence 0
+
+    set ::analysis(multiPV$::reviewgame::engineSlot) [list [list 0 0.5 {e2e4 e7e5}]]
+
+    # Act
+    ::reviewgame::stopAnalyze
+
+    # Assert
+    set okSeq [expr {$::reviewgame::sequence == 1}]
+    set okScore [expr {$::reviewgame::analysisEngine(score,1) == -0.5}]
+    set okMoves [expr {$::reviewgame::analysisEngine(moves,1) eq "e2e4 e7e5"}]
+    set okMode [expr {$::reviewgame::analysisEngine(analyzeMode) == 0}]
+
+    set okPb [expr {[::scid_test::widgets::getState $::reviewgame::window.finfo.pb -value] == 0}]
+    set okStop [expr {[lindex $::reviewgame_test::uciCalls end] eq [list sendToEngine 6 stop]}]
+    set okCancels [expr {$::reviewgame_test::afterCancels eq [list [list ::reviewgame::updateProgressBar]]}]
+
+    list $okSeq $okScore $okMoves $okMode $okPb $okStop $okCancels
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 1 1 1 1 1 1}
+
+
+test reviewgame-updateProgressBar-1.0 {updateProgressBar steps progress bar and reschedules itself} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::progressBarStep 2
+    set ::reviewgame::progressBarTimer 15
+
+    # Act
+    ::reviewgame::updateProgressBar
+
+    # Assert
+    list \
+        [::scid_test::widgets::getSteps $::reviewgame::window.finfo.pb] \
+        $::reviewgame_test::afterCalls
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {2 {{15 ::reviewgame::updateProgressBar}}}
+
+test reviewgame-checkConsistency-1.0 {checkConsistency detects board rotation and warns} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::boardFlipped 0
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 1 }
+
+    # Act
+    set ok [::reviewgame::checkConsistency]
+
+    # Assert
+    list $ok [expr {[llength $::reviewgame_test::tkMessageBoxCalls] == 1}]
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {0 1}
+
+test reviewgame-extendedTime-1.0 {extendedTime enables extended mode and may move back} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::analysisEngine(analyzeMode) 0
+    ::reviewgame_test::stubCommand ::reviewgame::isPlayerTurn {} { return 0 }
+
+    # Act
+    ::reviewgame::extendedTime
+
+    # Assert
+    list \
+        $::reviewgame_test::moveBackCalls \
+        $::reviewgame::useExtendedTime \
+        $::reviewgame::sequence \
+        $::reviewgame_test::mainLoopCalls
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 1 0 1}
+
+test reviewgame-stopAnalyze-when-not-analysing-1.0 {stopAnalyze no-ops when analyze mode is not active} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::analysisEngine(analyzeMode) 0
+    set ::reviewgame::sequence 7
+
+    # Act
+    ::reviewgame::stopAnalyze
+
+    # Assert
+    list \
+        $::reviewgame::sequence \
+        $::reviewgame_test::afterCancels \
+        $::reviewgame_test::uciCalls
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {7 {} {}}
+
+test reviewgame-checkConsistency-when-consistent-1.0 {checkConsistency returns 1 and does not warn when consistent} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::boardFlipped 0
+    ::reviewgame_test::stubCommand ::board::isFlipped {args} { return 0 }
+
+    # Act
+    set ok [::reviewgame::checkConsistency]
+
+    # Assert
+    list $ok [llength $::reviewgame_test::tkMessageBoxCalls]
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 0}
+
+test reviewgame-startAnalyze-without-move-1.0 {startAnalyze without move does not modify game state} -setup {
+    ::reviewgame_test::setup
+} -body {
+    # Arrange
+    set ::reviewgame::progressBarStep 1
+    set ::reviewgame::analysisEngine(analyzeMode) 0
+
+    # Act
+    ::reviewgame::startAnalyze 1
+
+    # Assert
+    set fenKey "fen$::reviewgame::engineSlot"
+    set okFen [expr {$::analysis($fenKey) eq "FEN"}]
+    set okNoGame [expr {$::reviewgame_test::scGameCalls eq {}}]
+    set okNoMove [expr {$::reviewgame_test::scMoveCalls eq {}}]
+
+    set okHasPosition [expr {[lindex $::reviewgame_test::uciCalls 0] eq [list sendToEngine 6 "position fen FEN "]}]
+    set okHasGo [expr {[lindex $::reviewgame_test::uciCalls 1] eq [list sendToEngine 6 "go infinite"]}]
+
+    list $okFen $okNoGame $okNoMove $okHasPosition $okHasGo
+} -cleanup {
+    ::reviewgame_test::cleanup
+} -result {1 1 1 1 1}
