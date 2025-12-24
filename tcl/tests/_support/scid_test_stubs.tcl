@@ -143,9 +143,26 @@ if {![llength [info commands sc_game]]} {
         # each case deterministic.
         set ::scid_test::sc_game_info [dict create]
     }
+    if {![info exists ::scid_test::sc_game_number]} {
+        set ::scid_test::sc_game_number 1
+    }
+    if {![info exists ::scid_test::sc_game_tags]} {
+        # `sc_game tag get <tagName>` returns values from this dict in headless tests.
+        # Keys are the tag names used by the caller (e.g. "WhiteElo", "BlackElo").
+        set ::scid_test::sc_game_tags [dict create]
+    }
 
     proc sc_game {subcmd args} {
+        # These variables may be unset by individual test cleanups. Keep their
+        # existence guaranteed so missing stubs fail in a predictable way.
+        if {![info exists ::scid_test::sc_game_info]} { set ::scid_test::sc_game_info [dict create] }
+        if {![info exists ::scid_test::sc_game_number]} { set ::scid_test::sc_game_number 1 }
+        if {![info exists ::scid_test::sc_game_tags]} { set ::scid_test::sc_game_tags [dict create] }
+
         switch -- $subcmd {
+            number {
+                return $::scid_test::sc_game_number
+            }
             info {
                 set field [lindex $args 0]
                 if {$field eq ""} {
@@ -155,6 +172,24 @@ if {![llength [info commands sc_game]]} {
                     error "sc_game info $field not stubbed in tests"
                 }
                 return [dict get $::scid_test::sc_game_info $field]
+            }
+            tag {
+                set op [lindex $args 0]
+                switch -- $op {
+                    get {
+                        set tagName [lindex $args 1]
+                        if {$tagName eq ""} {
+                            error "sc_game tag get missing tag name"
+                        }
+                        if {![dict exists $::scid_test::sc_game_tags $tagName]} {
+                            error "sc_game tag get $tagName not stubbed in tests"
+                        }
+                        return [dict get $::scid_test::sc_game_tags $tagName]
+                    }
+                    default {
+                        error "sc_game tag $op not stubbed in tests"
+                    }
+                }
             }
             tags {
                 set op [lindex $args 0]

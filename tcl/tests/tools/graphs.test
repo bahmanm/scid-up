@@ -1,0 +1,907 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# `tcl/tools/graphs.tcl` assumes these namespaces exist (they are created
+# earlier in the full Scid application bootstrap).
+namespace eval ::tools {}
+namespace eval ::tools::graphs {}
+namespace eval ::tools::graphs::filter {}
+namespace eval ::tools::graphs::score {}
+namespace eval ::tools::graphs::rating {}
+namespace eval ::tools::graphs::absfilter {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools graphs.tcl]
+
+namespace eval ::graphs_test {
+    variable stubbedCommands {}
+
+    variable widgetCalls {}
+    variable busyCalls {}
+    variable unbusyCalls {}
+
+    variable scFilterFreqCalls {}
+    variable scFilterCountCalls {}
+    variable scBaseCalls {}
+    variable scNameCalls {}
+    variable scGameCalls {}
+    variable updateBoardCalls {}
+
+    namespace eval graph {
+        variable createCalls {}
+        variable redrawCalls {}
+        variable configureCalls {}
+        variable dataCalls {}
+        variable cgetValues {}
+        variable xunmapValues {}
+    }
+}
+
+proc ::graphs_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::graphs_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::graphs_test::resetRecordedState {} {
+    set ::graphs_test::widgetCalls {}
+    set ::graphs_test::busyCalls {}
+    set ::graphs_test::unbusyCalls {}
+    set ::graphs_test::scFilterFreqCalls {}
+    set ::graphs_test::scFilterCountCalls {}
+    set ::graphs_test::scBaseCalls {}
+    set ::graphs_test::scNameCalls {}
+    set ::graphs_test::scGameCalls {}
+    set ::graphs_test::updateBoardCalls {}
+
+    set ::graphs_test::graph::createCalls {}
+    set ::graphs_test::graph::redrawCalls {}
+    set ::graphs_test::graph::configureCalls {}
+    set ::graphs_test::graph::dataCalls {}
+    set ::graphs_test::graph::cgetValues {}
+    set ::graphs_test::graph::xunmapValues {}
+}
+
+proc ::graphs_test::setup {} {
+    ::graphs_test::restoreStubs
+    ::graphs_test::resetRecordedState
+
+    # Deterministic globals typically present in Scid.
+    set ::curr_db 1
+    set ::language en
+    set ::MB3 3
+
+    set ::scid_test::sc_game_number 1
+    set ::scid_test::sc_game_info [dict create \
+        white "White Player" \
+        black "Black Player" \
+        site "Site" \
+        date "2025.01.01" \
+    ]
+    set ::scid_test::sc_game_tags [dict create WhiteElo 0 BlackElo 0]
+
+    array set ::tr {
+        Decade Decade
+        Year Year
+        Rating Rating
+        moves moves
+        Filter Filter
+        GraphFilterTitle GraphFilterTitle
+        GraphAbsFilterTitle GraphAbsFilterTitle
+        ToolsRating ToolsRating
+    }
+
+    # Minimal translation proc.
+    ::graphs_test::stubCommand tr {key} { return $key }
+
+    # Tk-only procs used by the module: no-op in headless tests.
+    ::graphs_test::stubCommand update {} { return }
+    ::graphs_test::stubCommand busyCursor {w} {
+        lappend ::graphs_test::busyCalls $w
+        return
+    }
+    ::graphs_test::stubCommand unbusyCursor {w} {
+        lappend ::graphs_test::unbusyCalls $w
+        return
+    }
+
+    # Minimal helpers referenced by graphs refresh procs.
+    namespace eval ::windows {}
+    namespace eval ::windows::gamelist {}
+    ::graphs_test::stubCommand ::windows::gamelist::filterText {} { return "TEST_FILTER" }
+
+    namespace eval ::utils {}
+    namespace eval ::utils::string {}
+    ::graphs_test::stubCommand ::utils::string::Surname {name} {
+        set parts [split $name " "]
+        if {[llength $parts] == 0} { return "" }
+        return [lindex $parts end]
+    }
+
+    # Minimal graph API stubs (used heavily by graphs.tcl).
+    namespace eval ::utils::graph {}
+    ::graphs_test::stubCommand ::utils::graph::create {graph args} {
+        lappend ::graphs_test::graph::createCalls [list $graph $args]
+        return
+    }
+    ::graphs_test::stubCommand ::utils::graph::redraw {graph} {
+        lappend ::graphs_test::graph::redrawCalls $graph
+        return
+    }
+    ::graphs_test::stubCommand ::utils::graph::configure {graph args} {
+        lappend ::graphs_test::graph::configureCalls [list $graph $args]
+        return
+    }
+    ::graphs_test::stubCommand ::utils::graph::data {graph dataset args} {
+        lappend ::graphs_test::graph::dataCalls [list $graph $dataset $args]
+        return
+    }
+    ::graphs_test::stubCommand ::utils::graph::cget {graph opt} {
+        set key "${graph}:${opt}"
+        if {[dict exists $::graphs_test::graph::cgetValues $key]} {
+            return [dict get $::graphs_test::graph::cgetValues $key]
+        }
+        return 0
+    }
+    ::graphs_test::stubCommand ::utils::graph::xunmap {graph cx} {
+        if {[dict exists $::graphs_test::graph::xunmapValues $graph]} {
+            return [dict get $::graphs_test::graph::xunmapValues $graph]
+        }
+        return 0.0
+    }
+
+    # Default Scid command stubs; tests may override per-case.
+    ::graphs_test::stubCommand sc_base {subcmd args} {
+        lappend ::graphs_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            current { return 1 }
+            numGames { return 0 }
+            getGame { return {} }
+            player_elo { return {} }
+            default { error "sc_base $subcmd not stubbed in graphs tests" }
+        }
+    }
+
+    ::graphs_test::stubCommand sc_filter {subcmd args} {
+        switch -- $subcmd {
+            freq {
+                lappend ::graphs_test::scFilterFreqCalls $args
+                return [list 0 0]
+            }
+            count {
+                lappend ::graphs_test::scFilterCountCalls $args
+                return 0
+            }
+            new { return 1 }
+            search { return }
+            release { return }
+            default { error "sc_filter $subcmd not stubbed in graphs tests" }
+        }
+    }
+
+    ::graphs_test::stubCommand sc_name {subcmd args} {
+        lappend ::graphs_test::scNameCalls [list $subcmd {*}$args]
+        if {$subcmd eq "elo"} { return {} }
+        error "sc_name $subcmd not stubbed in graphs tests"
+    }
+
+    ::graphs_test::stubCommand updateBoard {args} {
+        lappend ::graphs_test::updateBoardCalls $args
+        return
+    }
+}
+
+proc ::graphs_test::cleanup {} {
+    ::graphs_test::restoreStubs
+
+    unset -nocomplain ::curr_db ::language ::MB3
+    unset -nocomplain ::tr
+    unset -nocomplain ::scid_test::sc_game_number
+    unset -nocomplain ::scid_test::sc_game_info
+    unset -nocomplain ::scid_test::sc_game_tags
+}
+
+proc ::graphs_test::installWinfoStub {existsMap widthMap heightMap} {
+    ::graphs_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set w [lindex $args 0]
+                if {[dict exists $::graphs_test::winfoExists $w]} {
+                    return [dict get $::graphs_test::winfoExists $w]
+                }
+                return 0
+            }
+            width {
+                set w [lindex $args 0]
+                if {[dict exists $::graphs_test::winfoWidth $w]} {
+                    return [dict get $::graphs_test::winfoWidth $w]
+                }
+                error "winfo width $w not stubbed in graphs tests"
+            }
+            height {
+                set w [lindex $args 0]
+                if {[dict exists $::graphs_test::winfoHeight $w]} {
+                    return [dict get $::graphs_test::winfoHeight $w]
+                }
+                error "winfo height $w not stubbed in graphs tests"
+            }
+            default {
+                error "winfo $subcmd not stubbed in graphs tests"
+            }
+        }
+    }
+
+    set ::graphs_test::winfoExists $existsMap
+    set ::graphs_test::winfoWidth $widthMap
+    set ::graphs_test::winfoHeight $heightMap
+}
+
+proc ::graphs_test::installWidgetStub {name} {
+    ::graphs_test::stubCommand $name {subcmd args} {
+        lappend ::graphs_test::widgetCalls [list [lindex [info level 0] 0] $subcmd {*}$args]
+        switch -- $subcmd {
+            itemconfigure -
+            coords -
+            configure {
+                return
+            }
+            default {
+                error "[lindex [info level 0] 0] $subcmd not stubbed in graphs tests"
+            }
+        }
+    }
+}
+
+proc ::graphs_test::lastGraphCallArgs {callListVar graphName} {
+    upvar 1 $callListVar callList
+    set last {}
+    foreach call $callList {
+        if {[lindex $call 0] eq $graphName} {
+            set last [lindex $call 1]
+        }
+    }
+    return $last
+}
+
+proc ::graphs_test::findGraphConfigureArgs {graphName} {
+    foreach call $::graphs_test::graph::configureCalls {
+        if {[lindex $call 0] eq $graphName} {
+            return [lindex $call 1]
+        }
+    }
+    return {}
+}
+
+proc ::graphs_test::findGraphDataArgs {graphName datasetName} {
+    foreach call $::graphs_test::graph::dataCalls {
+        if {[lindex $call 0] eq $graphName && [lindex $call 1] eq $datasetName} {
+            return [lindex $call 2]
+        }
+    }
+    return {}
+}
+
+test graphs-getScorefromComment-1.0 {getScorefromComment parses [%eval <float>] and clamps} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set comment {Some text [%eval 2.50] more text}
+
+        # Act
+        set score [getScorefromComment $comment 2.0]
+
+        # Assert
+        return $score
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result 1.99
+
+test graphs-getScorefromComment-2.0 {getScorefromComment parses [%eval #-N] as negative mate} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set comment {[%eval #-3] forced mate}
+
+        # Act
+        set score [getScorefromComment $comment 3.0]
+
+        # Assert
+        return $score
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result -2.99
+
+test graphs-getScorefromComment-3.0 {getScorefromComment parses :M and +/-M mate annotations} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set c1 {:M5}
+        set c2 {:M-2}
+        set c3 {foo +M4 bar}
+        set c4 {foo -M4 bar}
+
+        # Act
+        set r1 [getScorefromComment $c1 2.0]
+        set r2 [getScorefromComment $c2 2.0]
+        set r3 [getScorefromComment $c3 2.0]
+        set r4 [getScorefromComment $c4 2.0]
+
+        # Assert
+        return [list $r1 $r2 $r3 $r4]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 1.99 -1.99 1.99 -1.99]
+
+test graphs-getScorefromComment-4.0 {getScorefromComment falls back to the first '+' even if a '-' appears earlier} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set comment {text -0.50 then +0.25}
+
+        # Act
+        set score [getScorefromComment $comment 2.0]
+
+        # Assert
+        return $score
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result 0.25
+
+test graphs-getScorefromComment-5.0 {getScorefromComment returns empty when no score exists} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set comment {no eval here}
+
+        # Act
+        set score [getScorefromComment $comment 2.0]
+
+        # Assert
+        return $score
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result {}
+
+test graphs-checkConfigFilterGraph-1.0 {checkConfigFilterGraph clamps invalid values to defaults} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::FilterMaxMoves 0
+        set ::FilterMinMoves 0
+        set ::FilterStepMoves 0
+        set ::FilterMaxElo 0
+        set ::FilterMinElo -1
+        set ::FilterStepElo 0
+        set ::FilterMaxYear 2025
+        set ::FilterMinYear 0
+        set ::FilterStepYear 0
+
+        # Act
+        checkConfigFilterGraph
+
+        # Assert
+        return [list \
+            $::FilterStepMoves $::FilterStepElo $::FilterStepYear \
+            $::FilterMinMoves $::FilterMinElo $::FilterMinYear \
+            $::FilterMaxMoves $::FilterMaxElo $::FilterMaxYear \
+        ]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 1 100 1 5 2100 2013 80 2800 2025]
+
+test graphs-checkConfigFilterGraph-2.0 {checkConfigFilterGraph resets FilterMaxYear when invalid} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::FilterMaxYear 0
+        set ::FilterMinYear 2000
+
+        # Act
+        checkConfigFilterGraph
+
+        # Assert
+        set nowYear [clock format [clock seconds] -format {%Y}]
+        return [expr {$::FilterMaxYear eq $nowYear && $::FilterMinYear == 2000}]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result 1
+
+test graphs-filterSwitch-1.0 {filter::Switch cycles type and calls Refresh} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::filter::type decade
+        set ::graphs_test::refreshCalls 0
+        ::graphs_test::stubCommand ::tools::graphs::filter::Refresh {} {
+            incr ::graphs_test::refreshCalls
+            return
+        }
+
+        # Act
+        ::tools::graphs::filter::Switch
+
+        # Assert
+        return [list $::tools::graphs::filter::type $::graphs_test::refreshCalls]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list year 1]
+
+test graphs-absfilterSwitch-1.0 {absfilter::Switch cycles type and calls Refresh} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::absfilter::type move
+        set ::graphs_test::refreshCalls 0
+        ::graphs_test::stubCommand ::tools::graphs::absfilter::Refresh {} {
+            incr ::graphs_test::refreshCalls
+            return
+        }
+
+        # Act
+        ::tools::graphs::absfilter::Switch
+
+        # Assert
+        return [list $::tools::graphs::absfilter::type $::graphs_test::refreshCalls]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list decade 1]
+
+test graphs-MoveTimeList-1.0 {MoveTimeList parses clkms and emt values (white)} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set game [list \
+            [list 0 0 {} {} {ignored}] \
+            [list 0 0 {} {} {[%clkms 60000]}] \
+            [list 0 0 {} {} {ignored}] \
+            [list 0 0 {} {} {[%emt 30]}] \
+        ]
+
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            switch -- $subcmd {
+                current { return 1 }
+                getGame { return $::graphs_test::testGame }
+                default { return 0 }
+            }
+        }
+        set ::graphs_test::testGame $game
+
+        # Act
+        set coords [MoveTimeList w 0]
+
+        # Assert
+        return $coords
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 0.5 1.0 1.5 30.0]
+
+test graphs-MoveTimeList-2.0 {MoveTimeList accumulates emt times in minutes when add is enabled} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set game [list \
+            [list 0 0 {} {} {ignored}] \
+            [list 0 0 {} {} {[%emt 60]}] \
+            [list 0 0 {} {} {ignored}] \
+            [list 0 0 {} {} {[%emt 30]}] \
+        ]
+
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            switch -- $subcmd {
+                current { return 1 }
+                getGame { return $::graphs_test::testGame }
+                default { return 0 }
+            }
+        }
+        set ::graphs_test::testGame $game
+
+        # Act
+        set coords [MoveTimeList w 1]
+
+        # Assert
+        return $coords
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 0.5 1.0 1.5 1.5]
+
+test graphs-MoveTimeList-3.0 {MoveTimeList parses clk hh:mm:ss as minutes} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set game [list \
+            [list 0 0 {} {} {[%clk 01:02:30]}] \
+            [list 0 0 {} {} {ignored}] \
+        ]
+
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            switch -- $subcmd {
+                current { return 1 }
+                getGame { return $::graphs_test::testGame }
+                default { return 0 }
+            }
+        }
+        set ::graphs_test::testGame $game
+
+        # Act
+        set coords [MoveTimeList b 0]
+
+        # Assert
+        return $coords
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 0.0 62.5]
+
+test graphs-MoveScoreList-1.0 {MoveScoreList returns scores and move indices} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::score::MaxY 6
+        set game [list \
+            [list 0 0 {} {} {start}] \
+            [list 0 0 {} {} {foo +0.50 bar}] \
+            [list 0 0 {} {} {-0.25}] \
+        ]
+
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            switch -- $subcmd {
+                current { return 1 }
+                getGame { return $::graphs_test::testGame }
+                default { return 0 }
+            }
+        }
+        set ::graphs_test::testGame $game
+
+        # Act
+        set coords [::tools::graphs::MoveScoreList 0 0]
+
+        # Assert
+        return $coords
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 0.0 0.5 0.5 -0.25]
+
+test graphs-MoveScoreList-2.0 {MoveScoreList inverts black-side scores when requested} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::score::MaxY 6
+        set game [list \
+            [list 0 0 {} {} {start}] \
+            [list 0 0 {} {} {+0.50}] \
+            [list 0 0 {} {} {-0.25}] \
+        ]
+
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            switch -- $subcmd {
+                current { return 1 }
+                getGame { return $::graphs_test::testGame }
+                default { return 0 }
+            }
+        }
+        set ::graphs_test::testGame $game
+
+        # Act
+        set coords [::tools::graphs::MoveScoreList 0 1]
+
+        # Assert
+        return $coords
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 0.0 -0.5 0.5 -0.25]
+
+test graphs-scoreMove-1.0 {score::Move maps x coordinate to a move index and navigates} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        dict set ::graphs_test::graph::xunmapValues score 0.0
+        set scMoves {}
+        ::graphs_test::stubCommand sc_move {subcmd args} {
+            lappend ::graphs_test::scGameCalls [list sc_move $subcmd {*}$args]
+            return
+        }
+        ::graphs_test::stubCommand updateBoard {args} {
+            lappend ::graphs_test::updateBoardCalls $args
+            return
+        }
+
+        # Act
+        ::tools::graphs::score::Move 123
+
+        # Assert
+        return [list $::graphs_test::scGameCalls $::graphs_test::updateBoardCalls]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list [list [list sc_move start] [list sc_move forward 1]] [list {}]]
+
+test graphs-filterRefresh-1.0 {filter::Refresh computes vlines, clamps freq, chooses ytick, and adds mean line} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::filter::type decade
+        set ::FilterGuessELO 1
+        set ::FilterMaxYear 2020
+        set ::FilterMinYear 2010
+        set ::FilterStepYear 1
+        set ::FilterMaxElo 2800
+        set ::FilterMinElo 2100
+        set ::FilterStepElo 100
+        set ::FilterMaxMoves 80
+        set ::FilterMinMoves 5
+        set ::FilterStepMoves 1
+
+        ::graphs_test::installWinfoStub \
+            [dict create .fgraph 1 .fgraph.c 1] \
+            [dict create .fgraph.c 660] \
+            [dict create .fgraph.c 480]
+        ::graphs_test::installWidgetStub .fgraph.c
+        ::graphs_test::installWidgetStub .fgraph.b.status
+
+        # sc_filter freq is called once per bucket; return a huge ratio once to
+        # exercise 999.9 clamping and ytick selection.
+        set freqCall 0
+        ::graphs_test::stubCommand sc_filter {subcmd args} {
+            switch -- $subcmd {
+                freq {
+                    incr ::graphs_test::freqCall
+                    if {$::graphs_test::freqCall == 1} { return [list 1000 1] }
+                    return [list 0 0]
+                }
+                count { return 200 }
+                default { return 0 }
+            }
+        }
+        set ::graphs_test::freqCall 0
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            switch -- $subcmd {
+                current { return 1 }
+                numGames { return 400 }
+                default { return 0 }
+            }
+        }
+
+        # Act
+        ::tools::graphs::filter::Refresh
+
+        # Assert
+        lassign [lindex $::graphs_test::graph::createCalls 0] _graphName createArgs
+        set vlineIdx [lsearch -exact $createArgs "-vline"]
+        set vlines [lindex $createArgs [expr {$vlineIdx + 1}]]
+
+        set cfgArgs [::graphs_test::findGraphConfigureArgs filter]
+        set ytick [lindex $cfgArgs [expr {[lsearch -exact $cfgArgs -ytick] + 1}]]
+        set hlines [lindex $cfgArgs [expr {[lsearch -exact $cfgArgs -hline] + 1}]]
+
+        set dataArgs [::graphs_test::findGraphDataArgs filter data]
+        set coords [lindex $dataArgs [expr {[lsearch -exact $dataArgs -coords] + 1}]]
+
+        return [list \
+            [expr {[lsearch -exact $vlines [list steelBlue 1 at 4.5]] != -1}] \
+            [expr {[lsearch -exact $vlines [list steelBlue 1 at 9.5]] != -1}] \
+            $ytick \
+            $hlines \
+            [lrange $coords 0 3] \
+        ]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 1 1 100 [list [list gray80 1 each 100] [list red 1 at 500.0]] [list 1 999.9 2 0.0]]
+
+test graphs-absfilterRefresh-1.0 {absfilter::Refresh uses absolute counts and chooses large ytick} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::absfilter::type decade
+        set ::FilterGuessELO 1
+        set ::FilterMaxYear 2020
+        set ::FilterMinYear 2010
+        set ::FilterStepYear 1
+        set ::FilterMaxElo 2800
+        set ::FilterMinElo 2100
+        set ::FilterStepElo 100
+        set ::FilterMaxMoves 80
+        set ::FilterMinMoves 5
+        set ::FilterStepMoves 1
+
+        ::graphs_test::installWinfoStub \
+            [dict create .afgraph 1 .afgraph.c 1] \
+            [dict create .afgraph.c 660] \
+            [dict create .afgraph.c 480]
+        ::graphs_test::installWidgetStub .afgraph.c
+        ::graphs_test::installWidgetStub .afgraph.b.status
+
+        set freqCall 0
+        ::graphs_test::stubCommand sc_filter {subcmd args} {
+            switch -- $subcmd {
+                freq {
+                    incr ::graphs_test::freqCall
+                    if {$::graphs_test::freqCall == 1} { return [list 600000 1] }
+                    return [list 0 0]
+                }
+                count { return 10 }
+                default { return 0 }
+            }
+        }
+        set ::graphs_test::freqCall 0
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            switch -- $subcmd {
+                current { return 1 }
+                numGames { return 1 }
+                default { return 0 }
+            }
+        }
+
+        # Act
+        ::tools::graphs::absfilter::Refresh
+
+        # Assert
+        set cfgArgs [::graphs_test::findGraphConfigureArgs absfilter]
+        set ytick [lindex $cfgArgs [expr {[lsearch -exact $cfgArgs -ytick] + 1}]]
+        set hlines [lindex $cfgArgs [expr {[lsearch -exact $cfgArgs -hline] + 1}]]
+        return [list $ytick $hlines]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 50000 [list [list gray80 1 each 50000] [list red 1 at 60000]]]
+
+test graphs-ratingGetElo-1.0 {rating::GetElo calls sc_name elo when configured} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::rating::elo elo
+        set ::tools::graphs::rating::year 2000
+        ::graphs_test::stubCommand sc_name {subcmd args} {
+            lappend ::graphs_test::scNameCalls [list $subcmd {*}$args]
+            return [list 2000 2500 2001 2510]
+        }
+
+        # Act
+        set result [::tools::graphs::rating::GetElo "Player X"]
+
+        # Assert
+        return [list $::graphs_test::scNameCalls $result]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list [list [list elo 2000 {Player X}]] [list 2000 2500 2001 2510]]
+
+test graphs-ratingGetElo-2.0 {rating::GetElo uses sc_filter + sc_base player_elo when configured} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        set ::tools::graphs::rating::elo info
+        set ::tools::graphs::rating::year 1995
+
+        set calls {}
+        ::graphs_test::stubCommand sc_filter {subcmd args} {
+            lappend ::graphs_test::scFilterFreqCalls [list $subcmd {*}$args]
+            switch -- $subcmd {
+                new { return 123 }
+                search { return }
+                release { return }
+                default { return }
+            }
+        }
+        ::graphs_test::stubCommand sc_base {subcmd args} {
+            lappend ::graphs_test::scBaseCalls [list $subcmd {*}$args]
+            if {$subcmd eq "player_elo"} { return [list 1995 2400 1996 2410] }
+            return 0
+        }
+        set ::curr_db 7
+
+        # Act
+        set result [::tools::graphs::rating::GetElo "Player Y"]
+
+        # Assert
+        return [list $::graphs_test::scFilterFreqCalls $::graphs_test::scBaseCalls $result]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list \
+        [list [list new 7] [list search 7 123 header -date {1995 2047}] [list release 7 123]] \
+        [list [list player_elo 7 123 {Player Y}]] \
+        [list 1995 2400 1996 2410] \
+    ]
+
+test graphs-ratingRefresh-1.0 {rating::Refresh plots both players, sets keys, and widens xtick for large year spans} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        ::graphs_test::installWinfoStub \
+            [dict create .rgraph 1 .rgraph.c 1] \
+            [dict create .rgraph.c 600] \
+            [dict create .rgraph.c 400]
+        ::graphs_test::installWidgetStub .rgraph.c
+
+        dict set ::scid_test::sc_game_info white "Alpha Beta"
+        dict set ::scid_test::sc_game_info black "Gamma Delta"
+
+        ::graphs_test::stubCommand ::tools::graphs::rating::GetElo {player} {
+            return [list 2000 2500 2005 2600 2010 2700]
+        }
+
+        dict set ::graphs_test::graph::cgetValues "ratings:axmin" 2000.2
+        dict set ::graphs_test::graph::cgetValues "ratings:axmax" 2015.9
+
+        # Act
+        ::tools::graphs::rating::Refresh both ""
+
+        # Assert
+        set cfgArgs [lindex [lindex $::graphs_test::graph::configureCalls end] 1]
+        set xtick [lindex $cfgArgs [expr {[lsearch -exact $cfgArgs -xtick] + 1}]]
+
+        set dArgs [::graphs_test::findGraphDataArgs ratings d]
+        set d2Args [::graphs_test::findGraphDataArgs ratings d2]
+
+        set dKey [lindex $dArgs [expr {[lsearch -exact $dArgs -key] + 1}]]
+        set d2Key [lindex $d2Args [expr {[lsearch -exact $d2Args -key] + 1}]]
+
+        set title "ToolsRating: Alpha Beta - Gamma Delta"
+        set titleSet 0
+        foreach call $::graphs_test::widgetCalls {
+            set widgetName [lindex $call 0]
+            if {$widgetName ne ".rgraph.c" && $widgetName ne "::.rgraph.c"} { continue }
+            if {[lindex $call 1] ne "itemconfigure"} { continue }
+            if {[lindex $call 2] ne "text"} { continue }
+
+            set textIdx [lsearch -exact $call -text]
+            if {$textIdx == -1} { continue }
+            if {[lindex $call [expr {$textIdx + 1}]] eq $title} {
+                set titleSet 1
+                break
+            }
+        }
+
+        return [list $xtick $dKey $d2Key $titleSet]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 5 Beta Delta 1]
+
+test graphs-scoreRefresh-1.0 {score::Refresh chooses ytick based on max move time and plots score bars} \
+    -setup {::graphs_test::setup} \
+    -body {
+        # Arrange
+        ::graphs_test::installWinfoStub \
+            [dict create .sgraph 1 .sgraph.c 1] \
+            [dict create .sgraph.c 600] \
+            [dict create .sgraph.c 300]
+        ::graphs_test::installWidgetStub .sgraph.c
+
+        set ::tools::graphs::score::Times 1
+        set ::tools::graphs::score::Scores 1
+        set ::tools::graphs::score::TimeSum 0
+        set ::tools::graphs::score::MaxY 6
+
+        ::graphs_test::stubCommand MoveTimeList {color add} {
+            if {$color eq "w"} { return [list 0.5 10 1.5 120] }
+            return [list 1.0 50 2.0 60]
+        }
+        ::graphs_test::stubCommand ::tools::graphs::MoveScoreList {invw invb} {
+            return [list 0.0 0.5 0.5 -0.25]
+        }
+
+        dict set ::scid_test::sc_game_info white "W"
+        dict set ::scid_test::sc_game_info black "B"
+        dict set ::scid_test::sc_game_info site "S"
+        dict set ::scid_test::sc_game_info date "D"
+        dict set ::scid_test::sc_game_tags WhiteElo 0
+        dict set ::scid_test::sc_game_tags BlackElo 0
+
+        # Act
+        ::tools::graphs::score::Refresh 0
+
+        # Assert
+        set createArgs [lindex [lindex $::graphs_test::graph::createCalls end] 1]
+        set ytick [lindex $createArgs [expr {[lsearch -exact $createArgs -ytick] + 1}]]
+
+        set dataArgs [::graphs_test::findGraphDataArgs score data]
+        set bars [lindex $dataArgs [expr {[lsearch -exact $dataArgs -bars] + 1}]]
+
+        return [list $ytick $bars]
+    } \
+    -cleanup {::graphs_test::cleanup} \
+    -result [list 20 2]
+
+# Ensure the suite leaves the interpreter clean.
+cleanupTests
