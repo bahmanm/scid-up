@@ -28,14 +28,30 @@ namespace eval ExtHardware {
   set bindbutton "::novag::connect"
   set showbutton 0
 
-  #----------------------------------------------------------------------
-  # Save the hardware options
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::ExtHardware::saveHardwareOptions
+  #   Persists external hardware configuration and (optionally) adds the connect
+  #   button to the main button bar.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Writes the configuration file `[scidConfigFile ExtHardware]`.
+  #   - Shows a `tk_messageBox` if the options file cannot be written.
+  #   - Updates `::statusBar` (including on write failure).
+  #   - Creates/configures `.main.fbutton.button.exthardware` if
+  #     `::ExtHardware::showbutton` is enabled and the button does not exist.
+  ################################################################################
   proc saveHardwareOptions {} {
      set optionF ""
      if {[catch {open [scidConfigFile ExtHardware] w} optionF]} {
         tk_messageBox -title "Scid: Unable to write file" -type ok -icon warning \
            -message "Unable to write options file: [scidConfigFile InputEngine]\n$optionF"
+        set ::statusBar "Unable to write external hardware options: [scidConfigFile ExtHardware]"
+        return
      } else {
         puts $optionF "# Scid options file"
         puts $optionF "# Version: $::scidVersion, $::scidVersionDate"
@@ -78,9 +94,19 @@ namespace eval ExtHardware {
 
   }
 
-  #----------------------------------------------------------------------
-  # Set the hardware connect button image
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::ExtHardware::HWbuttonImg
+  #   Updates the external hardware connect button image (when enabled).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - img (string): Tk image name to assign to the button.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Configures `.main.fbutton.button.exthardware` when
+  #     `::ExtHardware::showbutton` is enabled.
+  ################################################################################
   proc HWbuttonImg {img} {
 
     if { $::ExtHardware::showbutton == 1 } {
@@ -88,21 +114,47 @@ namespace eval ExtHardware {
     }
   }
 
-  #----------------------------------------------------------------------
-  # Set the hardware connect button command binding
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::ExtHardware::HWbuttonBind
+  #   Updates the external hardware connect command binding and (when enabled)
+  #   updates the existing button widget to use it.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - cmd (string): Command string to invoke when clicking the connect button.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Writes `::ExtHardware::bindbutton`.
+  #   - Reconfigures `.main.fbutton.button.exthardware` when it exists and
+  #     `::ExtHardware::showbutton` is enabled.
+  ################################################################################
   proc HWbuttonBind {cmd} {
 
+    set ::ExtHardware::bindbutton $cmd
+
     if { $::ExtHardware::showbutton == 1 } {
-       set ::ExtHardware::bindbutton $cmd
+      if { [winfo exists .main.fbutton.button.exthardware] } {
+        .main.fbutton.button.exthardware configure -command $cmd
+      }
     }
   }
 
-  #----------------------------------------------------------------------
-  # config:
-  #    Opens the configuration dialog to input driver engines binary
-  #    and parameters required to fire up the engine
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::ExtHardware::config
+  #   Opens the external hardware configuration dialog.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates/configures `.exthardwareConfig` and its widgets/bindings.
+  #   - Updates `::ExtHardware::bindbutton` based on the selected hardware type.
+  #   - On OK: saves options, updates the button binding, closes the dialog, and
+  #     invokes the configured connect command.
+  ################################################################################
   proc config {} {
     global ::ExtHardware::port ::ExtHardware::engine ::ExtHardware::param ::ExtHardware::hardware
 
@@ -230,9 +282,22 @@ namespace eval inputengine {
 
   font create moveFont -family Helvetica -size 56 -weight bold
 
-  #----------------------------------------------------------------------
-  # Generate the console window also used for status display
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::consoleWindow
+  #   Creates (or toggles) the input engine console window used for status and
+  #   control.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - If `.inputengineconsole` already exists, calls `::inputengine::disconnect`
+  #     and returns.
+  #   - Otherwise creates `.inputengineconsole` and its widgets/bindings.
+  #   - Creates a board widget via `::board::new`.
+  ################################################################################
   proc consoleWindow {} {
 
     set w .inputengineconsole
@@ -312,17 +377,36 @@ namespace eval inputengine {
     ::createToplevelFinalize $w
   }
 
+  ################################################################################
+  # ::inputengine::updateConsole
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - line (string): Text to append to the console.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Appends to `.inputengineconsole.console` and scrolls to the end.
+  ################################################################################
   proc updateConsole {line} {
     set t .inputengineconsole.console
     $t insert end "$line\n"
     $t yview moveto 1
   }
 
-  #----------------------------------------------------------------------
-  # connectdisconnect()
-  #   Connects or disconnects depending on the current status of the
-  #   external input engine
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::connectdisconnect
+  #   Connects or disconnects depending on the current engine connection state.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - If disconnected, opens the console window and calls `::inputengine::connect`.
+  #   - If connected, calls `::inputengine::disconnect`.
+  ################################################################################
   proc connectdisconnect {} {
     global  ::inputengine::InputEngine
 
@@ -336,11 +420,21 @@ namespace eval inputengine {
     }
   }
 
-  #----------------------------------------------------------------------
-  # connect():
-  #     Fire upt the input engine and connect it to a local pipe.
-  #     Also register the eventhandler
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::connect
+  #   Starts the external input engine process and establishes a pipe connection.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Reads `::ExtHardware::engine`, `::ExtHardware::port`, and `::ExtHardware::param`.
+  #   - Opens a pipe to the external process and stores it in `InputEngine(pipe)`.
+  #   - Updates the hardware button image and may show a `tk_messageBox` on failure.
+  #   - On success, calls `::inputengine::Init`.
+  ################################################################################
   proc connect {} {
     global ::inputengine::InputEngine ::inputengine::engine \
         ::inputengine::port ::inputengine::param
@@ -362,10 +456,21 @@ namespace eval inputengine {
     ::inputengine::Init
   }
 
-  #----------------------------------------------------------------------
-  # disconneet()
-  #    Disconnect and close the input engine
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::disconnect
+  #   Requests the external input engine to stop and quit, and closes the console
+  #   UI.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sends "stop" and "quit" to the engine via `::inputengine::sendToEngine`.
+  #   - Destroys `.inputengineconsole` if it exists.
+  #   - Updates `::inputengine::connectimg`.
+  ################################################################################
   proc disconnect {} {
     global ::inputengine::InputEngine
     set pipe $::inputengine::InputEngine(pipe)
@@ -376,23 +481,39 @@ namespace eval inputengine {
     ::inputengine::sendToEngine "quit"
     set ::inputengine::connectimg tb_eng_disconnected
 
-    if { [winfo exists ::inputengine::.inputengineconsole]} {
-       destroy ::inputengine::.inputengineconsole
+    if { [winfo exists .inputengineconsole] } {
+       destroy .inputengineconsole
     }
   }
 
-  #----------------------------------------------------------------------
-  # logEngine
-  #    Simple log routine, ie. writing to stdout
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::logEngine
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - msg (string): Log message to emit.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Appends to the console via `::inputengine::updateConsole`.
+  ################################################################################
   proc logEngine {msg} {
       updateConsole "$msg"
   }
 
-  #----------------------------------------------------------------------
-  # sendToEngine()
-  #    Send a string to the engine and log it by means of logEngine
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::sendToEngine
+  #   Sends a single protocol command line to the engine.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - msg (string): Line to send.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Writes to the engine pipe (`InputEngine(pipe)`) and flushes.
+  #   - Logs the outgoing line via `::inputengine::logEngine`.
+  ################################################################################
   proc sendToEngine {msg} {
     global ::inputengine::InputEngine
     set pipe $::inputengine::InputEngine(pipe)
@@ -402,10 +523,20 @@ namespace eval inputengine {
     flush $pipe
   }
 
-  #----------------------------------------------------------------------
-  # init()
-  #    Initialises the engine and internal data
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::Init
+  #   Initialises the engine connection and registers the read event handler.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Configures the engine pipe for non-blocking reads.
+  #   - Registers a `fileevent` readable handler to `::inputengine::readFromEngine`.
+  #   - Calls `::inputengine::newgame`.
+  ################################################################################
   proc Init {} {
     global ::inputengine::InputEngine
     set pipe $::inputengine::InputEngine(pipe)
@@ -419,15 +550,27 @@ namespace eval inputengine {
     ::inputengine::newgame
   }
 
-  #----------------------------------------------------------------------
-  # resetEngine()
-  #    Resets the engines global variables
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::resetEngine
+  #   Resets internal state associated with the input engine connection.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates the external hardware button image.
+  #   - Destroys `.inputengineconsole` if it exists.
+  #   - Clears `InputEngine(...)` state variables (including `InputEngine(pipe)`).
+  ################################################################################
   proc resetEngine {} {
     global ::inputengine::InputEngine
 
     ::ExtHardware::HWbuttonImg tb_eng_disconnected
-    destroy .inputengineconsole
+    if { [winfo exists .inputengineconsole] } {
+      destroy .inputengineconsole
+    }
     set ::inputengine::InputEngine(pipe)     ""
     set ::inputengine::InputEngine(log)      ""
     set ::inputengine::InputEngine(logCount) 0
@@ -435,10 +578,18 @@ namespace eval inputengine {
   }
 
 
-  #----------------------------------------------------------------------
-  # sysinfo()
-  #    Initialises the engine and internal data
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::sysinfo
+  #   Requests system information from the external engine.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sends the "sysinfo" command to the engine.
+  ################################################################################
   proc sysinfo {} {
     global ::inputengine::InputEngine
     set pipe $::inputengine::InputEngine(pipe)
@@ -447,10 +598,21 @@ namespace eval inputengine {
     ::inputengine::sendToEngine "sysinfo"
   }
 
-  #----------------------------------------------------------------------
-  # rotateboard()
-  #    Rotates the board, ie. exchanges a1 and h8
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::rotateboard
+  #   Flips the displayed boards and requests rotation/synchronisation from the
+  #   external engine.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `::board::flip` for `.main.board` and `.inputengineconsole.bd`.
+  #   - Calls `::inputengine::newgame`.
+  #   - Sends "rotateboard" and triggers `::inputengine::synchronise`.
+  ################################################################################
   proc rotateboard {} {
     global ::inputengine::InputEngine
     set pipe $::inputengine::InputEngine(pipe)
@@ -465,10 +627,19 @@ namespace eval inputengine {
     ::inputengine::synchronise
   }
 
-  #----------------------------------------------------------------------
-  # newgame()
-  #    Handle NewGame event from board
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::newgame
+  #   Starts a new game context for input engine play.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `::game::Clear` (may prompt to save).
+  #   - Updates game tags (event/date) via `sc_game tags set`.
+  ################################################################################
   proc newgame {} {
 
     # Ask the user to save the current game
@@ -477,10 +648,20 @@ namespace eval inputengine {
     sc_game tags set -date [::utils::date::today]
   }
 
-  #----------------------------------------------------------------------
-  # endgame()
-  #    Handle game ending (end game event + result)
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::endgame
+  #   Records the game result and saves the game to the database.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - result (string): Game result (e.g. "1-0", "0-1", "1/2-1/2").
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Logs endgame status.
+  #   - Writes the result tag via `sc_game tags set -result`.
+  #   - Calls `gameAdd` to add/update the game in the current database.
+  ################################################################################
   proc endgame {result} {
 
     set filternum [sc_filter first]
@@ -491,10 +672,20 @@ namespace eval inputengine {
     gameAdd
   }
 
-  #----------------------------------------------------------------------
-  # synchronise()
-  #    read board position and set scid's representation accordingly
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::synchronise
+  #   Requests position/clock synchronisation from the external engine.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Logs synchronisation activity.
+  #   - Resets `InputEngine(init)` to 0.
+  #   - Sends "getposition" and "getclock" to the engine.
+  ################################################################################
   proc synchronise {} {
     global ::inputengine::InputEngine
 
@@ -505,6 +696,17 @@ namespace eval inputengine {
     ::inputengine::sendToEngine "getclock"
   }
 
+  ################################################################################
+  # ::inputengine::strreverse
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - str (string): String to reverse.
+  # Returns:
+  #   - reversed (string): `str` with characters in reverse order.
+  # Side effects:
+  #   - None.
+  ################################################################################
   proc strreverse {str} {
      set res {}
      set i [string length $str]
@@ -512,11 +714,24 @@ namespace eval inputengine {
      set res
   }
 
-  #----------------------------------------------------------------------
-  # readFromEngine()
-  #     Event Handler for commands and moves sent from the input
-  #     engine, implements input engine protocol
-  #----------------------------------------------------------------------
+  ################################################################################
+  # ::inputengine::readFromEngine
+  #   `fileevent` handler which processes lines from the input engine pipe.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Reads from `InputEngine(pipe)` and may close/reset the engine on EOF.
+  #   - Applies moves via `sc_move addSan` and updates the board (`updateBoard`).
+  #   - Initialises/compares positions via `sc_game startBoard` and `sc_pos fen`.
+  #   - Updates UI widgets in `.inputengineconsole` (status, clocks, piece images).
+  #   - Plays sounds and may show `tk_messageBox` on error conditions.
+  #   - Updates move clock comments via `sc_pos setComment` when enabled.
+  #   - Updates the wooden board display via `::board::update` using `sc_pos board`.
+  ################################################################################
   proc readFromEngine {} {
     global ::inputengine::InputEngine ::inputengine::connectimg
     set pipe $::inputengine::InputEngine(pipe)
