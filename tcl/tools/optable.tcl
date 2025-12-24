@@ -72,6 +72,19 @@ set ::optable::_docEnd(latex) {
   \end{document}
 }
 
+################################################################################
+# ::optable::ConfigMenus
+#   Updates the opening report window menu labels for a given language.
+# Visibility:
+#   Public.
+# Inputs:
+#   - lang (string, optional): Language identifier; defaults to `::language`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.oprepWin.menu` label text via `configMenuText`.
+#   - No-ops when `.oprepWin` does not exist.
+################################################################################
 proc ::optable::ConfigMenus {{lang ""}} {
   if {! [winfo exists .oprepWin]} { return }
   if {$lang == ""} { set lang $::language }
@@ -90,6 +103,24 @@ proc ::optable::ConfigMenus {{lang ""}} {
   }
 }
 
+################################################################################
+# ::optable::makeReportWin
+#   Generates the opening report for the current database and (unless suppressed)
+#   displays it in the report window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - args (list): Optional flags:
+#     - `-noprogress`: Do not show the progress window.
+#     - `-nodisplay`: Generate report data but do not create/update `.oprepWin`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Runs report generation via `sc_search`, `sc_tree`, and `sc_report opening`.
+#   - Updates `::optable::_data(...)` (tree, LaTeX tree, board diagrams, ratios).
+#   - Creates/updates `.oprepWin` UI, binds keys, and refreshes menu items.
+#   - Shows/cancels a progress window and can be interrupted by the user.
+################################################################################
 proc ::optable::makeReportWin {args} {
   set ::optable::opReportBase [sc_base current]
   set showProgress 1
@@ -273,7 +304,20 @@ proc ::optable::makeReportWin {args} {
   ::notify::filter $::curr_db dbfilter
 }
 ################################################################################
-# merges the N best games up to P plies to current game
+# ::optable::mergeGames
+#   Merges the top games from the current opening report into the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - game_count (int, optional): Maximum number of games to merge (default 50).
+#   - ply (int, optional): Maximum number of plies to merge per game (default 999).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads report game list via `sc_report opening best a`.
+#   - Calls `sc_game merge` for each parsed game id.
+#   - Shows `tk_messageBox` warnings on parse/merge errors.
+#   - Updates the board view (`updateBoard -pgn`).
 ################################################################################
 proc ::optable::mergeGames { {game_count 50} {ply 999} } {
   set base  $::optable::opReportBase
@@ -298,7 +342,15 @@ proc ::optable::mergeGames { {game_count 50} {ply 999} } {
   updateBoard -pgn
 }
 ################################################################################
-#
+# ::optable::flipBoard
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Flips `.oprepWin.text.bd` and updates `::optable::_flip`.
 ################################################################################
 
 proc ::optable::flipBoard {} {
@@ -306,6 +358,17 @@ proc ::optable::flipBoard {} {
   set ::optable::_flip [::board::isFlipped .oprepWin.text.bd]
 }
 
+################################################################################
+# ::optable::resizeBoard
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Cycles the size of `.oprepWin.text.bd` and calls `::board::resize`.
+################################################################################
 proc ::optable::resizeBoard {} {
   set bd .oprepWin.text.bd
   set size [::board::size $bd]
@@ -313,6 +376,20 @@ proc ::optable::resizeBoard {} {
   ::board::resize $bd $size
 }
 
+################################################################################
+# ::optable::setOptions
+#   Opens the opening report options dialog.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/configures `.oprepOptions` and its widgets.
+#   - Updates `::optable(...)` option variables (and keeps a backup for cancel).
+#   - On OK, regenerates the report via `::optable::makeReportWin`.
+################################################################################
 proc ::optable::setOptions {} {
   set w .oprepOptions
   if {[winfo exists $w]} { return }
@@ -399,10 +476,20 @@ proc ::optable::setOptions {} {
   bind $w <Escape> "$w.b.cancel invoke"
 }
 
-# previewLaTeX:
-#   Saves the report to a temporary file, runs latex on it, then
-#   "dvips" to produce PostScript, and "ghostview" to display it.
-#
+################################################################################
+# ::optable::previewLaTeX
+#   Generates the current report as LaTeX and attempts to preview it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes temporary files under `::scidLogDir`.
+#   - Executes external tools (`latex`, `dvips`, `ghostview`) via `exec`.
+#   - Shows `tk_messageBox` errors when preview generation fails.
+################################################################################
 proc ::optable::previewLaTeX {} {
   busyCursor .
   set tmpdir $::scidLogDir
@@ -436,10 +523,19 @@ proc ::optable::previewLaTeX {} {
   unbusyCursor .
 }
 
-# previewHTML:
-#   Saves the report to a temporary file, and invokes the user's web
-#   browser to display it.
-#
+################################################################################
+# ::optable::previewHTML
+#   Generates the current report as HTML and opens it in the user's browser.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes a temporary HTML file under `::scidLogDir`.
+#   - Launches the platform browser via `exec`.
+################################################################################
 proc ::optable::previewHTML {} {
   busyCursor .
   set tmpdir $::scidLogDir
@@ -459,11 +555,20 @@ proc ::optable::previewHTML {} {
   unbusyCursor .
 }
 
-# saveReport:
-#   Saves the current opening report to a file.
-#   "fmt" is the format: text, html or latex.
-#   "type" is the report type: report, table, or both.
-#
+################################################################################
+# ::optable::saveReport
+#   Saves the current opening report to a user-selected file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - fmt (string): Output format: `text`, `html`, or `latex`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts for report type (`tk_dialog`) and file path (`tk_getSaveFile`).
+#   - Writes the generated report to disk.
+#   - May convert report encoding when `::hasEncoding` is enabled.
+################################################################################
 proc ::optable::saveReport {fmt} {
   set t [tk_dialog .dialog "Scid: Select report type" \
       "Select the report type. You may save a full report (which includes the theory table), a compact report (with no theory table), or just the theory table by itself." \
@@ -514,10 +619,20 @@ proc ::optable::saveReport {fmt} {
   unbusyCursor .
 }
 
-# latexifyTree
-#   Convert the plain text tree output used for text/html reports
-#   to a table for LaTeX output.
-#
+################################################################################
+# ::optable::latexifyTree
+#   Converts the plain text tree output into a LaTeX tabular representation.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads `::optable::_data(tree)`.
+#   - Writes `::optable::_data(latexTree)`.
+#   - Extracts move labels into `::optable::_data(moves)`.
+################################################################################
 proc ::optable::latexifyTree {} {
   set ::optable::_data(moves) {}
   if {! [info exists ::optable::_data(tree)]} { return }
@@ -565,6 +680,19 @@ proc ::optable::latexifyTree {} {
   set ::optable::_data(latexTree) $ltree
 }
 
+################################################################################
+# ::optable::setupRatios
+#   Computes frequency ratios used by the report's popularity section.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_filter freq` for multiple date ranges.
+#   - Writes ratio and delta fields under `::optable::_data(...)`.
+################################################################################
 proc ::optable::setupRatios {} {
   set r [sc_filter freq [sc_base current] tree date 0000.00.00]
   if {[lindex $r 0] == 0} {
@@ -607,12 +735,37 @@ proc ::optable::setupRatios {} {
   }
 }
 
+################################################################################
+# ::optable::_percent
+# Visibility:
+#   Internal.
+# Inputs:
+#   - x (int): Tenths of a percent (e.g. 123 means 12.3%).
+#   - fmt (string): Output format; LaTeX uses an escaped percent sign.
+# Returns:
+#   - text (string): Formatted percentage string.
+# Side effects:
+#   - None.
+################################################################################
 proc ::optable::_percent {x fmt} {
   set p "%"
   if {$fmt == "latex"} { set p "\\%" }
   return "[expr $x / 10][sc_info decimal][expr $x % 10]$p"
 }
 
+################################################################################
+# ::optable::results
+#   Formats aggregated results (score, average length, frequency) for a report.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - reportType (string): Report selector passed to `sc_report` (e.g. "opening").
+#   - fmt (string): Output format: `text`, `html`, `ctext`, or `latex`.
+# Returns:
+#   - text (string): Formatted results table.
+# Side effects:
+#   - Queries report statistics via `sc_report`.
+################################################################################
 proc ::optable::results {reportType fmt} {
   set s {}
   set n "\n"; set next " "; set p "%"
@@ -688,6 +841,19 @@ proc ::optable::results {reportType fmt} {
   return $s
 }
 
+################################################################################
+# ::optable::stats
+#   Formats filter statistics for configured rating/year ranges.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - fmt (string): Output format: `text`, `html`, `ctext`, or `latex`.
+# Returns:
+#   - text (string): Formatted statistics block.
+# Side effects:
+#   - Reads the global `stats` array for which ranges to include.
+#   - Queries stats via `sc_filter stats`.
+################################################################################
 proc ::optable::stats {fmt} {
   global stats
   set s {}
@@ -777,11 +943,33 @@ proc ::optable::stats {fmt} {
   return $s
 }
 
+################################################################################
+# ::optable::_reset
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets the section counters used for numbering output.
+################################################################################
 proc ::optable::_reset {} {
   set ::optable::_data(sec) 0
   set ::optable::_data(subsec) 0
 }
 
+################################################################################
+# ::optable::_title
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - text (string): Title block for the current output format.
+# Side effects:
+#   - None.
+################################################################################
 proc ::optable::_title {} {
   set fmt $::optable::_data(fmt)
   set title $::tr(OprepTitle)
@@ -799,6 +987,17 @@ proc ::optable::_title {} {
   return $r
 }
 
+################################################################################
+# ::optable::_sec
+# Visibility:
+#   Internal.
+# Inputs:
+#   - text (string): Section title.
+# Returns:
+#   - text (string): Formatted section header.
+# Side effects:
+#   - Increments `::optable::_data(sec)` and resets `subsec`.
+################################################################################
 proc ::optable::_sec {text} {
   set fmt $::optable::_data(fmt)
   incr ::optable::_data(sec)
@@ -815,6 +1014,17 @@ proc ::optable::_sec {text} {
   return "\n\n$line\n[string range $underline 1 [string length $line]]\n"
 }
 
+################################################################################
+# ::optable::_subsec
+# Visibility:
+#   Internal.
+# Inputs:
+#   - text (string): Subsection title.
+# Returns:
+#   - text (string): Formatted subsection header.
+# Side effects:
+#   - Increments `::optable::_data(subsec)`.
+################################################################################
 proc ::optable::_subsec {text} {
   set fmt $::optable::_data(fmt)
   incr ::optable::_data(subsec)
@@ -828,9 +1038,20 @@ proc ::optable::_subsec {text} {
   return "\n$::optable::_data(sec).$::optable::_data(subsec)  $text\n\n"
 }
 ################################################################################
-# report:
-#   Produces a report in the appropriate format. If "withTable" is true,
-#   the theory table is also included.
+# ::optable::report
+#   Produces an opening report in the specified format.
+# Visibility:
+#   Public.
+# Inputs:
+#   - fmt (string): Output format (case-insensitive): `text`, `html`, `ctext`, or `latex`.
+#   - withTable (boolean): When true, includes the theory table section.
+#   - flipPos (boolean, optional): When true, renders the diagram from the flipped side.
+# Returns:
+#   - text (string): Generated report.
+# Side effects:
+#   - Configures report output via `sc_report opening format` and `notes`.
+#   - Reads numerous `::optable(...)` option variables and `::optable::_data(...)` fields.
+#   - Calls into `sc_report`, `sc_filter`, and other Scid commands to gather content.
 ################################################################################
 proc ::optable::report {fmt withTable {flipPos 0}} {
   global tr
@@ -1116,9 +1337,18 @@ proc ::optable::report {fmt withTable {flipPos 0}} {
   return $r
 }
 
-# table:
-#   Produces only the ECO table, not any other part of the report.
-#
+################################################################################
+# ::optable::table
+#   Produces only the theory/ECO table for the current report.
+# Visibility:
+#   Public.
+# Inputs:
+#   - fmt (string): Output format.
+# Returns:
+#   - text (string): Generated table.
+# Side effects:
+#   - Configures report output via `sc_report opening format`.
+################################################################################
 proc ::optable::table {fmt} {
   sc_report opening format $fmt
   set ::optable::_data(fmt) $fmt
@@ -1133,10 +1363,19 @@ proc ::optable::table {fmt} {
 
 set reportFavorites {}
 
-# updateFavoritesMenu
-#   Update the Favorites menu in the report window, adding a
-#   command for each favorite report position.
-#
+################################################################################
+# ::optable::updateFavoritesMenu
+#   Updates the opening report favourites menu entries.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Modifies `.oprepWin.menu.favorites`.
+#   - Enables/disables menu items based on `::reportFavorites`.
+################################################################################
 proc ::optable::updateFavoritesMenu {} {
   set m .oprepWin.menu.favorites
   $m delete 3 end
@@ -1156,9 +1395,17 @@ proc ::optable::updateFavoritesMenu {} {
   }
 }
 
-# favoriteReportNames
-#   Return a list of the favorite report names.
-#
+################################################################################
+# ::optable::favoriteReportNames
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - names (list): Favourite report names in display order.
+# Side effects:
+#   - None.
+################################################################################
 proc ::optable::favoriteReportNames {} {
   set reportNames {}
   foreach entry $::reportFavorites {
@@ -1167,9 +1414,19 @@ proc ::optable::favoriteReportNames {} {
   return $reportNames
 }
 
-# addFavoriteDlg
-#   Adds the current position to the opening report favorites list.
-#
+################################################################################
+# ::optable::addFavoriteDlg
+#   Opens the dialog to add the current position as a favourite report entry.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.addFavoriteDlg` and grabs focus.
+#   - Displays current favourite names.
+################################################################################
 proc ::optable::addFavoriteDlg {} {
   set w .addFavoriteDlg
   win::createDialog $w
@@ -1198,6 +1455,20 @@ proc ::optable::addFavoriteDlg {} {
   grab $w
 }
 
+################################################################################
+# ::optable::addFavoriteOK
+#   Validates and persists a new favourite report entry from `.addFavoriteDlg`.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Appends to `::reportFavorites` and writes the favourites file.
+#   - Updates the favourites menu and closes the dialog on success.
+#   - Shows `tk_messageBox` on validation errors.
+################################################################################
 proc ::optable::addFavoriteOK {} {
   global reportFavorites
   set w .addFavoriteDlg
@@ -1220,10 +1491,20 @@ proc ::optable::addFavoriteOK {} {
 
 set reportFavoritesName ""
 
-# editFavoritesDlg
-#   Open the dialog box for editing the list of opening report
-#   favorite positions.
-#
+################################################################################
+# ::optable::editFavoritesDlg
+#   Opens the dialog for editing opening report favourites.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.editFavoritesDlg`, initialises `::reportFavoritesTemp`.
+#   - Configures list widgets and binds edit callbacks.
+#   - Uses a grab to keep focus in the dialog.
+################################################################################
 proc ::optable::editFavoritesDlg {} {
   global reportFavorites reportFavoritesTemp reportFavoritesName
   set w .editFavoritesDlg
@@ -1273,6 +1554,17 @@ proc ::optable::editFavoritesDlg {} {
   catch {grab $w}
 }
 
+################################################################################
+# ::optable::editFavoritesRefresh
+# Visibility:
+#   Internal.
+# Inputs:
+#   - args (list): Unused; present for validation callback compatibility.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the selected item in `::reportFavoritesTemp` and the treeview row.
+################################################################################
 proc ::optable::editFavoritesRefresh {args} {
   global reportFavoritesTemp reportFavoritesName
   set list .editFavoritesDlg.f.list
@@ -1287,6 +1579,17 @@ proc ::optable::editFavoritesRefresh {args} {
   $list selection set $sel
 }
 
+################################################################################
+# ::optable::editFavoritesSelect
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::reportFavoritesName` based on the current treeview selection.
+################################################################################
 proc ::optable::editFavoritesSelect {} {
   set list .editFavoritesDlg.f.list
   set sel [lindex [$list selection] 0]
@@ -1302,6 +1605,17 @@ proc ::optable::editFavoritesSelect {} {
   set ::reportFavoritesName [lindex $e 0]
 }
 
+################################################################################
+# ::optable::editFavoritesDelete
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Removes the selected entry from `::reportFavoritesTemp` and the treeview.
+################################################################################
 proc ::optable::editFavoritesDelete {} {
   global reportFavoritesTemp
   set w .editFavoritesDlg
@@ -1314,6 +1628,17 @@ proc ::optable::editFavoritesDelete {} {
 
 }
 
+################################################################################
+# ::optable::editFavoritesMove
+# Visibility:
+#   Internal.
+# Inputs:
+#   - dir (string): "up" or "down".
+# Returns:
+#   - None.
+# Side effects:
+#   - Reorders `::reportFavoritesTemp` and updates the treeview items.
+################################################################################
 proc ::optable::editFavoritesMove {dir} {
   global reportFavoritesTemp
   set w .editFavoritesDlg
@@ -1345,6 +1670,20 @@ proc ::optable::editFavoritesMove {dir} {
   $list selection set $newsel
 }
 
+################################################################################
+# ::optable::editFavoritesOK
+#   Commits favourites edits and updates the report window menu.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Copies `::reportFavoritesTemp` to `::reportFavorites`.
+#   - Saves favourites and refreshes the menu.
+#   - Closes `.editFavoritesDlg`.
+################################################################################
 proc ::optable::editFavoritesOK {} {
   set w .editFavoritesDlg
   catch {grab release $w}
@@ -1354,10 +1693,33 @@ proc ::optable::editFavoritesOK {} {
   ::optable::updateFavoritesMenu
 }
 
+################################################################################
+# ::optable::favoritesFilename
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - path (string): Path to the favourites file.
+# Side effects:
+#   - None.
+################################################################################
 proc ::optable::favoritesFilename {} {
   return [scidConfigFile reports]
 }
 
+################################################################################
+# ::optable::saveFavorites
+#   Persists the current favourites list to disk.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes the favourites file (via `open`/`puts`).
+################################################################################
 proc ::optable::saveFavorites {} {
   set fname [::optable::favoritesFilename]
   if {[catch {open $fname w} f]} {
@@ -1370,6 +1732,18 @@ proc ::optable::saveFavorites {} {
   close $f
 }
 
+################################################################################
+# ::optable::loadFavorites
+#   Loads the favourites list from disk.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sources the favourites file and updates `::reportFavorites`.
+################################################################################
 proc ::optable::loadFavorites {} {
   global reportFavorites
   set fname [::optable::favoritesFilename]
@@ -1381,6 +1755,19 @@ proc ::optable::loadFavorites {} {
 set reportFormat html
 set reportType full
 
+################################################################################
+# ::optable::generateFavoriteReports
+#   Opens the dialog to generate report files for all favourite positions.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.reportFavoritesDlg` and updates `::reportDir`.
+#   - Shows a message box when there are no favourites.
+################################################################################
 proc ::optable::generateFavoriteReports {} {
   global reportFavorites
   if {[llength $reportFavorites] == 0} {
@@ -1430,6 +1817,22 @@ proc ::optable::generateFavoriteReports {} {
   grab $w
 }
 
+################################################################################
+# ::optable::reportFavoritesOK
+#   Generates report files for all favourite positions using the configured
+#   output options.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes one report file per favourite entry.
+#   - Temporarily modifies the current game (`sc_game push/pop`, `sc_move addSan`).
+#   - Creates a progress window and updates it during generation.
+#   - Updates `::initialDir(report)`.
+################################################################################
 proc ::optable::reportFavoritesOK {} {
   global reportDir reportFormat reportType
   set ::initialDir(report) $reportDir
