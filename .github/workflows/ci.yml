@@ -44,10 +44,22 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: Install Tcl/Tk dependencies (Linux)
+    - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get update && sudo apt-get install -y tcl-dev tk-dev    
+        sudo apt-get update && sudo apt-get install -y tcl-dev tk-dev
+
+    - name: Install Tcl/Tk (Windows)
+      if: runner.os == 'Windows'
+      run: choco install tcltk -y
+    
+    - name: Set TCL paths (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        TCL_ROOT='C:/Program Files/Tcl'
+        echo "TCL_INCLUDE_PATH=$TCL_ROOT/include" >> $GITHUB_ENV
+        echo "TCL_LIBRARY=$TCL_ROOT/lib/tcl86t.lib" >> $GITHUB_ENV
 
     - name: Configure CMake
       run: >
@@ -55,6 +67,8 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DTCL_INCLUDE_PATH="$TCL_INCLUDE_PATH"
+        -DTCL_LIBRARY="$TCL_LIBRARY"
         -S ${{ github.workspace }}
 
     - name: Build
