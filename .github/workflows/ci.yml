@@ -44,6 +44,11 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
+    - name: Install Tcl/Tk dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update && sudo apt-get install -y tcl-dev tk-dev    
+
     - name: Configure CMake
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
