@@ -5,6 +5,23 @@
 
 ### Import game window
 
+################################################################################
+# importPgnGame
+#   Opens the "Import PGN" dialog which allows the user to paste/edit PGN text
+#   and import it into the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Returns immediately if `.importWin` already exists.
+#   - Creates and configures the `.importWin` toplevel and its widgets/menus.
+#   - Reads and writes widget state (text contents, selection, focus).
+#   - Calls `::game::Clear` and `sc_game import` when the user clicks Import.
+#   - Calls `::notify::GameChanged` on successful import.
+################################################################################
 proc importPgnGame {} {
   if {[winfo exists .importWin]} { return }
   set w .importWin
@@ -89,6 +106,19 @@ proc importPgnGame {} {
 }
 
 
+################################################################################
+# importClipboardGame
+#   Opens the import dialog and attempts to paste PGN text from the clipboard.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Opens the import dialog via `importPgnGame`.
+#   - Attempts to paste from the clipboard/selection into the import text widget.
+################################################################################
 proc importClipboardGame {} {
   importPgnGame
   catch {event generate .importWin.pane.edit.text <<Paste>>}
@@ -98,6 +128,20 @@ proc importClipboardGame {} {
   }
 }
 
+################################################################################
+# importPgnLine
+#   Opens the import dialog and pre-populates it with a supplied PGN line.
+# Visibility:
+#   Public.
+# Inputs:
+#   - line (string): PGN text to insert into the import text widget.
+# Returns:
+#   - None.
+# Side effects:
+#   - Opens the import dialog via `importPgnGame`.
+#   - Replaces the import text widget content with `line` and selects it.
+#   - Focuses the import text widget.
+################################################################################
 proc importPgnLine {line} {
   importPgnGame
   set w .importWin.pane.edit.text
@@ -108,7 +152,17 @@ proc importPgnLine {line} {
 }
 
 ################################################################################
-#
+# importMoveList
+#   Imports a SAN move list (in the current language) into the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - line (string): SAN moves (or a move list fragment) to add.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_move start` and `sc_move addSan` (mutates the current game).
+#   - Calls `updateBoard -pgn`.
 ################################################################################
 proc importMoveList {line} {
   sc_move start
@@ -116,7 +170,19 @@ proc importMoveList {line} {
   updateBoard -pgn
 }
 ################################################################################
-#
+# importMoveListTrans
+#   Imports a SAN move list, first translating it to English via `untrans`.
+# Visibility:
+#   Public.
+# Inputs:
+#   - line (string): SAN moves (possibly translated) to add.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads `sc_game firstMoves` to determine whether the current game is empty.
+#   - Shows a confirmation dialog if the current game already has moves.
+#   - Calls `untrans`, `sc_move start`, `sc_move addSan`, and `updateBoard -pgn`
+#     when the user confirms import.
 ################################################################################
 proc importMoveListTrans {line} {
   set doImport 0
@@ -135,6 +201,27 @@ proc importMoveListTrans {line} {
 
 
 ### Import file of Pgn games:
+################################################################################
+# importPgnFile
+#   Imports one or more PGN files into a database, showing a progress window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base (int|string): Database handle/index to import into. This argument is
+#     optional in the procedure signature, but callers typically provide it.
+#   - fnames (list|string): Either a list of file paths to import, or an empty
+#     string to prompt the user to choose files.
+# Returns:
+#   - None.
+# Side effects:
+#   - Opens a file selection dialog when `fnames` is empty (`tk_getOpenFile`).
+#   - Updates `::initialDir(pgn)` after file selection.
+#   - Creates and updates the `.ipgnWin` import progress window.
+#   - Calls `sc_base import` for each file (mutates the database).
+#   - Calls `after idle "::notify::DatabaseModified $base"` when finished.
+#   - May auto-close the progress window when invoked programmatically and there
+#     are no warnings/errors.
+################################################################################
 proc importPgnFile {{base} {fnames ""}} {
   if {$fnames == ""} {
       set ftypes { { "Portable Game Notation files" {".pgn" ".PGN"} } }
@@ -221,4 +308,3 @@ proc importPgnFile {{base} {fnames ""}} {
 ###
 ### End of file: import.tcl
 ###
-
