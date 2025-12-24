@@ -902,6 +902,3 @@ test graphs-scoreRefresh-1.0 {score::Refresh chooses ytick based on max move tim
     } \
     -cleanup {::graphs_test::cleanup} \
     -result [list 20 2]
-
-# Ensure the suite leaves the interpreter clean.
-cleanupTests

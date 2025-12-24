@@ -610,5 +610,3 @@ test fics-readparse-2.0 {readparse handles login prompt and sets logged for gues
     } \
     -cleanup {::fics_test::cleanup} \
     -result [list [list guest noecho] 1]
-
-tcltest::cleanupTests

@@ -274,5 +274,3 @@ test calvar-positionDone-1.0 {positionDone adds missed lines until a user line i
     } \
     -cleanup {::calvar_test::cleanup} \
     -result [list [list {a2a3 a7a6} 0.50 10]]
-
-tcltest::cleanupTests

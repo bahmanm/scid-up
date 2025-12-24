@@ -866,5 +866,3 @@ test analysis-toAbsPath-2.0 {toAbsPath replaces leading '.' with directory of cu
         [string replace "./foo" 0 0 $::analysis_test::scidInstallDir] \
         [string replace "./foo" 0 0 $::analysis_test::scidInstallDir] \
     ]
-
-tcltest::cleanupTests

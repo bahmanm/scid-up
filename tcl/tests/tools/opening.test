@@ -1,0 +1,372 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# `tcl/tools/opening.tcl` reads the side-to-move at load time.
+set ::scid_test::sc_pos_side white
+set ::scid_test::sc_pos_moveNumber 1
+set ::scid_test::sc_pos_fen "startpos w KQkq - 0 1"
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools opening.tcl]
+
+namespace eval ::opening_test {
+    variable stubbedCommands {}
+
+    variable calls {}
+    variable scMoveCalls {}
+    variable scVarCalls {}
+    variable scGameCalls {}
+    variable updateStatsCalls {}
+
+    # Stubbed position state.
+    variable pos_fen "startpos w KQkq - 0 1"
+    variable pos_hash 0
+    variable pos_isAt_vend 0
+    variable pos_isAt_vstart 0
+    variable pos_side white
+    variable pos_moveNumber 1
+
+    variable forwarded 0
+    variable currentVar -1
+
+    variable nag_main {}
+    variable nag_vars {}
+    variable move_next ""
+    variable move_vars {}
+
+    variable pos_hash_calls 0
+}
+
+proc ::opening_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::opening_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::opening_test::resetRecordedState {} {
+    set ::opening_test::calls {}
+    set ::opening_test::scMoveCalls {}
+    set ::opening_test::scVarCalls {}
+    set ::opening_test::scGameCalls {}
+    set ::opening_test::updateStatsCalls {}
+}
+
+proc ::opening_test::resetOpeningState {} {
+    set ::opening::fenMovesEvalList {}
+    set ::opening::hashList {}
+    set ::opening::movesLoaded 0
+    set ::opening::allLinesFenList {}
+    set ::opening::allLinesHashList {}
+    set ::opening::lastCMFen ""
+    set ::opening::lastCM ""
+    set ::opening::listStats {}
+    set ::opening::fenLastStatsUpdate 0
+    set ::opening::lStats1 ""
+    set ::opening::lStats2 ""
+    set ::opening::lStats3 ""
+    set ::opening::lStats4 ""
+}
+
+proc ::opening_test::setup {} {
+    ::opening_test::restoreStubs
+    ::opening_test::resetRecordedState
+    ::opening_test::resetOpeningState
+
+    set ::opening_test::pos_fen "startpos w KQkq - 0 1"
+    set ::opening_test::pos_hash 0
+    set ::opening_test::pos_isAt_vend 0
+    set ::opening_test::pos_isAt_vstart 0
+    set ::opening_test::pos_side white
+    set ::opening_test::pos_moveNumber 1
+
+    set ::opening_test::forwarded 0
+    set ::opening_test::currentVar -1
+
+    set ::opening_test::nag_main {}
+    set ::opening_test::nag_vars {}
+    set ::opening_test::move_next ""
+    set ::opening_test::move_vars {}
+    set ::opening_test::pos_hash_calls 0
+
+    ::opening_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            fen { return $::opening_test::pos_fen }
+            hash {
+                incr ::opening_test::pos_hash_calls
+                return $::opening_test::pos_hash
+            }
+            side { return $::opening_test::pos_side }
+            moveNumber { return $::opening_test::pos_moveNumber }
+            isAt {
+                set where [lindex $args 0]
+                switch -- $where {
+                    vend { return $::opening_test::pos_isAt_vend }
+                    vstart { return $::opening_test::pos_isAt_vstart }
+                    default { error "sc_pos isAt $where not stubbed" }
+                }
+            }
+            getNags {
+                if {$::opening_test::currentVar >= 0} {
+                    return [lindex $::opening_test::nag_vars $::opening_test::currentVar]
+                }
+                if {$::opening_test::forwarded} {
+                    return $::opening_test::nag_main
+                }
+                return {}
+            }
+            default { error "sc_pos $subcmd not stubbed in opening tests" }
+        }
+    }
+
+    ::opening_test::stubCommand sc_move {subcmd args} {
+        lappend ::opening_test::scMoveCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            forward {
+                set ::opening_test::forwarded 1
+                return
+            }
+            back {
+                set ::opening_test::forwarded 0
+                return
+            }
+            default { return }
+        }
+    }
+
+    ::opening_test::stubCommand sc_var {subcmd args} {
+        lappend ::opening_test::scVarCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            count { return [llength $::opening_test::move_vars] }
+            enter {
+                set ::opening_test::currentVar [lindex $args 0]
+                return
+            }
+            exit {
+                set ::opening_test::currentVar -1
+                return
+            }
+            default { error "sc_var $subcmd not stubbed in opening tests" }
+        }
+    }
+
+    ::opening_test::stubCommand sc_game {subcmd args} {
+        lappend ::opening_test::scGameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            info {
+                set field [lindex $args 0]
+                switch -- $field {
+                    nextMove { return $::opening_test::move_next }
+                    previousMove { return [lindex $::opening_test::move_vars $::opening_test::currentVar] }
+                    default { error "sc_game info $field not stubbed in opening tests" }
+                }
+            }
+            default { error "sc_game $subcmd not stubbed in opening tests" }
+        }
+    }
+
+    ::opening_test::stubCommand ::opening::updateStats {args} {
+        lappend ::opening_test::updateStatsCalls $args
+        return
+    }
+}
+
+proc ::opening_test::cleanup {} {
+    ::opening_test::restoreStubs
+    ::opening_test::resetRecordedState
+    ::opening_test::resetOpeningState
+}
+
+test opening-isGoodMove-1.0 {isGoodMove returns 1 when no negative nags} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set nags {}
+
+    # Act
+    set result [::opening::isGoodMove $nags]
+
+    # Assert
+    set result
+} -cleanup {
+    ::opening_test::cleanup
+} -result 1
+
+test opening-isGoodMove-2.0 {isGoodMove returns 0 when nags include ?! / ?? / ?} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set a [::opening::isGoodMove {?}]
+    set b [::opening::isGoodMove {?!}]
+    set c [::opening::isGoodMove {??}]
+
+    # Act
+    list $a $b $c
+} -cleanup {
+    ::opening_test::cleanup
+} -result {0 0 0}
+
+test opening-fillFen-1.0 {fillFen records main and variation moves for current position} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set ::opening_test::pos_fen "FEN_A w KQkq - 0 1"
+    set ::opening_test::pos_hash 100
+    set ::opening_test::pos_isAt_vend 0
+
+    set ::opening_test::move_next "e4"
+    set ::opening_test::nag_main {!}
+    set ::opening_test::move_vars {c4 d4}
+    set ::opening_test::nag_vars {{?!} {??}}
+
+    # Act
+    ::opening::fillFen
+
+    # Assert
+    list $::opening::fenMovesEvalList $::opening::hashList $::opening::movesLoaded
+} -cleanup {
+    ::opening_test::cleanup
+} -result {{{{FEN_A w KQkq -} {e4 ! c4 ?! d4 ??}}} 100 1}
+
+test opening-fillFen-2.0 {fillFen does not duplicate existing moves for same position} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set ::opening_test::pos_fen "FEN_A w KQkq - 0 1"
+    set ::opening_test::pos_hash 100
+    set ::opening_test::pos_isAt_vend 0
+
+    set ::opening_test::move_next "e4"
+    set ::opening_test::nag_main {!}
+    set ::opening_test::move_vars {c4}
+    set ::opening_test::nag_vars {{?!}}
+
+    # Act
+    ::opening::fillFen
+    ::opening::fillFen
+
+    # Assert
+    list $::opening::fenMovesEvalList $::opening::movesLoaded
+} -cleanup {
+    ::opening_test::cleanup
+} -result {{{{FEN_A w KQkq -} {e4 ! c4 ?!}}} 2}
+
+test opening-getCm-1.0 {getCm returns candidate moves for current position based on hash+fen} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set ::opening_test::pos_hash 20
+    set ::opening_test::pos_fen "FEN_A w KQkq - 0 1"
+
+    set ::opening::allLinesHashList {{10 20 30} {99}}
+    set ::opening::allLinesFenList {
+        {{{FEN_A w KQkq -} {e4 ! c4 ?!}}}
+        {{{FEN_A w KQkq -} {d4 ??}}}
+    }
+
+    # Act
+    set cm [::opening::getCm]
+
+    # Assert
+    set cm
+} -cleanup {
+    ::opening_test::cleanup
+} -result {e4 ! c4 ?!}
+
+test opening-getCm-cache-1.0 {getCm cache misses because it compares full FEN to a shortened cached key} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set ::opening_test::pos_hash 20
+    set ::opening_test::pos_fen "FEN_A w KQkq - 0 1"
+
+    set ::opening::allLinesHashList {{10 20 30}}
+    set ::opening::allLinesFenList {
+        {{{FEN_A w KQkq -} {e4 !}}}
+    }
+
+    # Act
+    set first [::opening::getCm]
+    set second [::opening::getCm]
+
+    # Assert
+    # With a correct cache hit, `sc_pos hash` would only be queried once.
+    list $first $second $::opening_test::pos_hash_calls
+} -cleanup {
+    ::opening_test::cleanup
+} -result {{e4 !} {e4 !} 2}
+
+test opening-getStats-1.0 {getStats returns empty list when stats are absent} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set ::opening_test::pos_fen "FEN_A w KQkq - 0 1"
+    set ::opening::listStats {}
+
+    # Act
+    ::opening::getStats
+} -cleanup {
+    ::opening_test::cleanup
+} -result {}
+
+test opening-addStats-1.0 {addStats adds and increments stats for current position} -setup {
+    ::opening_test::setup
+} -body {
+    # Arrange
+    set ::opening_test::pos_fen "FEN_A w KQkq - 0 1"
+
+    # Act
+    ::opening::addStats -good 1 -dubious 2 -absent 3 -total 4
+    ::opening::addStats -good 1 -dubious 0 -absent 0 -total 1
+
+    # Assert
+    list $::opening::listStats $::opening_test::updateStatsCalls
+} -cleanup {
+    ::opening_test::cleanup
+} -result {{{{FEN_A w KQkq -} {2 2 3 5}}} {1 1}}
+
+test opening-addStatsPrev-1.0 {addStatsPrev applies stats to the previous position} -setup {
+    ::opening_test::setup
+
+    # Override sc_move to simulate moving to the previous position.
+    set ::opening_test::currentFen "FEN_NOW w KQkq - 0 1"
+    set ::opening_test::prevFen "FEN_PREV w KQkq - 0 1"
+
+    ::opening_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            fen { return $::opening_test::pos_fen }
+            isAt {
+                if {[lindex $args 0] eq "vstart"} { return 0 }
+                if {[lindex $args 0] eq "vend"} { return 0 }
+                error "sc_pos isAt [lindex $args 0] not stubbed"
+            }
+            default { error "sc_pos $subcmd not stubbed in opening-addStatsPrev test" }
+        }
+    }
+    set ::opening_test::pos_fen $::opening_test::currentFen
+
+    ::opening_test::stubCommand sc_move {subcmd args} {
+        lappend ::opening_test::scMoveCalls [list $subcmd {*}$args]
+        if {$subcmd eq "back"} { set ::opening_test::pos_fen $::opening_test::prevFen; return }
+        if {$subcmd eq "forward"} { set ::opening_test::pos_fen $::opening_test::currentFen; return }
+        return
+    }
+
+    # Avoid updating UI-dependent widgets in a headless test.
+    ::opening_test::stubCommand ::opening::updateStats {args} { return }
+} -body {
+    # Arrange
+
+    # Act
+    ::opening::addStatsPrev -good 1 -dubious 0 -absent 0 -total 1
+
+    # Assert
+    list $::opening::listStats $::opening_test::scMoveCalls
+} -cleanup {
+    ::opening_test::cleanup
+} -result {{{{FEN_PREV w KQkq -} {1 0 0 1}}} {back forward}}
