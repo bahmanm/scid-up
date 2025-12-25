@@ -1,0 +1,489 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Minimal namespaces expected by the module.
+namespace eval ::board {}
+namespace eval ::uci {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools uci.tcl]
+
+namespace eval ::uci_test {
+    variable stubbedCommands {}
+
+    variable scMoveCalls {}
+    variable scGameCalls {}
+    variable formatPvCalls {}
+
+    variable afterCalls {}
+    variable fileeventCalls {}
+
+    variable updateAnalysisTextCalls {}
+
+    variable tempFiles {}
+    variable tempPipes {}
+    variable tempCounter 0
+
+    variable processInputStubsInstalled 0
+    variable sc_pos_side "white"
+}
+
+proc ::uci_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::uci_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::uci_test::setup {} {
+    ::uci_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::uci_test::scMoveCalls {}
+    set ::uci_test::scGameCalls {}
+    set ::uci_test::formatPvCalls {}
+    set ::uci_test::afterCalls {}
+    set ::uci_test::fileeventCalls {}
+    set ::uci_test::updateAnalysisTextCalls {}
+
+    set ::uci_test::tempFiles {}
+    set ::uci_test::tempPipes {}
+    set ::uci_test::tempCounter 0
+
+    set ::uci_test::processInputStubsInstalled 0
+    set ::uci_test::sc_pos_side "white"
+
+    # Reset module state used by tests.
+    array unset ::uci::uciInfo
+    array unset ::analysis
+}
+
+proc ::uci_test::cleanup {} {
+    foreach pipe $::uci_test::tempPipes {
+        catch {close $pipe}
+    }
+    foreach file $::uci_test::tempFiles {
+        catch {file delete -force $file}
+    }
+
+    ::uci_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::uci_test::scMoveCalls
+    unset -nocomplain ::uci_test::scGameCalls
+    unset -nocomplain ::uci_test::formatPvCalls
+    unset -nocomplain ::uci_test::afterCalls
+    unset -nocomplain ::uci_test::fileeventCalls
+    unset -nocomplain ::uci_test::updateAnalysisTextCalls
+
+    unset -nocomplain ::uci_test::tempFiles
+    unset -nocomplain ::uci_test::tempPipes
+    unset -nocomplain ::uci_test::tempCounter
+    unset -nocomplain ::uci_test::processInputStubsInstalled
+    unset -nocomplain ::uci_test::sc_pos_side
+
+    array unset ::uci::uciInfo
+    array unset ::analysis
+}
+
+proc ::uci_test::installProcessInputStubs {} {
+    if {$::uci_test::processInputStubsInstalled} {
+        return
+    }
+
+    # Arrange
+    ::uci_test::stubCommand ::checkEngineIsAlive {slot} { return 1 }
+    ::uci_test::stubCommand logEngine {slot text} { return }
+
+    ::uci_test::stubCommand after {args} {
+        lappend ::uci_test::afterCalls $args
+        return "afterId"
+    }
+
+    ::uci_test::stubCommand updateAnalysisText {slot} {
+        lappend ::uci_test::updateAnalysisTextCalls $slot
+        return
+    }
+
+    ::uci_test::stubCommand sc_pos {subcmd args} {
+        if {$subcmd eq "side"} {
+            return $::uci_test::sc_pos_side
+        }
+        error "sc_pos $subcmd not stubbed in uci tests"
+    }
+
+    ::uci_test::stubCommand calculateNodes {n} { return $n }
+
+    ::uci_test::stubCommand ::uci::formatPv {moves {fen ""}} {
+        lappend ::uci_test::formatPvCalls [list $moves $fen]
+        return "PV_SAN"
+    }
+
+    set ::uci_test::processInputStubsInstalled 1
+}
+
+proc ::uci_test::arrangeProcessInput {n fen line {multiPvCount 1} {resetState 1}} {
+    ::uci_test::installProcessInputStubs
+
+    # Arrange
+    set ::analysis(waitForReadyOk$n) 0
+    set ::analysis(fen$n) $fen
+    set ::analysis(multiPVCount$n) $multiPvCount
+
+    if {$resetState} {
+        set ::analysis(depth$n) 0
+        set ::analysis(prev_depth$n) 0
+        set ::analysis(multiPV$n) {}
+        set ::analysis(multiPVraw$n) {}
+    }
+
+    incr ::uci_test::tempCounter
+    set tmpFile [file join [::scid_test::tempDir] "uci_processInput_${n}_$::uci_test::tempCounter.txt"]
+
+    set out [open $tmpFile w]
+    puts $out $line
+    close $out
+
+    set pipe [open $tmpFile r]
+    set ::analysis(pipe$n) $pipe
+
+    lappend ::uci_test::tempFiles $tmpFile
+    lappend ::uci_test::tempPipes $pipe
+}
+
+# ---- Tests ----
+
+test uci-resetUciInfo-1.0 {resetUciInfo initialises expected fields} -setup {
+    ::uci_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::uci::resetUciInfo 7
+
+    # Assert
+    list \
+        $::uci::uciInfo(depth7) \
+        $::uci::uciInfo(seldepth7) \
+        $::uci::uciInfo(time7) \
+        $::uci::uciInfo(nodes7) \
+        $::uci::uciInfo(pv7) \
+        $::uci::uciInfo(multipv7) \
+        $::uci::uciInfo(tmp_score7) \
+        $::uci::uciInfo(scoremate7) \
+        $::uci::uciInfo(currmove7) \
+        $::uci::uciInfo(currmovenumber7) \
+        $::uci::uciInfo(hashfull7) \
+        $::uci::uciInfo(nps7) \
+        $::uci::uciInfo(tbhits7) \
+        $::uci::uciInfo(sbhits7) \
+        $::uci::uciInfo(cpuload7) \
+        $::uci::uciInfo(string7) \
+        $::uci::uciInfo(refutation7) \
+        $::uci::uciInfo(currline7)
+} -cleanup {
+    ::uci_test::cleanup
+} -result {0 0 0 0 {} {} {} 0 {} 0 0 0 0 0 0 {} {} {}}
+
+test uci-sc_move_add-1.0 {sc_move_add converts UCI long notation into sc_move add calls} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::stubCommand ::board::sq {sq} { return "($sq)" }
+
+    ::uci_test::stubCommand sc_move {subcmd args} {
+        if {$subcmd ne "add"} {
+            error "sc_move $subcmd not stubbed in uci tests"
+        }
+        lappend ::uci_test::scMoveCalls [list $subcmd {*}$args]
+        return
+    }
+} -body {
+    # Arrange
+
+    # Act
+    set rc [::uci::sc_move_add {e2e4 Ne7e5}]
+
+    # Assert
+    list $rc $::uci_test::scMoveCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {0 {{add (e2) (e4) 0} {add (e7) (e5) 0}}}
+
+test uci-sc_move_add-promotion-1.0 {sc_move_add maps promotion suffix to sc_move add promo code} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::stubCommand ::board::sq {sq} { return $sq }
+
+    ::uci_test::stubCommand sc_move {subcmd args} {
+        if {$subcmd ne "add"} {
+            error "sc_move $subcmd not stubbed in uci tests"
+        }
+        lappend ::uci_test::scMoveCalls [list $subcmd {*}$args]
+        return
+    }
+} -body {
+    # Arrange
+
+    # Act
+    set rc [::uci::sc_move_add {e7e8q e7e8r e7e8b e7e8n}]
+
+    # Assert
+    list $rc $::uci_test::scMoveCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {0 {{add e7 e8 2} {add e7 e8 3} {add e7 e8 4} {add e7 e8 5}}}
+
+test uci-sc_move_add-invalid-promotion-1.0 {sc_move_add returns 1 for an unknown promotion suffix} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::stubCommand ::board::sq {sq} { return $sq }
+
+    ::uci_test::stubCommand sc_move {subcmd args} {
+        if {$subcmd ne "add"} {
+            error "sc_move $subcmd not stubbed in uci tests"
+        }
+        lappend ::uci_test::scMoveCalls [list $subcmd {*}$args]
+        return
+    }
+} -body {
+    # Arrange
+
+    # Act
+    set rc [::uci::sc_move_add {e7e8x}]
+
+    # Assert
+    list $rc $::uci_test::scMoveCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {1 {}}
+
+test uci-sc_move_add-sc_move-error-1.0 {sc_move_add returns 1 when sc_move add errors} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::stubCommand ::board::sq {sq} { return $sq }
+
+    ::uci_test::stubCommand sc_move {subcmd args} {
+        if {$subcmd eq "add"} {
+            error "move rejected"
+        }
+        error "sc_move $subcmd not stubbed in uci tests"
+    }
+} -body {
+    # Arrange
+
+    # Act
+    ::uci::sc_move_add {e2e4}
+} -cleanup {
+    ::uci_test::cleanup
+} -result 1
+
+
+test uci-formatPv-1.0 {formatPv pushes a temporary game and returns formatted move list} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    set prevCount 0
+
+    ::uci_test::stubCommand sc_game {subcmd args} {
+        lappend ::uci_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd eq "push" || $subcmd eq "pop" || $subcmd eq "startBoard"} {
+            return
+        }
+        if {$subcmd eq "info" && [lindex $args 0] eq "previousMoveNT"} {
+            incr ::uci_test::prevCount
+            return "M$::uci_test::prevCount"
+        }
+        error "sc_game $subcmd not stubbed in uci tests"
+    }
+
+    ::uci_test::stubCommand ::uci::sc_move_add {moves} { return 0 }
+} -body {
+    # Arrange
+    set ::uci_test::prevCount 0
+
+    # Act
+    set out [::uci::formatPv {e2e4 e7e5} "FEN"]
+
+    # Assert
+    list $out $::uci_test::scGameCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {{M1 M2} {push {startBoard FEN} {info previousMoveNT} {info previousMoveNT} pop}}
+
+test uci-formatPv-breaks-on-error-1.0 {formatPv stops formatting when a move cannot be entered} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    set ::uci_test::sc_move_add_calls 0
+
+    ::uci_test::stubCommand sc_game {subcmd args} {
+        lappend ::uci_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd eq "push" || $subcmd eq "pop"} {
+            return
+        }
+        if {$subcmd eq "info" && [lindex $args 0] eq "previousMoveNT"} {
+            return "M1"
+        }
+        error "sc_game $subcmd not stubbed in uci tests"
+    }
+
+    ::uci_test::stubCommand ::uci::sc_move_add {moves} {
+        incr ::uci_test::sc_move_add_calls
+        if {$::uci_test::sc_move_add_calls == 2} {
+            return 1
+        }
+        return 0
+    }
+} -body {
+    # Arrange
+
+    # Act
+    set out [::uci::formatPv {e2e4 e7e5}]
+
+    # Assert
+    list $out $::uci_test::scGameCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {M1 {{push copyfast} {info previousMoveNT} pop}}
+
+
+test uci-formatPvAfterMoves-1.0 {formatPvAfterMoves plays SAN prefix and formats subsequent UCI moves} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    set prevCount 0
+
+    ::uci_test::stubCommand sc_game {subcmd args} {
+        lappend ::uci_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd eq "push" || $subcmd eq "pop"} {
+            return
+        }
+        if {$subcmd eq "info" && [lindex $args 0] eq "previousMoveNT"} {
+            incr ::uci_test::prevCount
+            return "M$::uci_test::prevCount"
+        }
+        error "sc_game $subcmd not stubbed in uci tests"
+    }
+
+    ::uci_test::stubCommand sc_move {subcmd args} {
+        if {$subcmd eq "addSan"} {
+            lappend ::uci_test::scMoveCalls [list $subcmd {*}$args]
+            return
+        }
+        error "sc_move $subcmd not stubbed in uci tests"
+    }
+
+    ::uci_test::stubCommand ::uci::sc_move_add {moves} { return 0 }
+} -body {
+    # Arrange
+    set ::uci_test::prevCount 0
+
+    # Act
+    set out [::uci::formatPvAfterMoves "e4" {e7e5 g1f3}]
+
+    # Assert
+    list $out $::uci_test::scMoveCalls $::uci_test::scGameCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {{M1 M2} {{addSan e4}} {{push copyfast} {info previousMoveNT} {info previousMoveNT} pop}}
+
+
+test uci-processInput_-info-cp-1.0 {processInput_ parses score/pv and updates analysis and multiPV structures} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::arrangeProcessInput 1 "" "info depth 12 time 1000 nodes 200 score cp 14 pv e2e4 e7e5" 2
+} -body {
+    # Arrange
+
+    # Act
+    ::uci::processInput_ 1 1
+
+    # Assert
+    list \
+        $::analysis(score1) \
+        $::analysis(moves1) \
+        $::analysis(time1) \
+        $::analysis(nodes1) \
+        $::analysis(multiPV1) \
+        $::analysis(multiPVraw1) \
+        $::uci_test::formatPvCalls \
+        $::uci_test::updateAnalysisTextCalls \
+        $::uci_test::afterCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {0.14 {e2e4 e7e5} 1.0 200 {{12 0.14 PV_SAN 0 1.0}} {{12 0.14 {e2e4 e7e5} 0 1.0}} {{{e2e4 e7e5} {}}} 1 {{idle {after 1 ::uci::processInput_ 1 1}}}}
+
+
+test uci-processInput_-info-cp-black-side-1.0 {processInput_ negates cp score when side-to-move is black} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::arrangeProcessInput 1 "x b" "info depth 1 time 0 nodes 0 score cp 14 pv e2e4" 1
+} -body {
+    # Arrange
+
+    # Act
+    ::uci::processInput_ 1 1
+
+    # Assert
+    list \
+        $::analysis(score1) \
+        $::analysis(scoremate1) \
+        $::analysis(multiPV1) \
+        $::analysis(multiPVraw1) \
+        $::uci_test::updateAnalysisTextCalls
+} -cleanup {
+    ::uci_test::cleanup
+} -result {-0.14 0 {{1 -0.14 PV_SAN 0 0.0}} {{1 -0.14 e2e4 0 0.0}} 1}
+
+
+test uci-processInput_-info-mate-1.0 {processInput_ parses mate score and propagates scoremate} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::arrangeProcessInput 1 "" "info depth 1 time 0 nodes 0 score mate 3 pv e2e4" 1
+} -body {
+    # Arrange
+
+    # Act
+    ::uci::processInput_ 1 1
+
+    # Assert
+    list $::analysis(scoremate1) $::analysis(score1)
+} -cleanup {
+    ::uci_test::cleanup
+} -match glob -result {3 327.*}
+
+
+test uci-processInput_-info-multipv-2.0 {processInput_ updates multiPV list indices for explicit multipv 2} -setup {
+    ::uci_test::setup
+
+    # Arrange
+    ::uci_test::arrangeProcessInput 1 "" "info depth 12 multipv 1 time 1000 nodes 200 score cp 14 pv e2e4 e7e5" 3
+} -body {
+    # Arrange
+
+    # Act
+    ::uci::processInput_ 1 1
+    ::uci_test::arrangeProcessInput 1 "" "info depth 12 multipv 2 time 1100 nodes 210 score cp 9 pv d2d4 d7d5" 3 0
+    ::uci::processInput_ 1 1
+
+    # Assert
+    list $::analysis(multiPV1) $::analysis(multiPVraw1)
+} -cleanup {
+    ::uci_test::cleanup
+} -result {{{12 0.14 PV_SAN 0 1.0} {12 0.09 PV_SAN 0 1.1}} {{12 0.14 {e2e4 e7e5} 0 1.0} {12 0.09 {d2d4 d7d5} 0 1.1}}}
+
+
+cleanupTests
