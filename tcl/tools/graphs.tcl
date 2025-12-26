@@ -1,7 +1,22 @@
 ### graph.tcl: part of Scid.
 
 # TODO: find a better position in this file for this function
-# search for valid score in comment. Cut to maxY. if no score is found returns an empty string
+################################################################################
+# getScorefromComment
+#   Extracts an evaluation score from a move comment and clamps it to the graph
+#   scale (kept slightly inside the axis range).
+# Visibility:
+#   Internal.
+# Inputs:
+#   - comment (string): Comment text to scan.
+#   - maxY (double): Maximum absolute score for the graph axis. The returned
+#     value is clamped to +/- (maxY - 0.01).
+# Returns:
+#   - score (string): Parsed score (as a stringified number), or empty string if
+#     no score could be found.
+# Side effects:
+#   - None.
+################################################################################
 proc getScorefromComment { comment maxY } {
     set maxY [expr $maxY - 0.01 ]
     set minY [expr 0.0 - $maxY]
@@ -59,13 +74,21 @@ proc getScorefromComment { comment maxY } {
     return $score
 }
 
+################################################################################
 # ::tools::graphs::Save
-#
-#   Saves a graph (e.g. tree graph, filter graph, rating graph) to a
-#   color or greyscale Postscript file.
-#
-#   The mode should be "color" or "gray".
-#
+#   Saves a graph canvas to a colour or greyscale PostScript file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - mode (string): PostScript colour mode ("color" or "gray").
+#   - w (widget): Canvas widget to export (must exist).
+# Returns:
+#   - None.
+# Side effects:
+#   - Opens a save-file dialog (`tk_getSaveFile`).
+#   - Writes a `.eps`/`.ps` file via `$w postscript`.
+#   - Shows a `tk_messageBox` on write errors.
+################################################################################
 proc ::tools::graphs::Save {mode w} {
   if {! [winfo exists $w]} { return }
   set ftypes {{"PostScript files" {.eps .ps}} {"All files" *}}
@@ -97,7 +120,19 @@ if { ! [info exists FilterMinElo] } {
   set FilterStepMoves 1
 }
 
-#Check for illegal Values and set to default values
+################################################################################
+# checkConfigFilterGraph
+#   Normalises illegal/out-of-range filter graph configuration values.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates the global `Filter*` configuration variables used by the filter
+#     graphs (e.g. `FilterMinElo`, `FilterStepYear`).
+################################################################################
 proc checkConfigFilterGraph {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear
   if { $FilterStepMoves < 1 } { set FilterStepMoves 1 }
@@ -111,6 +146,21 @@ proc checkConfigFilterGraph {} {
   if { $FilterMaxYear < 1 } { set FilterMaxYear [clock format [clock seconds] -format {%Y}] }
 }
 
+################################################################################
+# configureFilterGraph
+#   Opens the configuration window for the filter graphs.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures `.configFilterGraph` and associated widgets.
+#   - Mutates global `Filter*` variables via UI actions and default/reset buttons.
+#   - Triggers refreshes of filter graphs (`::tools::graphs::filter::Refresh`,
+#     `::tools::graphs::absfilter::Refresh`) depending on the UI actions.
+################################################################################
 proc configureFilterGraph {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO
 
@@ -240,6 +290,20 @@ proc configureFilterGraph {} {
 #
 set ::tools::graphs::filter::type year
 
+################################################################################
+# tools::graphs::filter::Open
+#   Opens (or closes) the relative filter graph window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures `.fgraph` and its menu/buttons/canvas when opening.
+#   - Destroys `.fgraph` and clears `filterGraph` when closing.
+#   - Calls `::tools::graphs::filter::Refresh` on open.
+################################################################################
 proc tools::graphs::filter::Open {} {
   global filterGraph
   set w .fgraph
@@ -306,6 +370,19 @@ proc tools::graphs::filter::Open {} {
   ::tools::graphs::filter::Refresh
 }
 
+################################################################################
+# tools::graphs::filter::Switch
+#   Cycles the filter graph mode (decade/year/elo/move) and refreshes the view.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tools::graphs::filter::type`.
+#   - Calls `::tools::graphs::filter::Refresh`.
+################################################################################
 proc tools::graphs::filter::Switch {} {
   variable type
   switch $type {
@@ -317,6 +394,22 @@ proc tools::graphs::filter::Switch {} {
   ::tools::graphs::filter::Refresh
 }
 
+################################################################################
+# ::tools::graphs::filter::Refresh
+#   Recomputes and redraws the relative filter graph using the current database
+#   filter and `Filter*` configuration settings.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Queries Scid database/filter state via `sc_filter`/`sc_base`.
+#   - Updates the `filter` graph via `::utils::graph::*`.
+#   - Writes labels to `.fgraph.c` and status text to `.fgraph.b.status`.
+#   - Uses `busyCursor`/`unbusyCursor` and calls `update`.
+################################################################################
 proc ::tools::graphs::filter::Refresh {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO
 
@@ -481,15 +574,27 @@ set ::tools::graphs::score::MaxY 6
 ###########################
 # Game score and time graph
 
+################################################################################
 # MoveTimeList
-#    Returns a Tcl list of the numeric times of each move, as found
-#    in the commment for each move.
-#    A time is a number with the format
-#        "%clk 00:00:00" or
-#        "%clkms 12345" (used by BabaChess) or
-#        "%emt 00:00:00" (used by pychess)
-#        "%emt 1.23" (used by Raptor)
-#    found somewhere in the comment of the move.
+#   Builds a list of move times extracted from move comments.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - color (string): Which series to build: "w" (White) or "b" (Black). This
+#     assumes `sc_base getGame` includes a start-position node at index 0, so the
+#     comments after White moves occur at odd indices and after Black moves at
+#     even indices.
+#   - add (bool/int): When true and `%emt` is used, accumulates elapsed time and
+#     scales it to minutes.
+# Returns:
+#   - coords (list): Even-length list of x/y pairs. x is the graph's internal
+#     half-move coordinate (integers for Black: 0.0, 1.0, ...; half-integers for
+#     White: 0.5, 1.5, ...). y is the extracted time value:
+#       - `%clkms` / `%clk`: minutes
+#       - `%emt`: seconds (or cumulative minutes if `add` is true)
+# Side effects:
+#   - Reads the current game mainline via `sc_base getGame` and `sc_game number`.
+################################################################################
 proc MoveTimeList {color add} {
     set movetimes   { }
     set mainline { }
@@ -565,17 +670,23 @@ proc MoveTimeList {color add} {
     return $movetimes
 }
 
+################################################################################
 # ::tools::graphs::MoveScoreList
-#    Returns a Tcl list of the numeric move scores, as found
-#    in the commment for each move.
-#    A score is a number with the format
-#        "+0.23" or
-#        "-2.3" or
-#        ":M4", ":M-4", "+M4", "-M4" for announce Mate
-#    found somewhere in the comment of the move.
-#    The list returned should be read in pairs of values: the first is the
-#    move (0.0 = start, 0.5 after White's first move, 1.0 after Black's
-#    first move, etc) and the second is the value found.
+#   Builds a list of engine evaluation scores extracted from move comments.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - invw (bool/int): Invert scores for White's moves.
+#   - invb (bool/int): Invert scores for Black's moves.
+# Returns:
+#   - coords (list): Even-length list of x/y pairs. x is the graph's internal
+#     half-move coordinate, starting at 0.0 for the first ply (i.e. after White's
+#     first move; the start position is skipped). y is the extracted/clamped
+#     score.
+# Side effects:
+#   - Reads the current game mainline via `sc_base getGame` and `sc_game number`.
+#   - Reads `::tools::graphs::score::MaxY` to clamp values.
+################################################################################
 proc ::tools::graphs::MoveScoreList { invw invb } {
     set moveScores { }
     set mainline { }
@@ -610,6 +721,21 @@ proc ::tools::graphs::MoveScoreList { invw invb } {
     return $moveScores
 }
 
+################################################################################
+# ::tools::graphs::score::Refresh
+#   Creates (optionally) and refreshes the score/time graph for the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - docreate (bool/int): When false, does nothing if the window is not open.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures `.sgraph` and its widgets/menus when opening.
+#   - Reads game tags/info via `sc_game` and current game data via `sc_base`.
+#   - Updates the `score` graph via `::utils::graph::*`.
+#   - Uses `busyCursor`/`unbusyCursor` and calls `update`.
+################################################################################
 proc ::tools::graphs::score::Refresh { {docreate 1 }} {
   set linecolor red
   set firstColor darkgreen
@@ -733,6 +859,18 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
   update
 }
 
+################################################################################
+# ::tools::graphs::score::ConfigMenus
+#   Reconfigures the score graph menu labels after a language change.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - lang (string): Language code (defaults to `::language`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates labels in `.sgraph.menu`.
+################################################################################
 proc ::tools::graphs::score::ConfigMenus {{lang ""}} {
   if {! [winfo exists .sgraph]} { return }
   if {$lang == ""} { set lang $::language }
@@ -749,6 +887,19 @@ proc ::tools::graphs::score::ConfigMenus {{lang ""}} {
   $m entryconfig 2 -label $::tr(Help)
 }
 
+################################################################################
+# ::tools::graphs::score::Move
+#   Navigates the main game to the move corresponding to a clicked x-coordinate.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - xc (int): X-coordinate in the score canvas.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_move start` / `sc_move forward`.
+#   - Calls `updateBoard`.
+################################################################################
 proc ::tools::graphs::score::Move {xc} {
   set x [expr {round([::utils::graph::xunmap score $xc] * 2 + 0.5)} ]
   sc_move start
@@ -765,6 +916,18 @@ set ::tools::graphs::rating::type both
 set ::tools::graphs::rating::elo info
 set ::tools::graphs::rating::player ""
 
+################################################################################
+# ::tools::graphs::rating::GetElo
+#   Returns an Elo history list for a player using the configured source.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - player (string): Player name.
+# Returns:
+#   - coords (list): Even-length list of x/y pairs (typically year/elo).
+# Side effects:
+#   - Queries the database via `sc_name` or via `sc_filter`+`sc_base player_elo`.
+################################################################################
 proc ::tools::graphs::rating::GetElo { player } {
   if {$::tools::graphs::rating::elo == "elo"} {
     set eloList [sc_name elo  $::tools::graphs::rating::year $player]
@@ -777,6 +940,21 @@ proc ::tools::graphs::rating::GetElo { player } {
   return $eloList
 }
 
+################################################################################
+# ::tools::graphs::rating::Refresh
+#   Creates (optionally) and refreshes the rating graph for the selected player(s).
+# Visibility:
+#   Public.
+# Inputs:
+#   - type (string): "white", "black", "both", or "player" (defaults to current).
+#   - player (string): Player name when type is "player".
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures `.rgraph` and its menus/canvas when opening.
+#   - Updates the `ratings` graph via `::utils::graph::*` using `GetElo`.
+#   - Updates `.rgraph.c` title text and uses `busyCursor`/`unbusyCursor`.
+################################################################################
 proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
   set white [sc_game info white]
   set black [sc_game info black]
@@ -888,6 +1066,18 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
   unbusyCursor $w
 }
 
+################################################################################
+# ::tools::graphs::rating::ConfigMenus
+#   Reconfigures the rating graph menu labels after a language change.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - lang (string): Language code (defaults to `::language`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates labels in `.rgraph.menu`.
+################################################################################
 proc ::tools::graphs::rating::ConfigMenus {{lang ""}} {
   if {! [winfo exists .rgraph]} { return }
   if {$lang == ""} { set lang $::language }
@@ -912,6 +1102,20 @@ proc ::tools::graphs::rating::ConfigMenus {{lang ""}} {
 #
 set ::tools::graphs::absfilter::type year
 
+################################################################################
+# tools::graphs::absfilter::Open
+#   Opens (or closes) the absolute filter graph window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures `.afgraph` and its menu/buttons/canvas when opening.
+#   - Destroys `.afgraph` and clears `absfilterGraph` when closing.
+#   - Calls `::tools::graphs::absfilter::Refresh` on open.
+################################################################################
 proc tools::graphs::absfilter::Open {} {
   global absfilterGraph
   set w .afgraph
@@ -977,6 +1181,19 @@ proc tools::graphs::absfilter::Open {} {
   ::tools::graphs::absfilter::Refresh
 }
 
+################################################################################
+# tools::graphs::absfilter::Switch
+#   Cycles the absolute filter graph mode (decade/year/elo/move) and refreshes.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tools::graphs::absfilter::type`.
+#   - Calls `::tools::graphs::absfilter::Refresh`.
+################################################################################
 proc tools::graphs::absfilter::Switch {} {
   variable type
   switch $type {
@@ -988,6 +1205,22 @@ proc tools::graphs::absfilter::Switch {} {
   ::tools::graphs::absfilter::Refresh
 }
 
+################################################################################
+# ::tools::graphs::absfilter::Refresh
+#   Recomputes and redraws the absolute filter graph using the current database
+#   filter and `Filter*` configuration settings.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Queries Scid database/filter state via `sc_filter`/`sc_base`.
+#   - Updates the `absfilter` graph via `::utils::graph::*`.
+#   - Writes labels to `.afgraph.c` and status text to `.afgraph.b.status`.
+#   - Uses `busyCursor`/`unbusyCursor` and calls `update`.
+################################################################################
 proc ::tools::graphs::absfilter::Refresh {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO
 

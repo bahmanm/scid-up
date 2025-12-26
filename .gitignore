@@ -47,3 +47,14 @@ Release
 Testing
 winpackage
 
+.cmake/
+CMakeCache.txt
+CMakeFiles/
+CPackConfig.cmake
+CPackSourceConfig.cmake
+build.ninja
+cmake_install.cmake
+compile_commands.json
+install_manifest.txt
+_tmp/
+CTestTestfile.cmake

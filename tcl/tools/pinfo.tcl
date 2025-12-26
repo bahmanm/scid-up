@@ -6,6 +6,19 @@ namespace eval pinfo {
 set playerInfoName ""
 set ::eloFromRating 0
 
+################################################################################
+# ::pinfo::setupDefaultResolvers
+#   Writes a default resolver configuration file for player ID link generation.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes `[scidConfigFile resolvers]`.
+#   - Shows a `tk_messageBox` warning if the file cannot be written.
+################################################################################
 proc setupDefaultResolvers { } {
    set optionF ""
    if {[catch {open [scidConfigFile resolvers] w} optionF]} {
@@ -209,7 +222,22 @@ proc setupDefaultResolvers { } {
    }
 }
 
-# split player name in firstname lastname
+################################################################################
+# ::pinfo::splitName
+#   Splits a player name at the first delimiter and returns `{after before}`.
+#   Delimiter preference is "," (preferred) then the first space.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - playerName (string): Player name.
+# Returns:
+#   - parts (list): `{after before}` (before may be empty).
+#     Examples:
+#       - "Carlsen, Magnus" -> `{Magnus Carlsen}`
+#       - "Magnus Carlsen" -> `{Carlsen Magnus}`
+# Side effects:
+#   - None.
+################################################################################
 proc ::pinfo::splitName { playerName } {
   set countlen 1
   set count [string first "," $playerName ]
@@ -224,8 +252,21 @@ proc ::pinfo::splitName { playerName } {
   return [list $playerName ""]
 }
 
-# format firstname lastname in order with delimiter
-# swap order F: firstname_lastname L: lastname_firstname
+################################################################################
+# ::pinfo::formatName
+#   Formats a player's first/last name with the requested ordering and delimiter.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - fname (string): First name.
+#   - lname (string): Last name.
+#   - swap_order (string): "F" for first-last, "L" for last-first.
+#   - delimiter (string): Delimiter inserted between the two names.
+# Returns:
+#   - text (string): Formatted name.
+# Side effects:
+#   - None.
+################################################################################
 proc ::pinfo::formatName { fname lname swap_order delimiter } {
     if { $swap_order eq "L" } {
         set first $fname
@@ -235,7 +276,20 @@ proc ::pinfo::formatName { fname lname swap_order delimiter } {
     return "[string totitle $fname]$delimiter[string totitle $lname]"
 }
 
-# Replace the ID-Tags by proper links
+################################################################################
+# ::pinfo::ReplaceIDTags
+#   Replaces resolver ID tags in a player's info text with clickable links.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - pinfo (string): Player info text containing lines like `FIDEID 12345<br>`.
+#   - pname (string): Player name (used for `useNAME*` resolvers).
+# Returns:
+#   - text (string): `pinfo` with matching IDs replaced by `<run openURL ...>` links.
+# Side effects:
+#   - Reads `::unsafe::idlink` resolver definitions.
+#   - Builds URLs using `::language` for `%LANG%` substitution.
+################################################################################
 proc ::pinfo::ReplaceIDTags { pinfo pname } {
   switch $::language {
     B {set wplanguage pt}
@@ -298,6 +352,21 @@ proc ::pinfo::ReplaceIDTags { pinfo pname } {
   return $pinfo
 }
 
+################################################################################
+# playerInfo
+#   Displays the player info window for the specified player.
+# Visibility:
+#   Public.
+# Inputs:
+#   - player (string, optional): Player name; defaults to the last shown player.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `playerInfoName` (used as the default player when none is supplied).
+#   - Queries player information via `sc_name info` and rating history.
+#   - Creates/updates `.playerInfoWin` UI and renders content via `::htext::display`.
+#   - May load player photo data via `getphoto` and show it.
+################################################################################
 proc playerInfo {{player ""}} {
   global playerInfoName eloFromRating
   if {$player == "" && [info exists playerInfoName]} { set player $playerInfoName }

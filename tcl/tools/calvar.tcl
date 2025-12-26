@@ -30,7 +30,17 @@ namespace eval calvar {
 
   trace add variable ::calvar::working write { ::calvar::traceWorking }
   ################################################################################
-  #
+  # traceWorking
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - a (string): Traced variable name (ignored).
+  #   - b (string): Array element index (ignored).
+  #   - c (string): Trace operation (expected "write"; ignored).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Enables/disables `.calvarWin.fCommand.bDone` based on `::calvar::working`.
   ################################################################################
   proc traceWorking {a b c} {
     set widget .calvarWin.fCommand.bDone
@@ -41,7 +51,17 @@ namespace eval calvar {
     }
   }
   ################################################################################
-  #
+  # reset
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Resets the CalVar session state (`currentLine`, `currentListMoves`,
+  #     `lines`, `analysisQueue`, `working`).
+  #   - Clears the `.calvarWin.fText.t` widget when the window exists.
   ################################################################################
   proc reset {} {
     set currentLine 1
@@ -54,7 +74,17 @@ namespace eval calvar {
     }
   }
   ################################################################################
-  #
+  # config
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates (or focuses) the CalVar configuration dialog `.configCalvarWin`.
+  #   - Populates `::calvar::engineListBox(...)` from `::engines(list)` (UCI-only).
+  #   - On "Start", sets `::calvar::engineName` and invokes `::calvar::start`.
   ################################################################################
   proc config {} {
 
@@ -141,7 +171,20 @@ namespace eval calvar {
     wm minsize $w 45 0
   }
   ################################################################################
-  #
+  # start
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - engine (int): Index in the configuration engine listbox selection.
+  #   - n (int, optional): Engine slot number. Defaults to 4.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates `.calvarWin` and initialises CalVar UI state.
+  #   - Starts a UCI engine via `::uci::startEngine` and enables MultiPV (10).
+  #   - Temporarily sets `::suggestMoves` and `::gameInfo(hideNextMove)`.
+  #   - Starts an initial analysis of the current position and schedules timers
+  #     for per-position and per-line analysis.
   ################################################################################
   proc start { engine { n 4 } } {
 
@@ -220,7 +263,18 @@ namespace eval calvar {
     ::createToplevelFinalize $w
   }
   ################################################################################
-  #
+  # stop
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - n (int, optional): Engine slot number. Defaults to 4.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Cancels pending CalVar timers (`afterIdPosition`, `afterIdLine`).
+  #   - Stops the UCI engine via `::uci::closeUCIengine`.
+  #   - Destroys `.calvarWin` and restores `::suggestMoves` and
+  #     `::gameInfo(hideNextMove)`.
   ################################################################################
   proc stop { {n  4 } } {
     after cancel $::calvar::afterIdPosition
@@ -234,7 +288,17 @@ namespace eval calvar {
   }
 
   ################################################################################
-  #
+  # pressSquare
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - sq (int|string): Board square identifier as used by `::board::san`.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::calvar::midmove` and appends completed moves to
+  #     `::calvar::currentListMoves`.
+  #   - Writes user input into `.calvarWin.fText.t` at the current line.
   ################################################################################
   proc pressSquare { sq } {
     global ::calvar::midmove
@@ -253,7 +317,16 @@ namespace eval calvar {
     .calvarWin.fText.t insert "$::calvar::currentLine.end" "$tmp$sansq"
   }
   ################################################################################
-  #
+  # promo
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - piece (string): Promotion piece designator (typically one of q, r, b, n).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Appends `piece` to the last move in `::calvar::currentListMoves`.
+  #   - Writes `piece` into `.calvarWin.fText.t`.
   ################################################################################
   proc promo { piece } {
     if { [llength $::calvar::currentListMoves] == 0 } { return }
@@ -264,18 +337,42 @@ namespace eval calvar {
     .calvarWin.fText.t insert end "$piece"
   }
   ################################################################################
-  # This will end a line, and start engine computation
-  ################################################################################
-  proc nag { n } {
-    .calvarWin.fText.t insert "$::calvar::currentLine.end" " $n\n"
-    set newline [list $::calvar::currentListMoves $n [sc_pos fen]]
-    lappend ::calvar::lines $newline
+  # nag
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - n (string): NAG text (e.g. "=", "+=", "+/-", etc.).
+  # Returns:
+  #   - None.
+	  # Side effects:
+	  #   - Finalises the current user-entered line by appending NAG and FEN.
+	  #   - Appends to `::calvar::lines`, increments `::calvar::currentLine`,
+	  #     and queues the line for engine evaluation via `addLineToCompute`.
+	  #   - Clears `::calvar::currentListMoves`.
+	  #   - Writes the NAG text into `.calvarWin.fText.t`.
+	  ################################################################################
+	  proc nag { n } {
+	    .calvarWin.fText.t insert "$::calvar::currentLine.end" " $n\n"
+	    set newline [list $::calvar::currentListMoves $n [sc_pos fen]]
+	    lappend ::calvar::lines $newline
     incr ::calvar::currentLine
     addLineToCompute $newline
     set ::calvar::currentListMoves {}
   }
   ################################################################################
-  #
+  # addLineToCompute
+	  # Visibility:
+	  #   Internal.
+	  # Inputs:
+	  #   - line (list|string): Line tuple `{moves nag fen}` or empty string.
+	  #   - n (int, optional): Engine slot number. Currently unused; analysis uses
+	  #     slot 4 via downstream defaults.
+	  # Returns:
+	  #   - None.
+	  # Side effects:
+	  #   - Appends `line` to `::calvar::analysisQueue` (when non-empty).
+  #   - When idle (`::calvar::working` is false), drains the queue by invoking
+  #     `computeLine` for each queued item.
   ################################################################################
   proc addLineToCompute {line {n 4} } {
     global ::calvar::analysisQueue
@@ -291,7 +388,19 @@ namespace eval calvar {
     }
   }
   ################################################################################
-  #
+  # computeLine
+	  # Visibility:
+	  #   Internal.
+	  # Inputs:
+	  #   - line (list): Line tuple `{moves nag fen}`.
+	  #   - n (int, optional): Engine slot number. Currently unused; analysis uses
+	  #     slot 4 via downstream defaults.
+	  # Returns:
+	  #   - None.
+	  # Side effects:
+	  #   - Starts engine analysis for `line` via `startAnalyze`.
+	  #   - Marks the CalVar session as busy (`::calvar::working`) and schedules a
+  #     timer (`afterIdLine`) to stop analysis via `stopAnalyze`.
   ################################################################################
   proc computeLine {line {n 4} } {
     set ::calvar::working 1
@@ -302,9 +411,24 @@ namespace eval calvar {
     set ::calvar::afterIdLine [after [expr $::calvar::thinkingTimePerLine * 1000] "::calvar::stopAnalyze [list $moves $nag $fen]"]
   }
   ################################################################################
-  # we suppose FEN has not changed !
-  ################################################################################
-  proc handleResult {moves nag fen {n 4} } {
+  # handleResult
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - moves (list): User-entered moves (UCI move strings).
+  #   - nag (string): NAG text to apply to the user line.
+  #   - fen (string): FEN for the position the line starts from.
+  #   - n (int, optional): Engine slot number. Defaults to 4.
+  # Returns:
+  #   - None.
+	  # Side effects:
+	  #   - Rewrites `::analysis(multiPV$n)` from `::analysis(multiPVraw$n)` using the
+	  #     formatting helpers in `::uci`.
+	  #   - Invokes `addVar` for the top PV line, inverting the score sign (engine
+	  #     score is computed for the opposite side).
+	  #   - Writes error messages to stdout via `puts` in error conditions.
+	  ################################################################################
+	  proc handleResult {moves nag fen {n 4} } {
     set comment ""
 
     set usermoves [::uci::formatPv $moves $fen]
@@ -337,8 +461,21 @@ namespace eval calvar {
     }
   }
   ################################################################################
-  # will add a variation at current position.
-  # Try to merge the variation with an existing one.
+  # addVar
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - usermoves (list|string): User line moves (SAN/PGN-like, as formatted by `::uci`).
+  #   - engmoves (list|string): Engine PV moves (SAN/PGN-like, as formatted by `::uci`).
+  #   - nag (string): NAG to apply to the user variation.
+  #   - comment (string): Optional comment to apply to the user variation.
+  #   - engscore (double|string): Engine evaluation score (sign already adjusted).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Modifies the game tree via `sc_var`, `sc_move`, and `sc_pos` commands by
+  #     creating variations for the user line and the engine continuation.
+  #   - Updates the board and PGN display via `updateBoard -pgn`.
   ################################################################################
   proc addVar {usermoves engmoves nag comment engscore} {
     # Cannot add a variation to an empty variation:
@@ -379,8 +516,18 @@ namespace eval calvar {
     updateBoard -pgn
   }
   ################################################################################
-  # will add a variation at current position.
-  # Try to merge the variation with an existing one.
+  # addMissedLine
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - moves (list|string): Engine PV moves for the missed line.
+  #   - score (double|string): Engine evaluation score (as provided by MultiPV).
+  #   - depth (int|string): Depth value for the missed line.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Adds a variation with a "Missed line" comment to the game tree.
+  #   - Updates the board and PGN display via `updateBoard -pgn`.
   ################################################################################
   proc addMissedLine {moves score depth} {
     # Cannot add a variation to an empty variation:
@@ -407,13 +554,33 @@ namespace eval calvar {
     updateBoard -pgn
   }
   ################################################################################
-  # The user stops entering var, check he founds all important ones.
-  # All the moves that the user did not consider with a score better than the first best
-  # move entered by the user should be pointed out.
+  # positionDone
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Compares user-entered lines (`::calvar::lines`) with the initial MultiPV
+  #     analysis (`::calvar::initPosAnalysis`) and adds "Missed line" variations
+  #     for higher-ranked engine lines the user did not start with.
+  #   - Resets the CalVar session state via `::calvar::reset`.
   ################################################################################
   proc positionDone {} {
     global ::calvar::initPosAnalysis ::calvar::lines
 
+    ################################################################################
+    # isPresent
+    # Visibility:
+    #   Internal.
+    # Inputs:
+    #   - engmoves (list|string): Engine PV moves (SAN/PGN-like).
+    # Returns:
+    #   - int: 1 if the first move of `engmoves` matches any user-entered line;
+    #     otherwise 0.
+    # Side effects:
+    #   - None.
     ################################################################################
     proc isPresent { engmoves } {
       global ::calvar::lines
@@ -442,11 +609,24 @@ namespace eval calvar {
     ::calvar::reset
   }
   ################################################################################
-  # startAnalyze:
-  #   Put the engine in analyze mode and ponder on the first move entered by the user to see
-  # if the line's evaluation is coherent
-  ################################################################################
-  proc startAnalyze {moves nag fen {n 4}} {
+  # startAnalyze
+	  # Visibility:
+	  #   Internal.
+	  # Inputs:
+	  #   - moves (list): User-entered moves (UCI move strings). When non-empty, only
+	  #     the first move (`[lindex $moves 0]`) is sent to the engine.
+	  #   - nag (string): NAG text (currently unused by this procedure).
+	  #   - fen (string): Position FEN to analyse.
+	  #   - n (int, optional): Engine slot number. Defaults to 4.
+	  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Starts engine analysis mode by sending UCI commands (`isready`, `position`,
+  #     `go infinite`) and blocks on `vwait analysis(waitForReadyOk$n)`.
+	  #   - Writes `analysis(analyzeMode$n)`, `analysis(waitForReadyOk$n)`, and
+	  #     `analysis(fen$n)`.
+	  ################################################################################
+	  proc startAnalyze {moves nag fen {n 4}} {
     global analysis
 
     # Check that the engine has not already had analyze mode started:
@@ -464,9 +644,26 @@ namespace eval calvar {
     ::uci::sendToEngine $n "go infinite"
   }
   ################################################################################
-  # stopAnalyzeMode
-  ################################################################################
-  proc stopAnalyze { moves nag fen {n 4} } {
+  # stopAnalyze
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - moves (list|string): User-entered moves (UCI move strings), or empty.
+  #   - nag (string): NAG text for the user line.
+  #   - fen (string): Position FEN to analyse.
+  #   - n (int, optional): Engine slot number. Defaults to 4.
+  # Returns:
+  #   - None.
+	  # Side effects:
+	  #   - Stops UCI analysis (`stop`) and clears `analysis(analyzeMode$n)`.
+	  #   - When `moves` is non-empty, formats results via
+	  #     `handleResult $moves $nag $fen` (which uses its default engine slot).
+	  #     Otherwise captures the initial position analysis into
+	  #     `::calvar::initPosAnalysis`.
+	  #   - Marks the session idle (`::calvar::working 0`) and resumes queue
+	  #     processing via `addLineToCompute ""`.
+	  ################################################################################
+	  proc stopAnalyze { moves nag fen {n 4} } {
     if {! $::analysis(analyzeMode$n)} { return }
     set ::analysis(analyzeMode$n) 0
     ::uci::sendToEngine $n "stop"

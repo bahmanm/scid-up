@@ -35,7 +35,19 @@ namespace eval opening {
   set listStats {} ;# list of {fen x y z t} where x:good move played, y:dubious move, z:move out of rep, t:position played
   
   ################################################################################
-  # Configuration
+  # config
+  #   Opens the repertoire training configuration dialog (or focuses an existing
+  #   window).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates/configures `.openingConfig` and its widgets.
+  #   - Sets bindings for help/escape/configure events.
+  #   - Continue invokes `::opening::openRep` and closes the dialog.
   ################################################################################
   proc config {} {
     global ::opening::playerBestMove ::opening::opBestMove ::opening::repColor
@@ -74,7 +86,23 @@ namespace eval opening {
     bind $w <Configure> "recordWinSize $w"
   }
   ################################################################################
-  # Open a repertoire
+  # openRep
+  #   Opens the configured repertoire database and initialises a new game for
+  #   repertoire training.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Loads or resets training statistics (via `loadStats` / `listStats`).
+  #   - Locates a repertoire base from `::windows::switcher::base_types` and
+  #     switches databases (`sc_base switch`).
+  #   - Loads the repertoire tree by calling `loadRep` (may be cancelled).
+  #   - Creates/saves a new game in the active base and refreshes UI.
+  #   - Opens the trainer window via `openingWin` and starts `mainLoop`.
+  #   - Shows `tk_messageBox` dialogs when no suitable repertoire is found.
   ################################################################################
   proc openRep {} {
     global ::windows::switcher::base_types ::opening::repColor ::opening::repBase
@@ -134,9 +162,18 @@ namespace eval opening {
     ::opening::mainLoop
   }
   ################################################################################
-  # Loads a repertoire
-  # Go through all games and variations and build a tree of positions encountered
-  #
+  # loadRep
+  #   Loads the repertoire games and builds a position tree to drive training.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - name (string): Display name for progress window messages.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Shows a progress window which can be cancelled.
+  #   - Iterates `sc_base numGames` and loads each game (`sc_game load`).
+  #   - Builds `allLinesFenList` and `allLinesHashList` by calling `parseGame`.
   ################################################################################
   proc loadRep { name } {
     global ::opening::repBase ::opening::fenMovesEvalList ::opening::allLinesFenList \
@@ -169,13 +206,33 @@ namespace eval opening {
     closeProgressWindow
   }
   ################################################################################
-  # cancel repertoire loading
+  # sc_progressBar
+  #   Cancels an in-progress repertoire load.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sets `::opening::cancelLoadRepertoire` to `1`.
   ################################################################################
   proc sc_progressBar {} {
     set ::opening::cancelLoadRepertoire 1
   }
   ################################################################################
-  # parse one game and fill the list
+  # parseGame
+  #   Parses the current game (main line and all variations) and records the
+  #   repertoire moves for each encountered position.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Navigates the current game via `sc_move` and `sc_var` commands.
+  #   - Calls `fillFen` to record move/NAG information per position.
   ################################################################################
   proc parseGame {} {
     while {![sc_pos isAt vend]} {
@@ -191,7 +248,18 @@ namespace eval opening {
     }
   }
   ################################################################################
-  # parse recursively variants.
+  # parseVar
+  #   Recursively parses the current variation and any nested sub-variations.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Navigates variation nodes using `sc_var enter` / `sc_var exit`.
+  #   - Moves through the variation via `sc_move forward`.
+  #   - Calls `fillFen` to record position data.
   ################################################################################
   proc parseVar {} {
     while {![sc_pos isAt vend]} {
@@ -209,10 +277,22 @@ namespace eval opening {
     sc_var exit
   }
   ################################################################################
-  # fill the tree with repertoire information
-  # we are at a given position :
-  # - fill hash list in order to speed up searches
-  # - fill fenMovesEvalList with {fen {move eval} {move eval} .... }
+  # fillFen
+  #   Records repertoire candidate moves and NAG annotations for the current
+  #   position in the in-memory position tree.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Increments `::opening::movesLoaded`.
+  #   - Appends `sc_pos hash` to `::opening::hashList`.
+  #   - Updates `::opening::fenMovesEvalList` with a 4-field FEN key and a
+  #     flattened `{move nag move nag ...}` list.
+  #   - Temporarily navigates via `sc_move` / `sc_var` to read NAGs.
+  #   - Writes to stdout (`puts`) when detecting redundant/incoherent entries.
   ################################################################################
   proc fillFen {} {
     global ::opening::fenMovesEvalList ::opening::hashList ::opening::movesLoaded
@@ -283,7 +363,22 @@ namespace eval opening {
     }
   }
   ################################################################################
-  # main loop called every second to trigger playing
+  # mainLoop
+  #   Trainer main loop: validates the player's last move, updates statistics,
+  #   plays a repertoire reply (if available), and reschedules itself.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Cancels and re-schedules itself via `after` (typically every second).
+  #   - Reads board orientation (`::board::isFlipped`) and updates UI.
+  #   - Navigates the game (`sc_move back/forward`) to validate the player's move.
+  #   - Updates statistics (`addStats`, `addStatsPrev`) and board display.
+  #   - Shows `tk_messageBox` prompts for out-of-repertoire or dubious moves.
+  #   - Plays the opponent's move via `::opening::play`.
   ################################################################################
   proc mainLoop {} {
     global ::opening::allLinesHashList ::opening::allLinesFenList tCM
@@ -391,7 +486,16 @@ namespace eval opening {
     after 1000  ::opening::mainLoop
   }
   ################################################################################
-  # isGoodMove : returns true if the nag list in parameter is empty or contains !? ! !!
+  # isGoodMove
+  #   Determines whether a move's NAG list represents an acceptable move.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - n (list): NAG list as returned by `sc_pos getNags`.
+  # Returns:
+  #   - ok (boolean): `1` if the move is not marked as bad/dubious, else `0`.
+  # Side effects:
+  #   - None.
   ################################################################################
   proc isGoodMove { n } {
     if { [lsearch -exact $n "?"] != -1 || [lsearch -exact $n "?!"] != -1 || [lsearch -exact $n "??"] != -1} {
@@ -400,9 +504,20 @@ namespace eval opening {
     return 1
   }
   ################################################################################
-  # get all candidate moves in the repertoire from current position
-  # the list returned is of the form {move1 nag1 move2 nag2 ....}
-  # the moves are not unique
+  # getCm
+  #   Returns candidate repertoire moves for the current position.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - cm (list): Flattened list `{move1 nagList1 move2 nagList2 ...}`.
+  # Side effects:
+  #   - Computes `sc_pos hash` and searches `::opening::allLinesHashList` to
+  #     narrow the scan.
+  #   - Updates the cached result in `::opening::lastCM`/`::opening::lastCMFen`.
+  #   - Note: The cache comparison uses the full FEN while `lastCMFen` is later
+  #     stored as a 4-field FEN; this means the cache rarely hits as written.
   ################################################################################
   proc getCm {  } {
     global ::opening::allLinesHashList ::opening::allLinesFenList ::opening::lastCMFen
@@ -434,7 +549,18 @@ namespace eval opening {
     return $cm
   }
   ################################################################################
-  # play one of the candidate moves
+  # play
+  #   Plays a randomly-selected repertoire move from a candidate list.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - cm (list): Candidate moves list as returned by `getCm`.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - May clear the current game at move 1 as White (`::game::Clear`).
+  #   - Adds a move to the game via `sc_move addSan`.
+  #   - Updates the board display (`updateBoard -pgn -animate`).
   ################################################################################
   proc play { cm } {
     # addStatsPrev -good 0 -dubious 0 -absent 0 -total 1
@@ -450,7 +576,18 @@ namespace eval opening {
     updateBoard -pgn -animate
   }
   ################################################################################
-  # The window displayed when in opening trainer mode
+  # openingWin
+  #   Opens (or focuses) the opening trainer UI window.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates/configures `.openingWin` and its widgets.
+  #   - Adds checkboxes to control candidate move/statistics display.
+  #   - Binds help/escape/configure events.
   ################################################################################
   proc openingWin {} {
     global ::opening::displayCM ::opening::displayCMValue ::opening::tCM ::opening::fenLastUpdate
@@ -510,7 +647,18 @@ namespace eval opening {
     wm minsize $w 45 0
   }
   ################################################################################
-  #
+  # endTraining
+  #   Ends opening trainer mode.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Cancels the scheduled `mainLoop` callback.
+  #   - Persists training statistics (`saveStats`).
+  #   - Destroys `.openingWin` and returns focus to the main window.
   ################################################################################
   proc endTraining {} {
     after cancel ::opening::mainLoop
@@ -519,7 +667,20 @@ namespace eval opening {
     destroy ".openingWin"
   }
   ################################################################################
-  # display the candidate moves list (with NAG values)
+  # update_tCM
+  #   Updates the candidate move display text for the trainer window.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - forceUpdate (boolean, optional): When true, skips the FEN equality check
+  #     and recomputes candidate move display for the current position.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `.openingWin.f1.lCM` background colour and `::opening::tCM`.
+  #   - Updates `::opening::fenLastUpdate` to the current full FEN when it updates
+  #     the display (including the end-of-variation case).
+  #   - Sets `::opening::fenLastUpdate` to `0` when `::opening::displayCM` is disabled.
   ################################################################################
   proc  update_tCM { { forceUpdate 0 } } {
     global ::opening::displayCM ::opening::displayCMValue ::opening::tCM ::opening::fenLastUpdate
@@ -562,7 +723,17 @@ namespace eval opening {
     set tCM $tmp
   }
   ################################################################################
-  #
+  # loadStats
+  #   Loads persisted opening trainer statistics from the user's config file.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sources `[scidConfigFile optrainer]` if present.
+  #   - Writes status messages to the splash screen (`::splash::add`).
   ################################################################################
   proc loadStats {} {
     set optionsFile [scidConfigFile optrainer]
@@ -573,7 +744,16 @@ namespace eval opening {
     }
   }
   ################################################################################
-  #
+  # saveStats
+  #   Persists opening trainer statistics to the user's config file.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - ok (boolean): `1` on success; `0` if the file cannot be opened.
+  # Side effects:
+  #   - Writes `[scidConfigFile optrainer]` with the current `::opening::listStats`.
   ################################################################################
   proc saveStats {} {
     set optrainerFile [scidConfigFile optrainer]
@@ -586,8 +766,16 @@ namespace eval opening {
   }
   ################################################################################
   # getStats
-  # returns a list containing the 4 stats values for current pos
-  # or an empty list if the stats are not available for current position
+  #   Returns the recorded training statistics for the current position.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - stats (list): List `{good dubious absent total}` for the position, or an
+  #     empty list if the position has no recorded stats.
+  # Side effects:
+  #   - None.
   ################################################################################
   proc getStats {} {
     set s [split [sc_pos fen]]
@@ -609,7 +797,20 @@ namespace eval opening {
   
   ################################################################################
   # addStats
-  # x = success best moves only, y = success all moves z = failures t = coverage by computer
+  #   Records training outcome statistics for the current position.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   -args (list): Flags and integer values:
+  #     - `-good <n>`: Number of good moves played.
+  #     - `-dubious <n>`: Number of dubious moves played.
+  #     - `-absent <n>`: Number of out-of-repertoire moves played.
+  #     - `-total <n>`: Number of times the position was encountered.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates (or appends to) `::opening::listStats` for the current 4-field FEN.
+  #   - Calls `updateStats 1` to refresh UI variables.
   ################################################################################
   proc addStats { args } {
     set dx 0
@@ -650,7 +851,17 @@ namespace eval opening {
     updateStats 1
   }
   ################################################################################
-  #
+  # addStatsPrev
+  #   Records training statistics for the previous position (before the last move).
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   -args (list): Same flags as `addStats`.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Navigates one move back (`sc_move back`), calls `addStats`, then moves
+  #     forward again.
   ################################################################################
   proc addStatsPrev { args } {
     if {[sc_pos isAt vstart] } { return }
@@ -660,7 +871,19 @@ namespace eval opening {
     }
   }
   ################################################################################
-  #
+  # updateStats
+  #   Updates trainer statistics display variables for the current position.
+  # Visibility:
+  #   Internal.
+  # Inputs:
+  #   - force (boolean, optional): When true, recomputes even if FEN matches the
+  #     last update.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::opening::fenLastStatsUpdate`.
+  #   - Updates `::opening::lStats1..4` based on `getStats` and
+  #     `::opening::displayOpeningStats`.
   ################################################################################
   proc updateStats { {force 0} } {
     global ::opening::fenLastStatsUpdate
@@ -684,7 +907,18 @@ namespace eval opening {
     }
   }
   ################################################################################
-  # shows a repertoire report (how much of the rep was trained)
+  # report
+  #   Displays a summary report of the repertoire training progress.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates `.openingWin.optrainerreport` and populates it with text.
+  #   - Reads `::opening::allLinesFenList` and `::opening::listStats`.
+  #   - Binds help/escape/configure events for the report window.
   ################################################################################
   proc report {} {
     global ::opening::listStats ::opening::allLinesFenList

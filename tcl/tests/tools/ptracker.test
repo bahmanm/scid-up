@@ -1,0 +1,342 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Utilities referenced by variable traces and report formatting.
+namespace eval ::utils {}
+namespace eval ::utils::validate {}
+
+if {![llength [info commands ::utils::validate::Integer]]} {
+    # Called via variable traces as:
+    #   trace variable varName w {::utils::validate::Integer max min}
+    # Tcl appends: name1 name2 op
+    proc ::utils::validate::Integer {max min name1 name2 op} {
+        return
+    }
+}
+
+if {![llength [info commands ::utils::thousands]]} {
+    proc ::utils::thousands {n} { return $n }
+}
+
+# Progress bar helpers used by `::ptrack::refresh`.
+if {![llength [info commands progressBarSet]]} {
+    proc progressBarSet {args} {
+        lappend ::ptracker_test::progressCalls $args
+        return
+    }
+}
+
+if {![llength [info commands progressBarCancel]]} {
+    proc progressBarCancel {} { return }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools ptracker.tcl]
+
+namespace eval ::ptracker_test {
+    variable stubbedCommands {}
+    variable bindCalls {}
+    variable scBaseCalls {}
+    variable progressCalls {}
+}
+
+proc ::ptracker_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::ptracker_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::ptracker_test::setup {} {
+    ::ptracker_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::ptracker_test::bindCalls {}
+    set ::ptracker_test::scBaseCalls {}
+    set ::ptracker_test::progressCalls {}
+
+    set ::ptrack::mode "-games"
+    set ::ptrack::color blue
+    set ::ptrack::select d1
+
+    set ::ptrack::moves(start) 1
+    set ::ptrack::moves(end) 20
+}
+
+proc ::ptracker_test::cleanup {} {
+    ::ptracker_test::restoreStubs
+    ::scid_test::widgets::reset
+    unset -nocomplain ::ptracker_test::bindCalls
+    unset -nocomplain ::ptracker_test::scBaseCalls
+    unset -nocomplain ::ptracker_test::progressCalls
+}
+
+proc ::ptracker_test::rgb {hex} {
+    if {[scan $hex "#%2x%2x%2x" r g b] != 3} {
+        error "Invalid RGB colour: $hex"
+    }
+    return [list $r $g $b]
+}
+
+# ---- Tests ----
+
+test ptracker-sq-1.0 {ptrack::sq maps 0..63 to algebraic squares} -setup {
+    ::ptracker_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    list \
+        [::ptrack::sq 0] \
+        [::ptrack::sq 7] \
+        [::ptrack::sq 8] \
+        [::ptrack::sq 63]
+} -cleanup {
+    ::ptracker_test::cleanup
+} -result {a1 h1 a2 h8}
+
+test ptracker-color-1.0 {ptrack::color returns a valid hex colour and is monotonic for black scheme} -setup {
+    ::ptracker_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set cLow [::ptrack::color 1.0 black]
+    set cHigh [::ptrack::color 50.0 black]
+
+    # Assert
+    lassign [::ptracker_test::rgb $cLow] r1 g1 b1
+    lassign [::ptracker_test::rgb $cHigh] r2 g2 b2
+
+    list \
+        [expr {$r1 == $g1 && $g1 == $b1}] \
+        [expr {$r2 == $g2 && $g2 == $b2}] \
+        [expr {$r2 <= $r1}] \
+        [expr {[string match "#??????" $cLow]}]
+} -cleanup {
+    ::ptracker_test::cleanup
+} -result {1 1 1 1}
+
+test ptracker-refresh-color-1.0 {ptrack::refresh color repaints squares based on ::ptrack::shade} -setup {
+    ::ptracker_test::setup
+
+    # Arrange: make the window appear to exist.
+    ::ptracker_test::stubCommand winfo {subcmd args} {
+        if {$subcmd eq "exists"} {
+            return [expr {[lindex $args 0] eq ".ptracker"}]
+        }
+        error "winfo $subcmd not stubbed in ptracker tests"
+    }
+
+    for {set i 0} {$i < 64} {incr i} {
+        ::scid_test::widgets::defineWidget .ptracker.bd.sq$i
+    }
+
+    set ::ptrack::shade {}
+    for {set i 0} {$i < 64} {incr i} {
+        lappend ::ptrack::shade [expr {double($i)}]
+    }
+} -body {
+    # Arrange
+
+    # Act
+    ::ptrack::refresh color
+
+    # Assert
+    set expected0 [::ptrack::color 0.0]
+    set expected7 [::ptrack::color 7.0]
+    list \
+        [expr {[::scid_test::widgets::getState .ptracker.bd.sq0 -background] eq $expected0}] \
+        [expr {[::scid_test::widgets::getState .ptracker.bd.sq7 -background] eq $expected7}]
+} -cleanup {
+    ::ptracker_test::cleanup
+} -result {1 1}
+
+test ptracker-refresh-adjusts-range-1.0 {ptrack::refresh coerces moves(end) to moves(start) when end < start} -setup {
+    ::ptracker_test::setup
+
+    # Arrange
+    ::ptracker_test::stubCommand winfo {subcmd args} {
+        if {$subcmd eq "exists"} {
+            return [expr {[lindex $args 0] eq ".ptracker"}]
+        }
+        error "winfo $subcmd not stubbed in ptracker tests"
+    }
+
+    foreach w {
+        .ptracker.t.buttons.update
+        .ptracker.t.buttons.close
+        .ptracker.t.buttons.stop
+    } {
+        ::scid_test::widgets::defineWidget $w
+    }
+
+    ::ptracker_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd eq "piecetrack"} {
+            error "piecetrack failed"
+        }
+        error "sc_base $subcmd not stubbed in ptracker tests"
+    }
+
+    set ::ptrack::moves(start) 10
+    set ::ptrack::moves(end) 5
+} -body {
+    # Arrange
+
+    # Act
+    ::ptrack::refresh
+
+    # Assert
+    list \
+        $::ptrack::moves(end) \
+        [::scid_test::widgets::getState .ptracker.t.buttons.update -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.close -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.stop -state]
+} -cleanup {
+    ::ptracker_test::cleanup
+} -result {10 normal normal disabled}
+
+test ptracker-refresh-all-1.0 {ptrack::refresh populates shade, configures squares, and fills the list} -setup {
+    ::ptracker_test::setup
+
+    # Arrange
+    ::ptracker_test::stubCommand winfo {subcmd args} {
+        if {$subcmd eq "exists"} {
+            return [expr {[lindex $args 0] eq ".ptracker"}]
+        }
+        error "winfo $subcmd not stubbed in ptracker tests"
+    }
+
+    ::ptracker_test::stubCommand bind {args} {
+        lappend ::ptracker_test::bindCalls $args
+        return
+    }
+
+    ::ptracker_test::stubCommand sc_filter {subcmd args} {
+        if {$subcmd eq "count"} { return 100 }
+        error "sc_filter $subcmd not stubbed in ptracker tests"
+    }
+
+    set ::ptracker_test::piecetrackData {}
+    for {set i 0} {$i < 64} {incr i} {
+        lappend ::ptracker_test::piecetrackData 0
+    }
+    lset ::ptracker_test::piecetrackData 0 10
+
+    ::ptracker_test::stubCommand sc_base {subcmd args} {
+        lappend ::ptracker_test::scBaseCalls [list $subcmd {*}$args]
+        if {$subcmd eq "piecetrack"} {
+            # Assert: UI is disabled before heavy work.
+            if {![::scid_test::widgets::hasState .ptracker.t.buttons.update -state] ||
+                [::scid_test::widgets::getState .ptracker.t.buttons.update -state] ne "disabled"} {
+                error "Expected update button disabled before sc_base piecetrack"
+            }
+            if {![::scid_test::widgets::hasState .ptracker.t.buttons.close -state] ||
+                [::scid_test::widgets::getState .ptracker.t.buttons.close -state] ne "disabled"} {
+                error "Expected close button disabled before sc_base piecetrack"
+            }
+            if {![::scid_test::widgets::hasState .ptracker.t.buttons.stop -state] ||
+                [::scid_test::widgets::getState .ptracker.t.buttons.stop -state] ne "normal"} {
+                error "Expected stop button normal before sc_base piecetrack"
+            }
+            if {[llength $::ptracker_test::progressCalls] == 0} {
+                error "Expected progressBarSet called before sc_base piecetrack"
+            }
+
+            return $::ptracker_test::piecetrackData
+        }
+        error "sc_base $subcmd not stubbed in ptracker tests"
+    }
+
+    foreach w {
+        .ptracker.t.buttons.update
+        .ptracker.t.buttons.close
+        .ptracker.t.buttons.stop
+    } {
+        ::scid_test::widgets::defineWidget $w
+    }
+
+    for {set i 0} {$i < 64} {incr i} {
+        ::scid_test::widgets::defineWidget .ptracker.bd.sq$i
+    }
+
+    ::scid_test::widgets::defineWidget .ptracker.t.text.text
+
+    set ::ptrack::moves(start) 2
+    set ::ptrack::moves(end) 3
+    set ::ptrack::mode "-games"
+    set ::ptrack::select d1
+} -body {
+    # Arrange
+
+    # Act
+    ::ptrack::refresh
+
+    # Assert
+    set expectedScBaseCalls [list [list piecetrack -games 2 3 d1]]
+    set okCalls [expr {$::ptracker_test::scBaseCalls eq $expectedScBaseCalls}]
+
+    set shade0 [lindex $::ptrack::shade 0]
+    set okShade0 [expr {$shade0 == 100.0}]
+
+    set expectedBg0 [::ptrack::color 100.0]
+    set okBg0 [expr {[::scid_test::widgets::getState .ptracker.bd.sq0 -background] eq $expectedBg0}]
+
+    set text [::scid_test::widgets::getText .ptracker.t.text.text]
+    set okText [expr {[string first "\t 1.\ta1" $text] == 0}]
+
+    set okBindCalls [expr {[llength $::ptracker_test::bindCalls] == 128}]
+
+    set expectedProgressCalls [list [list .ptracker.progress 401 21]]
+    set okProgress [expr {$::ptracker_test::progressCalls eq $expectedProgressCalls}]
+
+    list $okCalls $okShade0 $okBg0 $okText $okBindCalls $okProgress
+} -cleanup {
+    ::ptracker_test::cleanup
+} -result {1 1 1 1 1 1}
+
+test ptracker-refresh-error-restores-buttons-1.0 {ptrack::refresh restores button states when sc_base piecetrack errors} -setup {
+    ::ptracker_test::setup
+
+    # Arrange
+    ::ptracker_test::stubCommand winfo {subcmd args} {
+        if {$subcmd eq "exists"} {
+            return [expr {[lindex $args 0] eq ".ptracker"}]
+        }
+        error "winfo $subcmd not stubbed in ptracker tests"
+    }
+
+    foreach w {
+        .ptracker.t.buttons.update
+        .ptracker.t.buttons.close
+        .ptracker.t.buttons.stop
+    } {
+        ::scid_test::widgets::defineWidget $w
+    }
+
+    ::ptracker_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd eq "piecetrack"} {
+            error "piecetrack failed"
+        }
+        error "sc_base $subcmd not stubbed in ptracker tests"
+    }
+} -body {
+    # Arrange
+
+    # Act
+    ::ptrack::refresh
+
+    # Assert
+    list \
+        [::scid_test::widgets::getState .ptracker.t.buttons.update -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.close -state] \
+        [::scid_test::widgets::getState .ptracker.t.buttons.stop -state]
+} -cleanup {
+    ::ptracker_test::cleanup
+} -result {normal normal disabled}

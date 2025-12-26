@@ -15,18 +15,38 @@ set ::ptrack::colors [list black red yellow cyan blue xblack xred xyellow xcyan 
 trace variable ::ptrack::moves(start) w {::utils::validate::Integer 999 0}
 trace variable ::ptrack::moves(end) w {::utils::validate::Integer 999 0}
 
+################################################################################
 # ::ptrack::sq
-#   Given a square number (0=a1 to 63=h8), returns the square name.
-#
+#   Converts a 0..63 square index to algebraic notation.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Square index (0..63), where 0=a1 and 63=h8.
+# Returns:
+#   - Square name (e.g. "a1", "h8").
+# Side effects:
+#   - None.
+################################################################################
 proc ::ptrack::sq {n} {
   set sq [lindex [list a b c d e f g h] [expr {$n % 8} ]]
   append sq [expr {int($n/8) + 1} ]
   return $sq
 }
 
+################################################################################
 # ::ptrack::unselect
-#   Unselects all pieces in the Piece Tracker window.
-#
+#   Clears the current selection and restores piece-square backgrounds.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::ptrack::select` to an empty list.
+#   - Configures `.ptracker.bd.p*` backgrounds to `::squareColor_dark` /
+#     `::squareColor_lite`.
+################################################################################
 proc ::ptrack::unselect {} {
   set w .ptracker
   set ::ptrack::select {}
@@ -38,9 +58,20 @@ proc ::ptrack::unselect {} {
   }
 }
 
+################################################################################
 # ::ptrack::select
-#   Selects all the listed pieces the Piece Tracker window.
-#
+#   Selects and highlights pieces in the Piece Tracker window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - plist: List of algebraic squares (e.g. "d1", "a2").
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::ptrack::unselect`.
+#   - Updates `::ptrack::select` to contain `plist`.
+#   - Configures `.ptracker.bd.p*` backgrounds to `::highcolor`.
+################################################################################
 proc ::ptrack::select {plist} {
   ::ptrack::unselect
   foreach p $plist {
@@ -49,9 +80,19 @@ proc ::ptrack::select {plist} {
   }
 }
 
+################################################################################
 # ::ptrack::status
-#   Sets the Piece Tracker window status bar.
-#
+#   Updates the Piece Tracker status bar.
+# Visibility:
+#   Public.
+# Inputs:
+#   - text: Optional status text. If empty, shows the current filter summary.
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures `.ptracker.status` label text.
+#   - Reads `::windows::gamelist::filterText` when `text` is empty.
+################################################################################
 proc ::ptrack::status {{text ""}} {
   set t .ptracker.status
   if {$text == ""} {
@@ -61,19 +102,40 @@ proc ::ptrack::status {{text ""}} {
   }
 }
 
+################################################################################
 # ::ptrack::recolor
-#   Changes the color scheme for track values.
-#
+#   Sets the colour scheme used for square shading and repaints the board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - color: Colour scheme name from `::ptrack::colors`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::ptrack::color`.
+#   - Updates `.ptracker.t.color.b` to use the corresponding `ptrack_$color`.
+#   - Calls `::ptrack::refresh color`.
+################################################################################
 proc ::ptrack::recolor {color} {
   set ::ptrack::color $color
   .ptracker.t.color.b configure -image ptrack_$::ptrack::color
   ::ptrack::refresh color
 }
 
+################################################################################
 # ::ptrack::color
-#   Given a real value between 0.0 and 100.0, returns
-#   the corresponding Piece Tracker color value.
-#
+#   Maps a percentage value to a Tk colour in the chosen colour scheme.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pct: Percentage value (nominally 0.0..100.0). Values outside the range
+#     are clamped.
+#   - col: Optional colour scheme name (defaults to `::ptrack::color`).
+# Returns:
+#   - A Tk colour string in "#RRGGBB" form.
+# Side effects:
+#   - None.
+################################################################################
 proc ::ptrack::color {pct {col ""}} {
   if {$col == ""} {
     set col $::ptrack::color
@@ -106,9 +168,21 @@ proc ::ptrack::color {pct {col ""}} {
   return $color
 }
 
+################################################################################
 # ::ptrack::make
-#   Creates the Piece Tracker window
-#
+#   Creates and initialises the Piece Tracker window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates the `.ptracker` toplevel and its child widgets.
+#   - Creates and configures images, including per-colour gradients.
+#   - Binds UI events for selection, status help, and window behaviour.
+#   - Initialises `::ptrack::shade` and restores the current selection.
+################################################################################
 proc ::ptrack::make {} {
   set w .ptracker
   if {[winfo exists $w]} { return }
@@ -294,9 +368,30 @@ proc ::ptrack::make {} {
   focus $w.t.buttons.update
 }
 
+################################################################################
 # ::ptrack::refresh
-#   Regenerates Piece Tracker statistics and updates the window
-#
+#   Recomputes piece-tracker statistics and refreshes the display.
+# Visibility:
+#   Public.
+# Inputs:
+#   - type: Optional refresh type.
+#       - "color": Repaint square colours using the existing `::ptrack::shade`.
+#       - "all": Recompute statistics and refresh the full view.
+#     Defaults to "all".
+# Returns:
+#   - None.
+# Side effects:
+#   - No-ops if `.ptracker` does not exist.
+#   - On "color": repaints `.ptracker.bd.sq*` backgrounds.
+#   - On "all":
+#       - Disables update/close buttons and enables the stop button.
+#       - Sets a grab on `.ptracker.t.buttons.stop` (best-effort).
+#       - May coerce `::ptrack::moves(end)` to `::ptrack::moves(start)`.
+#       - Runs `progressBarSet`.
+#       - Invokes `sc_base piecetrack`, storing the result in `::ptrack::data`.
+#       - Updates `::ptrack::shade`, repaints squares, rebuilds
+#         `.ptracker.t.text.text`, and binds hover handlers on squares.
+################################################################################
 proc ::ptrack::refresh {{type "all"}} {
   set w .ptracker
   if {! [winfo exists $w]} { return }

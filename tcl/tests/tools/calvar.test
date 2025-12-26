@@ -1,0 +1,276 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools calvar.tcl]
+
+namespace eval ::calvar_test {
+    variable doneButtonState ""
+    variable textInserts {}
+    variable stubbedProcs {}
+    variable addLineToComputeArgs {}
+    variable computeLineArgs {}
+    variable addVarArgs {}
+    variable addMissedLineCalls {}
+}
+
+# ----------------------------------------------------------------------
+# Stubs and helpers.
+# ----------------------------------------------------------------------
+
+# Stub the minimal widget commands referenced by `calvar.tcl` so the suite can be
+# executed under plain `tclsh`.
+if {![llength [info commands .calvarWin.fCommand.bDone]]} {
+    proc .calvarWin.fCommand.bDone {subcmd args} {
+        switch -- $subcmd {
+            configure {
+                set stateIdx [lsearch -exact $args "-state"]
+                if {$stateIdx == -1 || ($stateIdx + 1) >= [llength $args]} {
+                    error ".calvarWin.fCommand.bDone configure missing -state"
+                }
+                set ::calvar_test::doneButtonState [lindex $args [expr {$stateIdx + 1}]]
+                return
+            }
+            default {
+                error ".calvarWin.fCommand.bDone $subcmd not stubbed in tests"
+            }
+        }
+    }
+}
+
+if {![llength [info commands .calvarWin.fText.t]]} {
+    proc .calvarWin.fText.t {subcmd args} {
+        switch -- $subcmd {
+            insert {
+                if {[llength $args] != 2} {
+                    error ".calvarWin.fText.t insert expects {index text}"
+                }
+                lassign $args index text
+                lappend ::calvar_test::textInserts [list $index $text]
+                return
+            }
+            delete {
+                # `calvar::reset` only deletes when a real Tk window exists.
+                return
+            }
+            default {
+                error ".calvarWin.fText.t $subcmd not stubbed in tests"
+            }
+        }
+    }
+}
+
+# Minimal UCI formatting helpers used by `calvar::handleResult` and `calvar::positionDone`.
+if {![llength [info commands ::uci::formatPv]]} {
+    proc ::uci::formatPv {moves args} {
+        return $moves
+    }
+}
+
+if {![llength [info commands ::uci::formatPvAfterMoves]]} {
+    proc ::uci::formatPvAfterMoves {firstMove pv} {
+        return [join $pv " "]
+    }
+}
+
+proc ::calvar_test::stubProc {name argList body} {
+    variable stubbedProcs
+
+    if {[llength [info commands $name]]} {
+        set orig "${name}__scid_test_orig"
+        rename $name $orig
+        lappend stubbedProcs [list $name $orig]
+    } else {
+        lappend stubbedProcs [list $name ""]
+    }
+
+    proc $name $argList $body
+}
+
+proc ::calvar_test::restoreStubs {} {
+    variable stubbedProcs
+
+    foreach pair $stubbedProcs {
+        lassign $pair name orig
+        if {[llength [info commands $name]]} {
+            rename $name ""
+        }
+        if {$orig ne ""} {
+            rename $orig $name
+        }
+    }
+
+    set stubbedProcs {}
+}
+
+proc ::calvar_test::setup {} {
+    ::calvar_test::restoreStubs
+
+    set ::calvar_test::doneButtonState ""
+    set ::calvar_test::textInserts {}
+    set ::calvar_test::addLineToComputeArgs {}
+    set ::calvar_test::computeLineArgs {}
+    set ::calvar_test::addVarArgs {}
+    set ::calvar_test::addMissedLineCalls {}
+
+    set ::scid_test::sc_pos_fen "FEN"
+
+    set ::calvar::thinkingTimePerLine 10
+    set ::calvar::thinkingTimePosition 30
+    set ::calvar::currentLine 1
+    set ::calvar::currentListMoves {}
+    set ::calvar::lines {}
+    set ::calvar::analysisQueue {}
+    set ::calvar::initPosAnalysis {}
+    set ::calvar::midmove ""
+    set ::calvar::working 0
+
+    set ::analysis(multiPVraw4) {}
+    set ::analysis(multiPV4) {}
+    set ::analysis(analyzeMode4) 0
+}
+
+proc ::calvar_test::cleanup {} {
+    ::calvar_test::restoreStubs
+
+    unset -nocomplain ::scid_test::sc_pos_fen
+
+    set ::calvar::currentLine 1
+    set ::calvar::currentListMoves {}
+    set ::calvar::lines {}
+    set ::calvar::analysisQueue {}
+    set ::calvar::initPosAnalysis {}
+    set ::calvar::midmove ""
+    set ::calvar::working 0
+
+    set ::analysis(multiPVraw4) {}
+    set ::analysis(multiPV4) {}
+    set ::analysis(analyzeMode4) 0
+}
+
+test calvar-promo-1.0 {promo appends promotion piece to the last move} \
+    -setup {::calvar_test::setup} \
+    -body {
+        # Arrange
+        set ::calvar::currentListMoves {e7e8}
+
+        # Act
+        ::calvar::promo q
+
+        # Assert
+        return [list $::calvar::currentListMoves $::calvar_test::textInserts]
+    } \
+    -cleanup {::calvar_test::cleanup} \
+    -result [list [list e7e8q] [list [list end q]]]
+
+test calvar-nag-1.0 {nag ends a line, records it, and queues analysis} \
+    -setup {::calvar_test::setup} \
+    -body {
+        # Arrange
+        set ::calvar::currentLine 1
+        set ::calvar::currentListMoves {e2e4 e7e5}
+        set ::scid_test::sc_pos_fen "FEN1"
+
+        ::calvar_test::stubProc ::calvar::addLineToCompute {line {n 4}} {
+            set ::calvar_test::addLineToComputeArgs [list $line $n]
+            return
+        }
+
+        # Act
+        ::calvar::nag "+="
+
+        # Assert
+        return [list \
+            $::calvar::lines \
+            $::calvar::currentLine \
+            $::calvar::currentListMoves \
+            $::calvar_test::addLineToComputeArgs \
+            $::calvar_test::textInserts \
+        ]
+    } \
+    -cleanup {::calvar_test::cleanup} \
+    -result [list \
+        [list [list {e2e4 e7e5} "+=" "FEN1"]] \
+        2 \
+        {} \
+        [list [list {e2e4 e7e5} "+=" "FEN1"] 4] \
+        [list [list "1.end" " +=\n"]] \
+    ]
+
+test calvar-addLineToCompute-1.0 {addLineToCompute drains queue when idle} \
+    -setup {::calvar_test::setup} \
+    -body {
+        # Arrange
+        set ::calvar::working 0
+        set ::calvar::analysisQueue {}
+
+        ::calvar_test::stubProc ::calvar::computeLine {line {n 4}} {
+            lappend ::calvar_test::computeLineArgs $line
+            return
+        }
+
+        set line [list {e2e4} "+=" "FEN1"]
+
+        # Act
+        ::calvar::addLineToCompute $line
+
+        # Assert
+        return [list $::calvar::analysisQueue $::calvar_test::computeLineArgs]
+    } \
+    -cleanup {::calvar_test::cleanup} \
+    -result [list {} [list [list {e2e4} "+=" "FEN1"]]]
+
+test calvar-handleResult-1.0 {handleResult formats MultiPV output and invokes addVar with inverted score} \
+    -setup {::calvar_test::setup} \
+    -body {
+        # Arrange
+        set ::analysis(multiPVraw4) [list \
+            [list 55 0.14 {e7e5 g1f3} 100] \
+            [list 54 -0.07 {c7c5} 101] \
+        ]
+
+        ::calvar_test::stubProc ::calvar::addVar {usermoves engmoves nag comment engscore} {
+            set ::calvar_test::addVarArgs [list $usermoves $engmoves $nag $comment $engscore]
+            return
+        }
+
+        # Act
+        ::calvar::handleResult {e2e4} "+=" "FEN1" 4
+
+        # Assert
+        set first [lindex $::analysis(multiPV4) 0]
+        set second [lindex $::analysis(multiPV4) 1]
+        return [list $first $second $::calvar_test::addVarArgs]
+    } \
+    -cleanup {::calvar_test::cleanup} \
+    -result [list \
+        [list 55 0.14 {e2e4 e7e5 g1f3} 100] \
+        [list 54 -0.07 {e2e4 c7c5} 101] \
+        [list [list e2e4] {e2e4 e7e5 g1f3} "+=" {} -0.14] \
+    ]
+
+test calvar-positionDone-1.0 {positionDone adds missed lines until a user line is present} \
+    -setup {::calvar_test::setup} \
+    -body {
+        # Arrange
+        set ::calvar::initPosAnalysis [list \
+            [list 10 0.50 {a2a3 a7a6} 0] \
+            [list 9 0.40 {b2b3 b7b6} 0] \
+        ]
+        set ::calvar::lines [list [list {b2b3} "+=" "FEN1"]]
+
+        ::calvar_test::stubProc ::calvar::addMissedLine {moves score depth} {
+            lappend ::calvar_test::addMissedLineCalls [list $moves $score $depth]
+            return
+        }
+
+        # Act
+        ::calvar::positionDone
+
+        # Assert
+        return $::calvar_test::addMissedLineCalls
+    } \
+    -cleanup {::calvar_test::cleanup} \
+    -result [list [list {a2a3 a7a6} 0.50 10]]

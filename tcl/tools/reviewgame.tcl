@@ -21,7 +21,21 @@ namespace eval reviewgame {
 }
 
 ################################################################################
-#
+# ::reviewgame::start
+#   Launches the game review window and begins the training loop.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Starts a UCI engine in slot `::reviewgame::engineSlot` (if available).
+#   - Creates and configures toplevel `::reviewgame::window`.
+#   - Reads current game tags via `sc_game tags get`.
+#   - Sets play-mode callback via `::setPlayMode`.
+#   - Binds window events (destroy/help) and initialises session counters.
+#   - Calls `::reviewgame::resetValues` and enters `::reviewgame::mainLoop`.
 ################################################################################
 proc ::reviewgame::start {} {
   if { ! [::reviewgame::launchengine] } {
@@ -124,6 +138,19 @@ proc ::reviewgame::start {} {
   ::reviewgame::mainLoop
 }
 
+################################################################################
+# ::reviewgame::clearEvaluation
+#   Clears any displayed solution/evaluation text in the review window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates widgets under `::reviewgame::window.finfo` (solution label and
+#     evaluation fields).
+################################################################################
 proc ::reviewgame::clearEvaluation {} {
   set w $::reviewgame::window
   $w.finfo.sol configure -text "[::tr ShowSolution]"
@@ -133,6 +160,21 @@ proc ::reviewgame::clearEvaluation {} {
   $w.finfo.sc3 configure -text ""
 }
 
+################################################################################
+# ::reviewgame::callback
+#   Handles play-mode callbacks while a review session is active.
+# Visibility:
+#   Public.
+# Inputs:
+#   - cmd: Callback command name.
+#   - args: Additional callback arguments (ignored by this implementation).
+# Returns:
+#   - 1/0 indicating whether the requested action is permitted/handled.
+#     "moveForward" returns 1; "stop" calls `::reviewgame::endTraining` and
+#     returns 0.
+# Side effects:
+#   - On "stop", calls `::reviewgame::endTraining`.
+################################################################################
 proc ::reviewgame::callback {cmd args} {
   switch $cmd {
       premove { # TODO: currently we just return true if it is the engine turn.
@@ -145,7 +187,17 @@ proc ::reviewgame::callback {cmd args} {
 }
 
 ################################################################################
-#
+# ::reviewgame::showSolution
+#   Reveals the next game move in the UI.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `$::reviewgame::window.finfo.sol` with `sc_game info nextMove`.
+#   - Sets `::reviewgame::solutionDisplayed`.
 ################################################################################
 proc ::reviewgame::showSolution {} {
   set w $::reviewgame::window
@@ -153,7 +205,21 @@ proc ::reviewgame::showSolution {} {
   set ::reviewgame::solutionDisplayed 1
 }
 ################################################################################
-#
+# ::reviewgame::endTraining
+#   Aborts the current review session and closes the review window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels scheduled timers (`::reviewgame::mainLoop`, `::reviewgame::stopAnalyze`).
+#   - Sets `::reviewgame::bailout` and resets `::reviewgame::sequence`.
+#   - Stops any in-flight analysis (`::reviewgame::stopAnalyze`).
+#   - Closes `::reviewgame::window` via `::win::closeWindow`.
+#   - Resets play mode via `::setPlayMode ""`.
+#   - Attempts to close the UCI engine in slot `::reviewgame::engineSlot`.
 ################################################################################
 proc ::reviewgame::endTraining {} {
   set w $::reviewgame::window
@@ -171,7 +237,16 @@ proc ::reviewgame::endTraining {} {
   catch { ::uci::closeUCIengine $::reviewgame::engineSlot }
 }
 ################################################################################
-#
+# ::reviewgame::isPlayerTurn
+#   Determines whether it is currently the human player's turn from the bottom.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - 1 if the side-to-move corresponds to the bottom player; otherwise 0.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::reviewgame::isPlayerTurn {} {
   if { [sc_pos side] == "white" &&  ![::board::isFlipped .main.board] || [sc_pos side] == "black" &&  [::board::isFlipped .main.board] } {
@@ -180,7 +255,23 @@ proc ::reviewgame::isPlayerTurn {} {
   return 0
 }
 ################################################################################
-# waits for the user to play and check the move played
+# ::reviewgame::mainLoop
+#   Drives the review session state machine (analyse game move, analyse position,
+#   prompt the user, and validate the played move).
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels and re-schedules itself via `after`.
+#   - Updates multiple UI widgets under `::reviewgame::window.finfo`.
+#   - May display warning message boxes via `::reviewgame::checkConsistency` and
+#     `::reviewgame::checkPlayerMove`.
+#   - May flip the main board (`::board::flip`) to keep the player at the bottom.
+#   - Runs analysis via `::reviewgame::startAnalyze` and waits via `vwait`.
+#   - Calls `::reviewgame::checkPlayerMove` and `::reviewgame::updateStats`.
 ################################################################################
 proc ::reviewgame::mainLoop {} {
   global ::reviewgame::sequence ::reviewgame::useExtendedTime
@@ -249,7 +340,21 @@ proc ::reviewgame::mainLoop {} {
   after 1000 ::reviewgame::mainLoop
 }
 ################################################################################
-#
+# ::reviewgame::checkPlayerMove
+#   Validates the user's last move against the game move and the engine's choice.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads and mutates game state via `sc_move`, `sc_game`, `sc_pos`, and `sc_var`.
+#   - May show warning `tk_messageBox` dialogs (e.g. when the position changes).
+#   - May annotate the game (NAG, comments, and variations) for poor moves.
+#   - Updates UI evaluation fields and status messages.
+#   - May advance the game (`::move::Forward`) depending on outcome.
+#   - Updates session counters (`::reviewgame::numberMovesPlayed`, etc.).
 ################################################################################
 proc ::reviewgame::checkPlayerMove {} {
   global ::reviewgame::sequence ::reviewgame::useExtendedTime ::reviewgame::analysisEngine ::animateDelay
@@ -363,7 +468,17 @@ proc ::reviewgame::checkPlayerMove {} {
   }
 }
 ################################################################################
-#
+# ::reviewgame::updateStats
+#   Updates the displayed per-session statistics ("moves like player/engine").
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `$::reviewgame::window.finfo.stats`.
+#   - Reads current player name via `sc_game info`.
 ################################################################################
 proc ::reviewgame::updateStats {} {
   set l $::reviewgame::window.finfo.stats
@@ -376,7 +491,18 @@ proc ::reviewgame::updateStats {} {
   $l configure -text "[::tr GameReviewMovesPlayedLike] $player : $::reviewgame::movesLikePlayer / $::reviewgame::numberMovesPlayed\n[::tr GameReviewMovesPlayedEngine] : $::reviewgame::movesLikeEngine / $::reviewgame::numberMovesPlayed"
 }
 ################################################################################
-#
+# ::reviewgame::isGoodScore
+#   Determines whether a move is acceptable given the configured score margin.
+# Visibility:
+#   Private.
+# Inputs:
+#   - engine: Engine score for the best move (numeric, from the engine output).
+#   - player: Engine score for the player's move (numeric, from the engine output).
+# Returns:
+#   - 1 if the player's score is within `::reviewgame::margin` of the engine score
+#     (from the player's perspective); otherwise 0.
+# Side effects:
+#   - Reads `::reviewgame::margin` and board orientation via `::board::isFlipped`.
 ################################################################################
 proc ::reviewgame::isGoodScore {engine player} {
   global ::reviewgame::margin
@@ -393,8 +519,19 @@ proc ::reviewgame::isGoodScore {engine player} {
   return 0
 }
 ################################################################################
-## resetValues
-#   Resets global data.
+# ::reviewgame::resetValues
+#   Resets per-cycle state used by the review session state machine.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets `::reviewgame::sequence`.
+#   - Clears analysis state flags (`::reviewgame::analysisEngine(analyzeMode)`,
+#     `::reviewgame::bailout`, `::reviewgame::useExtendedTime`,
+#     `::reviewgame::solutionDisplayed`).
 ################################################################################
 proc ::reviewgame::resetValues {} {
   set ::reviewgame::sequence 0
@@ -405,8 +542,18 @@ proc ::reviewgame::resetValues {} {
 }
 
 ################################################################################
-#  Will start engine
-# in case of an error, return 0, or 1 if the engine is ok
+# ::reviewgame::launchengine
+#   Starts the first enabled UCI engine for use by the review session.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - 1 if an engine was found and started; otherwise 0.
+# Side effects:
+#   - Resets UCI state via `::uci::resetUciInfo`.
+#   - Starts an engine via `::uci::startEngine` in slot `::reviewgame::engineSlot`.
+#   - Updates `::reviewgame::analysisEngine(analyzeMode)`.
 ################################################################################
 proc ::reviewgame::launchengine {} {
   global ::reviewgame::analysisEngine
@@ -432,18 +579,41 @@ proc ::reviewgame::launchengine {} {
   return 1
 }
 
-# ======================================================================
-# sendToEngine:
-#   Send a command to a running analysis engine.
-# ======================================================================
+################################################################################
+# ::reviewgame::sendToEngine
+#   Sends a command to the configured analysis engine.
+# Visibility:
+#   Private.
+# Inputs:
+#   - text: UCI command text to send.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes to the configured engine slot via `::uci::sendToEngine`.
+################################################################################
 proc ::reviewgame::sendToEngine {text} {
   ::uci::sendToEngine $::reviewgame::engineSlot $text
 }
 
-# ======================================================================
-# startAnalyzeMode:
-#   Put the engine in analyze mode, from current position after move played (in UCI format), time is in seconds
-# ======================================================================
+################################################################################
+# ::reviewgame::startAnalyze
+#   Starts infinite analysis from the current position (optionally after a move)
+#   and schedules a timed stop.
+# Visibility:
+#   Private.
+# Inputs:
+#   - analysisTime: Analysis duration in seconds.
+#   - move: Optional SAN move to apply temporarily before analysing.
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels any pending `::reviewgame::stopAnalyze` timer.
+#   - If analysis is already active, sends UCI `exit` before restarting.
+#   - Schedules progress bar updates (`::reviewgame::updateProgressBar`).
+#   - Updates `::analysis(fen$::reviewgame::engineSlot)`.
+#   - Sends UCI `position ...` and `go infinite` to the engine.
+#   - Schedules `::reviewgame::stopAnalyze` after `analysisTime` seconds.
+################################################################################
 proc ::reviewgame::startAnalyze { analysisTime { move "" } } {
   global ::reviewgame::analysisEngine ::reviewgame::engineSlot
   
@@ -474,10 +644,27 @@ proc ::reviewgame::startAnalyze { analysisTime { move "" } } {
   ::reviewgame::sendToEngine "go infinite"
   after [expr 1000 * $analysisTime] "::reviewgame::stopAnalyze $move"
 }
-# ======================================================================
-# stopAnalyzeMode:
-#   Stop the engine analyze mode
-# ======================================================================
+################################################################################
+# ::reviewgame::stopAnalyze
+#   Stops analysis, captures the current PV for the active phase, and advances
+#   `::reviewgame::sequence` to release any `vwait` in the main loop.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: Optional move string passed through from `startAnalyze`.
+# Returns:
+#   - None. Returns immediately if `::reviewgame::analysisEngine(analyzeMode)` is
+#     false.
+# Side effects:
+#   - Cancels progress bar updates (`::reviewgame::updateProgressBar`).
+#   - Resets the progress bar value (if it exists).
+#   - Increments `::reviewgame::sequence`.
+#   - Updates `::reviewgame::analysisEngine(score,$sequence)` and
+#     `::reviewgame::analysisEngine(moves,$sequence)` from `::analysis(multiPV...)`.
+#   - When `::reviewgame::sequence` is 1, negates the captured score so it is
+#     from White's perspective.
+#   - Sends UCI `stop` to the engine.
+################################################################################
 proc ::reviewgame::stopAnalyze { { move "" } } {
   global ::reviewgame::analysisEngine ::reviewgame::sequence
   
@@ -501,7 +688,18 @@ proc ::reviewgame::stopAnalyze { { move "" } } {
   ::reviewgame::sendToEngine "stop"
 }
 ################################################################################
-#
+# ::reviewgame::proceed
+#   Skips the current guess and advances to the next training cycle.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears evaluation UI and exits any active variation (`sc_var exit`).
+#   - Advances two plies (`::move::Forward` twice).
+#   - Resets per-cycle state and schedules `::reviewgame::mainLoop`.
 ################################################################################
 proc ::reviewgame::proceed {} {
   # skip this move, go to next cycle
@@ -513,7 +711,19 @@ proc ::reviewgame::proceed {} {
   after 1000 ::reviewgame::mainLoop
 }
 ################################################################################
-# Rethink on the position with extended time
+# ::reviewgame::extendedTime
+#   Re-runs analysis for the current position using the extended time control.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - No-ops if the engine is currently analysing.
+#   - May move back one ply (`::move::Back`) to return to the player's turn.
+#   - Sets `::reviewgame::useExtendedTime`, resets `::reviewgame::sequence`, and
+#     re-enters `::reviewgame::mainLoop`.
 ################################################################################
 proc ::reviewgame::extendedTime {} {
   # if already calculating, do nothing
@@ -530,14 +740,33 @@ proc ::reviewgame::extendedTime {} {
   ::reviewgame::mainLoop
 }
 ################################################################################
-#
+# ::reviewgame::updateProgressBar
+#   Advances the progress bar and reschedules itself.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `$::reviewgame::window.finfo.pb step`.
+#   - Schedules itself via `after` using `::reviewgame::progressBarTimer`.
 ################################################################################
 proc ::reviewgame::updateProgressBar {} {
   $::reviewgame::window.finfo.pb step $::reviewgame::progressBarStep
   after $::reviewgame::progressBarTimer ::reviewgame::updateProgressBar
 }
 ################################################################################
-#
+# ::reviewgame::checkConsistency
+#   Validates that the board orientation has not changed mid-session.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - 1 if consistent; otherwise 0.
+# Side effects:
+#   - Shows a warning `tk_messageBox` if the board was rotated.
 ################################################################################
 proc ::reviewgame::checkConsistency {} {
   if { $::reviewgame::boardFlipped != [::board::isFlipped .main.board] } {

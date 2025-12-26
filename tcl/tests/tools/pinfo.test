@@ -1,0 +1,215 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# `pinfo.tcl` uses `safeSource` and `::splash::add` at load time.
+namespace eval ::splash {}
+if {![llength [info commands ::splash::add]]} {
+    proc ::splash::add {args} { return }
+}
+
+if {![llength [info commands safeSource]]} {
+    proc safeSource {path} {
+        uplevel #0 [list source $path]
+    }
+}
+
+# Ensure a minimal resolver configuration exists so sourcing `pinfo.tcl` does not
+# attempt to generate (and then source) the full default resolver file.
+set resolversFile [scidConfigFile resolvers]
+file mkdir [file dirname $resolversFile]
+set ch [open $resolversFile w]
+puts $ch {namespace eval ::unsafe {}}
+puts $ch {array set ::unsafe::idlink {}}
+close $ch
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools pinfo.tcl]
+
+namespace eval ::pinfo_test {
+    variable stubbedCommands {}
+}
+
+proc ::pinfo_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::pinfo_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::pinfo_test::setup {} {
+    ::pinfo_test::restoreStubs
+
+    # Arrange
+    set ::language "E"
+    set ::scidVersion "test"
+    set ::scidVersionDate "1970-01-01"
+
+    namespace eval ::unsafe {}
+    catch {array unset ::unsafe::idlink}
+    array set ::unsafe::idlink {}
+}
+
+proc ::pinfo_test::cleanup {} {
+    ::pinfo_test::restoreStubs
+
+    catch {array unset ::unsafe::idlink}
+    unset -nocomplain ::language
+    unset -nocomplain ::scidVersion
+    unset -nocomplain ::scidVersionDate
+}
+
+test pinfo-splitName-1.0 {splitName splits "Last, First" into {First Last}} -setup {
+    ::pinfo_test::setup
+} -body {
+    # Arrange
+    set name "Carlsen, Magnus"
+
+    # Act
+    ::pinfo::splitName $name
+} -cleanup {
+    ::pinfo_test::cleanup
+} -result {Magnus Carlsen}
+
+test pinfo-splitName-2.0 {splitName splits on first space when comma is absent} -setup {
+    ::pinfo_test::setup
+} -body {
+    # Arrange
+    set name "Magnus Carlsen"
+
+    # Act
+    ::pinfo::splitName $name
+} -cleanup {
+    ::pinfo_test::cleanup
+} -result {Carlsen Magnus}
+
+test pinfo-splitName-3.0 {splitName returns {name ""} when no delimiter exists} -setup {
+    ::pinfo_test::setup
+} -body {
+    # Arrange
+    set name "Magnus"
+
+    # Act
+    ::pinfo::splitName $name
+} -cleanup {
+    ::pinfo_test::cleanup
+} -result {Magnus {}}
+
+test pinfo-formatName-1.0 {formatName formats name order and delimiter} -setup {
+    ::pinfo_test::setup
+} -body {
+    # Arrange
+    set fname "magnus"
+    set lname "carlsen"
+
+    # Act
+    set firstLast [::pinfo::formatName $fname $lname "F" "_"]
+    set lastFirst [::pinfo::formatName $fname $lname "L" ","]
+
+    # Assert
+    list $firstLast $lastFirst
+} -cleanup {
+    ::pinfo_test::cleanup
+} -result {Magnus_Carlsen Carlsen,Magnus}
+
+test pinfo-ReplaceIDTags-1.0 {ReplaceIDTags replaces an explicit ID tag with a link} -setup {
+    ::pinfo_test::setup
+
+    set ::language "D"
+
+    array set ::unsafe::idlink {
+        0 {{FIDEID} {http://ratings.example/card?event=%ID%} {} {FIDE}}
+    }
+} -body {
+    # Arrange
+    set pinfo "Name<br>FIDEID 12345<br><br>"
+    set pname "Carlsen, Magnus"
+
+    # Act
+    set out [::pinfo::ReplaceIDTags $pinfo $pname]
+
+    # Assert
+    list \
+        [string match "*openURL http://ratings.example/card?event=12345*" $out] \
+        [string match "*<blue>FIDE: 12345*" $out]
+} -cleanup {
+    ::pinfo_test::cleanup
+} -result {1 1}
+
+test pinfo-ReplaceIDTags-2.0 {ReplaceIDTags can append a useNAME resolver with language and encoded spaces} -setup {
+    ::pinfo_test::setup
+
+    set ::language "F"
+
+    proc iconcmd {} { return }
+
+    array set ::unsafe::idlink {
+        0 {{useNAMEF_} {http://%LANG%.wikipedia.org/wiki/%ID%} {iconcmd} {Wikipedia}}
+    }
+} -body {
+    # Arrange
+    set pinfo "Bio<br><br>"
+    set pname "Van Wely, Loek"
+
+    # Act
+    set out [::pinfo::ReplaceIDTags $pinfo $pname]
+
+    # Assert
+    list \
+        [string match "*openURL http://fr.wikipedia.org/wiki/Loek_Van%%20wely*" $out] \
+        [string match "*<img iconcmd>*" $out] \
+        [string match "*Wikipedia*" $out]
+} -cleanup {
+    ::pinfo_test::cleanup
+    rename iconcmd ""
+} -result {1 1 1}
+
+test pinfo-ReplaceIDTags-3.0 {ReplaceIDTags can use extracted FIDEID for a useFIDEID resolver} -setup {
+    ::pinfo_test::setup
+
+    array set ::unsafe::idlink {
+        0 {{FIDEID} {http://ratings.example/card?event=%ID%} {} {FIDE}}
+        1 {{useFIDEID} {http://fide2.example/%ID%} {} {AltFIDE}}
+    }
+} -body {
+    # Arrange
+    set pinfo "Name<br>FIDEID 999<br><br>"
+    set pname "Carlsen, Magnus"
+
+    # Act
+    set out [::pinfo::ReplaceIDTags $pinfo $pname]
+
+    # Assert
+    list \
+        [string match "*openURL http://ratings.example/card?event=999*" $out] \
+        [string match "*openURL http://fide2.example/999*" $out]
+} -cleanup {
+    ::pinfo_test::cleanup
+} -result {1 1}
+
+test pinfo-setupDefaultResolvers-1.0 {setupDefaultResolvers writes a default resolver configuration file} -setup {
+    ::pinfo_test::setup
+} -body {
+    # Arrange
+    set fname [scidConfigFile resolvers]
+    catch {file delete -force $fname}
+
+    # Act
+    ::pinfo::setupDefaultResolvers
+
+    # Assert
+    set ch [open $fname r]
+    set content [read $ch]
+    close $ch
+
+    list \
+        [file exists $fname] \
+        [string match "*set idlink(0)*" $content] \
+        [string match "*image create photo iccflnk*" $content]
+} -cleanup {
+    ::pinfo_test::cleanup
+} -result {1 1 1}

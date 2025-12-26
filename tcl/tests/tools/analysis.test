@@ -1,0 +1,868 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Prevent `analysis.tcl` from trying to auto-discover engines at load time.
+::scid_test::ensureEngineListFile
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] tools analysis.tcl]
+
+namespace eval ::analysis_test {}
+set ::analysis_test::scidInstallDir [file dirname [info nameofexecutable]]
+
+proc ::analysis_test::setup {} {
+    global analysis engines
+
+    namespace eval ::pgn {}
+
+    set ::analysis(lockEngine1) 0
+    set ::analysis(lockN1) 0
+    set ::analysis(lockSide1) white
+    set ::analysis(uci1) 0
+
+    set ::pgn::moveNumberSpaces 0
+
+    set ::informant("+=") 0.20
+    set ::informant("+/-") 0.40
+    set ::informant("+-") 0.80
+    set ::informant("+--") 1.60
+
+    set ::scid_test::sc_pos_side white
+    set ::scid_test::sc_pos_moveNumber 1
+
+    set engines(list) {}
+    set engines(sort) Name
+
+    set ::scidVersion "test"
+
+    set ::scid_test::sc_game_extra {}
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+    unset -nocomplain ::scid_test::last_addSan
+    unset -nocomplain ::scid_test::last_uci_sc_move_add
+
+    catch {file delete -force [scidConfigFile engines]}
+    catch {file delete -force [scidConfigFile engines.bak]}
+}
+
+proc ::analysis_test::cleanup {} {
+    global analysis engines
+
+    set ::analysis(lockEngine1) 0
+    set ::analysis(lockN1) 0
+    set ::analysis(lockSide1) white
+    set ::analysis(uci1) 0
+
+    set ::pgn::moveNumberSpaces 0
+
+    set ::informant("+=") 0.20
+    set ::informant("+/-") 0.40
+    set ::informant("+-") 0.80
+    set ::informant("+--") 1.60
+
+    set ::scid_test::sc_pos_side white
+    set ::scid_test::sc_pos_moveNumber 1
+
+    set engines(list) {}
+    set engines(sort) Name
+
+    set ::scidVersion "test"
+
+    set ::scid_test::sc_game_extra {}
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+    unset -nocomplain ::scid_test::last_addSan
+    unset -nocomplain ::scid_test::last_uci_sc_move_add
+
+    catch {file delete -force [scidConfigFile engines]}
+    catch {file delete -force [scidConfigFile engines.bak]}
+}
+
+test analysis-scoreToNag-1.0 {scoreToNag maps near-equal to "="} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set score 0.0
+
+        # Act
+        set actual [scoreToNag $score]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {=}
+
+test analysis-scoreToNag-2.0 {scoreToNag maps small advantage to "+="} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set score 0.30
+
+        # Act
+        set actual [scoreToNag $score]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {+=}
+
+test analysis-scoreToNag-3.0 {scoreToNag maps small disadvantage to "=+"} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set score -0.30
+
+        # Act
+        set actual [scoreToNag $score]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {=+}
+
+test analysis-scoreToMate-1.0 {scoreToMate returns formatted numeric when not mate} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {+0.12}
+
+test analysis-scoreToMate-2.0 {scoreToMate ignores mate when engine is locked} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::analysis(lockEngine1) 1
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5#}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {+0.12}
+
+test analysis-scoreToMate-3.0 {scoreToMate detects mate via "#": white to move (odd plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5#}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M2}
+
+test analysis-scoreToMate-4.0 {scoreToMate detects mate via "#": black to move (even plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::sc_pos_side black
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5 Nc6#}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M2}
+
+test analysis-scoreToMate-5.0 {scoreToMate detects mate via "++": black to move (odd plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::sc_pos_side black
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5++}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M-2}
+
+test analysis-scoreToMate-6.0 {scoreToMate detects mate via "++": white to move (even plies)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set n 1
+        set score 0.12
+        set pv {e2e4 e7e5 Qh5 Nc6++}
+
+        # Act
+        set actual [scoreToMate $score $pv $n]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {M-2}
+
+test analysis-addMoveNumbers-1.0 {addMoveNumbers prefixes white-to-move PV with move numbers} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6 Bb5}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {2.Nf6 Nf3 3.Nc6 Bb5 }
+
+test analysis-addMoveNumbers-2.0 {addMoveNumbers prefixes black-to-move PV with ellipsis} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::scid_test::sc_pos_side black
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6 Bb5}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {2.... Nf6 3.Nf3 Nc6 4.Bb5 }
+
+test analysis-addMoveNumbers-3.0 {addMoveNumbers honours ::pgn::moveNumberSpaces} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::pgn::moveNumberSpaces 1
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6 Bb5}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {2. Nf6 Nf3 3. Nc6 Bb5 }
+
+test analysis-addMoveNumbers-4.0 {addMoveNumbers uses locked side/move number when engine is locked} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set e 1
+        set ::analysis(lockEngine1) 1
+        set ::analysis(lockN1) 7
+        set ::analysis(lockSide1) black
+        set ::pgn::moveNumberSpaces 0
+        set ::scid_test::sc_pos_side white
+        set ::scid_test::sc_pos_moveNumber 2
+        set pv {Nf6 Nf3 Nc6}
+
+        # Act
+        set actual [addMoveNumbers $e $pv]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {7.... Nf6 8.Nf3 Nc6 }
+
+test analysis-calculateNodes-1.0 {calculateNodes returns 0 for fewer than 4 digits} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set nodes "999"
+
+        # Act
+        set actual [calculateNodes $nodes]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {0}
+
+test analysis-calculateNodes-2.0 {calculateNodes returns kilo-nodes by truncation} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set nodes "12345"
+
+        # Act
+        set actual [calculateNodes $nodes]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {12}
+
+test analysis-calculateNodes-3.0 {calculateNodes returns first digit for exactly 4 digits} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set nodes "1000"
+
+        # Act
+        set actual [calculateNodes $nodes]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {1}
+
+test analysis-resetAnalysis-1.0 {resetAnalysis clears key analysis statistics} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::analysis(score1) 12
+        set ::analysis(scoremate1) 3
+        set ::analysis(nodes1) 99
+        set ::analysis(depth1) 7
+        set ::analysis(time1) 123
+        set ::analysis(moves1) {e2e4 e7e5}
+        set ::analysis(multiPV1) {foo}
+
+        # Act
+        resetAnalysis 1
+
+        # Assert
+        return [list \
+            $::analysis(score1) \
+            $::analysis(scoremate1) \
+            $::analysis(nodes1) \
+            $::analysis(depth1) \
+            $::analysis(time1) \
+            $::analysis(moves1) \
+            $::analysis(multiPV1) \
+        ]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {0 0 0 0 0 {} {}}
+
+test analysis-resetEngine-1.0 {resetEngine clears representative engine state} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::analysis(pipe1) "dummy"
+        set ::analysis(score1) 42
+        set ::analysis(depth1) 11
+        set ::analysis(moves1) {e2e4}
+        set ::analysis(lockEngine1) 1
+
+        # Act
+        resetEngine 1
+
+        # Assert
+        return [list \
+            $::analysis(pipe1) \
+            $::analysis(score1) \
+            $::analysis(depth1) \
+            $::analysis(moves1) \
+            $::analysis(lockEngine1) \
+        ]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {{} 0 0 {} 0}
+
+test analysis-resetEngine-2.0 {resetEngine unsets the corresponding UCI options array} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        array set ::uciOptions1 {foo bar}
+
+        # Act
+        resetEngine 1
+
+        # Assert
+        return [info exists ::uciOptions1(foo)]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {0}
+
+test analysis-engine-1.0 {engine rejects entries missing required attributes} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set before $::engines(list)
+
+        # Act
+        set r1 [engine [list Cmd stockfish Dir .]]
+        set r2 [engine [list Name Stockfish Dir .]]
+        set r3 [engine [list Name Stockfish Cmd stockfish]]
+
+        # Assert
+        return [list $r1 $r2 $r3 $::engines(list) $before]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {0 0 0 {} {}}
+
+test analysis-engine-2.0 {engine fills optional attributes with defaults} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set arglist [list Name Stockfish Cmd stockfish Dir .]
+
+        # Act
+        set ok [engine $arglist]
+        set e [lindex $::engines(list) 0]
+
+        # Assert
+        return [list $ok $e]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {1 {Stockfish stockfish {} . 0 0 {} 0 {}}}
+
+test analysis-engine-3.0 {engine stores provided optional attributes} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set arglist [list \
+            Name E \
+            Cmd cmd \
+            Args {-a -b} \
+            Dir ./d \
+            Elo 123 \
+            Time 456 \
+            URL https://example.invalid \
+            UCI 1 \
+            UCIoptions {Threads=2} \
+        ]
+
+        # Act
+        set ok [engine $arglist]
+
+        # Assert
+        return [list $ok [lindex $::engines(list) 0]]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {1 {E cmd {-a -b} ./d 123 456 https://example.invalid 1 Threads=2}}
+
+test analysis-enginelist-date-1.0 {enginelist::date matches clock format} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set t 0
+        set expected [clock format $t -format "%a %b %d %Y %H:%M"]
+
+        # Act
+        set actual [::enginelist::date $t]
+
+        # Assert
+        return [list $expected $actual]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result [list [clock format 0 -format "%a %b %d %Y %H:%M"] [clock format 0 -format "%a %b %d %Y %H:%M"]]
+
+test analysis-enginelist-setTime-1.0 {enginelist::setTime updates last-opened time} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::engines(list) [list [list E1 cmd {} . 0 0 {} 0 {}]]
+        set t 123456
+
+        # Act
+        ::enginelist::setTime 0 $t
+
+        # Assert
+        return [lindex [lindex $::engines(list) 0] 5]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {123456}
+
+test analysis-enginelist-sort-Name-1.0 {enginelist::sort sorts by Name} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::engines(list) [list \
+            [list Z cmd {} . 0 0 {} 0 {}] \
+            [list a cmd {} . 0 0 {} 0 {}] \
+            [list M cmd {} . 0 0 {} 0 {}] \
+        ]
+
+        # Act
+        ::enginelist::sort Name
+
+        # Assert
+        return [lmap e $::engines(list) {lindex $e 0}]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {a M Z}
+
+test analysis-enginelist-sort-Elo-1.0 {enginelist::sort sorts by Elo (descending, dictionary)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::engines(list) [list \
+            [list E1 cmd {} . 10 0 {} 0 {}] \
+            [list E2 cmd {} . 400 0 {} 0 {}] \
+            [list E3 cmd {} . 90 0 {} 0 {}] \
+        ]
+
+        # Act
+        ::enginelist::sort Elo
+
+        # Assert
+        return [lmap e $::engines(list) {lindex $e 4}]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {400 90 10}
+
+test analysis-enginelist-sort-Time-1.0 {enginelist::sort sorts by Time (descending, integer)} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::engines(list) [list \
+            [list E1 cmd {} . 0 9 {} 0 {}] \
+            [list E2 cmd {} . 0 100 {} 0 {}] \
+            [list E3 cmd {} . 0 12 {} 0 {}] \
+        ]
+
+        # Act
+        ::enginelist::sort Time
+
+        # Assert
+        return [lmap e $::engines(list) {lindex $e 5}]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {100 12 9}
+
+test analysis-enginelist-read-write-1.0 {enginelist::write and ::enginelist::read round-trip engine list} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::engines(list) [list \
+            [list E1 cmd1 {-x} . 111 10 {} 1 {opt1}] \
+            [list E2 cmd2 {} ./dir 222 20 {https://example.invalid} 0 {}] \
+        ]
+
+        # Act
+        set w1 [::enginelist::write]
+        set w2 [::enginelist::write]
+        set enginesFile [scidConfigFile engines]
+        set backupFile [scidConfigFile engines.bak]
+        set content [read [set ch [open $enginesFile r]]]; close $ch
+
+        set before {}
+        set ::engines(list) $before
+        ::enginelist::read
+        set after $::engines(list)
+
+        # Assert
+        set hasE1 [expr {[string match {*Name E1*} $content] || [string match {*Name "E1"*} $content]}]
+        set hasE2 [expr {[string match {*Name E2*} $content] || [string match {*Name "E2"*} $content]}]
+        return [list $w1 $w2 [file exists $backupFile] $hasE1 $hasE2 $before $after]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result [list \
+        1 1 1 1 1 {} \
+        [list \
+            [list E1 cmd1 -x . 111 10 {} 1 opt1] \
+            [list E2 cmd2 {} ./dir 222 20 https://example.invalid 0 {}] \
+        ] \
+    ]
+
+test analysis-formatAnalysisMoves-1.0 {formatAnalysisMoves strips common prefixes and trims whitespace} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set text "t-   e2e4 e7e5   "
+
+        # Act
+        set actual [formatAnalysisMoves $text]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {e2e4 e7e5}
+
+test analysis-formatAnalysisMoves-1.1 {formatAnalysisMoves strips ". " prefix} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set text ". e2e4"
+
+        # Act
+        set actual [formatAnalysisMoves $text]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {e2e4}
+
+test analysis-formatAnalysisMoves-1.2 {formatAnalysisMoves strips "t " prefix} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set text "t e2e4"
+
+        # Act
+        set actual [formatAnalysisMoves $text]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {e2e4}
+
+test analysis-formatAnalysisMoves-1.3 {formatAnalysisMoves strips "t+ " prefix} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set text "t+ e2e4"
+
+        # Act
+        set actual [formatAnalysisMoves $text]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {e2e4}
+
+test analysis-formatAnalysisMoves-2.0 \
+    {formatAnalysisMoves normalises Crafty hash token and removes "H " markers} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set text "Bc4H <HT> "
+
+        # Act
+        set actual [formatAnalysisMoves $text]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {Bc4 {HT}}
+
+test analysis-appendAnnotator-1.0 {appendAnnotator creates an Annotator tag when absent} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::sc_game_extra {Event Test}
+
+        # Act
+        appendAnnotator "Alice"
+
+        # Assert
+        return $::scid_test::sc_game_extra
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result [list \
+        "Event \"Test\"\n" \
+        "Annotator \"Alice\"\n" \
+    ]
+
+test analysis-appendAnnotator-2.0 \
+    {appendAnnotator appends to an existing Annotator tag and preserves others} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::sc_game_extra {Event Test Annotator Bob Site Here}
+
+        # Act
+        appendAnnotator "Alice"
+
+        # Assert
+        return $::scid_test::sc_game_extra
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result [list \
+        "Event \"Test\"\n" \
+        "Annotator \"Bob, Alice\"\n" \
+        "Site \"Here\"\n" \
+    ]
+
+test analysis-push-pop-1.0 {pushAnalysisData and popAnalysisData round-trip analysis values} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::stack {}
+        set ::analysis(prevscore1) 1.0
+        set ::analysis(prevscoremate1) 0
+        set ::analysis(prevdepth1) 7
+        set ::analysis(score1) 2.0
+        set ::analysis(scoremate1) 0
+        set ::analysis(depth1) 9
+        set ::analysis(prevmoves1) {a}
+        set ::analysis(moves1) {b}
+        set lastVar 1
+
+        # Act
+        pushAnalysisData $lastVar 1
+        set ::analysis(score1) 99.0
+        set popped [popAnalysisData 1]
+
+        # Assert
+        return [list $popped $::analysis(score1) $::analysis(moves1) [llength $::stack]]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {1 2.0 b 0}
+
+test analysis-pop-empty-1.0 {popAnalysisData on empty stack resets analysis values and returns empty} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::stack {}
+        set ::analysis(score1) 12.0
+        set ::analysis(moves1) {e2e4}
+
+        # Act
+        set popped [popAnalysisData 1]
+
+        # Assert
+        return [list $popped $::analysis(score1) $::analysis(moves1)]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {{} 0 {}}
+
+test analysis-sc_move_add-1.0 {sc_move_add uses sc_move addSan for non-UCI engines} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::analysis(uci1) 0
+        set moves "e4"
+
+        # Act
+        set code [sc_move_add $moves 1]
+
+        # Assert
+        return [list $code $::scid_test::last_addSan]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {0 e4}
+
+test analysis-sc_move_add-2.0 {sc_move_add uses ::uci::sc_move_add for UCI engines} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::analysis(uci1) 1
+        set moves "e4"
+
+        # Act
+        set code [sc_move_add $moves 1]
+
+        # Assert
+        return [list $code $::scid_test::last_uci_sc_move_add]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {0 e4}
+
+test analysis-enginelist-delete-1.0 {enginelist::delete does nothing when the user cancels} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::tk_messageBox_answer no
+        set ::engines(list) [list \
+            [list E1 cmd {} . 0 0 {} 0 {}] \
+            [list E2 cmd {} . 0 0 {} 0 {}] \
+        ]
+
+        # Act
+        set r [::enginelist::delete 0]
+
+        # Assert
+        return [list $r [llength $::engines(list)] [lindex [lindex $::engines(list) 0] 0]]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {false 2 E1}
+
+test analysis-enginelist-delete-2.0 {enginelist::delete removes the selected engine when confirmed} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set ::scid_test::tk_messageBox_answer yes
+        set ::engines(list) [list \
+            [list E1 cmd {} . 0 0 {} 0 {}] \
+            [list E2 cmd {} . 0 0 {} 0 {}] \
+        ]
+
+        # Act
+        set r [::enginelist::delete 0]
+
+        # Assert
+        set enginesFileExists [file exists [scidConfigFile engines]]
+        return [list \
+            $r \
+            [llength $::engines(list)] \
+            [lindex [lindex $::engines(list) 0] 0] \
+            $enginesFileExists \
+        ]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {true 1 E2 1}
+
+test analysis-toAbsPath-1.0 {toAbsPath keeps absolute and non-dot paths unchanged} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set path "/tmp/foo"
+
+        # Act
+        set actual [toAbsPath $path]
+
+        # Assert
+        return $actual
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result {/tmp/foo}
+
+test analysis-toAbsPath-2.0 {toAbsPath replaces leading '.' with directory of current executable} \
+    -setup {::analysis_test::setup} \
+    -body {
+        # Arrange
+        set path "./foo"
+        set scidInstallDir [file dirname [info nameofexecutable]]
+        set expected [string replace $path 0 0 $scidInstallDir]
+
+        # Act
+        set actual [toAbsPath $path]
+
+        # Assert
+        return [list $expected $actual]
+    } \
+    -cleanup {::analysis_test::cleanup} \
+    -result [list \
+        [string replace "./foo" 0 0 $::analysis_test::scidInstallDir] \
+        [string replace "./foo" 0 0 $::analysis_test::scidInstallDir] \
+    ]

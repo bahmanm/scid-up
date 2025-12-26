@@ -87,3 +87,37 @@ option(GTEST "Build unit tests" OFF)
 if(GTEST)
   add_subdirectory(gtest)
 endif()
+
+option(TCL_TESTS "Add Tcl test targets" ON)
+if(TCL_TESTS)
+  set(SCID_TCL_TEST_RUNNER "${CMAKE_SOURCE_DIR}/tcl/tests/run_all_tests.tcl")
+
+  set(SCID_TCLSH "")
+  if(DEFINED TCL_TCLSH AND TCL_TCLSH)
+    set(SCID_TCLSH "${TCL_TCLSH}")
+  endif()
+  if(NOT SCID_TCLSH)
+    find_program(SCID_TCLSH NAMES tclsh tclsh8.6)
+  endif()
+
+  if(SCID_TCLSH)
+    add_custom_target(
+      tcl_tests
+      COMMAND
+        "${CMAKE_COMMAND}" -E chdir "${CMAKE_SOURCE_DIR}"
+        "${SCID_TCLSH}" "${SCID_TCL_TEST_RUNNER}"
+      COMMENT "Running Tcl tests"
+      VERBATIM
+    )
+
+    enable_testing()
+    add_test(
+      NAME tcl_tests
+      COMMAND
+        "${CMAKE_COMMAND}" -E chdir "${CMAKE_SOURCE_DIR}"
+        "${SCID_TCLSH}" "${SCID_TCL_TEST_RUNNER}"
+    )
+  else()
+    message(WARNING "tclsh not found; Tcl tests are disabled")
+  endif()
+endif()
