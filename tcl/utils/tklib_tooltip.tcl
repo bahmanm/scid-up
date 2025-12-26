@@ -320,7 +320,11 @@ proc ::tooltip::createToplevel {} {
 
     toplevel $b -class Tooltip -borderwidth 0
     if {[tk windowingsystem] eq "aqua"} {
-        ::tk::unsupported::MacWindowStyle style $b help none
+        if {[llength [info commands ::tk::unsupported::MacWindowStyle]]} {
+            ::tk::unsupported::MacWindowStyle style $b help none
+        } else {
+            wm overrideredirect $b 1
+        }
     } else {
         wm overrideredirect $b 1
     }
