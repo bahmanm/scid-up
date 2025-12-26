@@ -1,0 +1,468 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::ERROR {}
+namespace eval ::win {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] file spellchk.tcl]
+
+namespace eval ::spellchk_test {
+    variable stubbedCommands {}
+
+    variable tkGetOpenFileReturn ""
+    variable tkGetOpenFileCalls {}
+
+    variable progressCalls {}
+    variable messageBoxCalls {}
+    variable bindCalls {}
+    variable updateCalls {}
+
+    variable scNameCalls {}
+    variable scNameReadReturn {0 0 0 0}
+    variable scNameReadError 0
+    variable scNameSpellcheckReturn ""
+    variable scNameSpellcheckError 0
+
+    variable errorMessageBoxCalls {}
+    variable progressBarSetCalls {}
+
+    variable winfoExistsSpellcheckWin 0
+    variable winfoTopLevel "."
+}
+
+proc ::spellchk_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::spellchk_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::spellchk_test::setup {} {
+    ::spellchk_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::spellchk_test::tkGetOpenFileReturn ""
+    set ::spellchk_test::tkGetOpenFileCalls {}
+
+    set ::spellchk_test::progressCalls {}
+    set ::spellchk_test::messageBoxCalls {}
+    set ::spellchk_test::bindCalls {}
+    set ::spellchk_test::updateCalls {}
+
+    set ::spellchk_test::scNameCalls {}
+    set ::spellchk_test::scNameReadReturn {0 0 0 0}
+    set ::spellchk_test::scNameReadError 0
+    set ::spellchk_test::scNameSpellcheckReturn "SPELLCHECK_RESULT"
+    set ::spellchk_test::scNameSpellcheckError 0
+
+    set ::spellchk_test::errorMessageBoxCalls {}
+    set ::spellchk_test::progressBarSetCalls {}
+
+    set ::spellchk_test::winfoExistsSpellcheckWin 0
+    set ::spellchk_test::winfoTopLevel "."
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+
+    # Provide minimal translation data used by stopScanning.
+    set ::tr(Cancel) "Cancel"
+
+    # Ensure required globals exist.
+    set ::spellCheckFile [file join [::scid_test::tempDir] default.ssp]
+    set ::spellstate idle
+    set ::spellcheckType Player
+
+    set ::spell_maxCorrections 0
+    set ::spellcheckSurnames 1
+    set ::spellcheckAmbiguous 0
+
+    ::spellchk_test::stubCommand ::tr {key} { return $key }
+
+    # Widget doubles used by start/stop/correct and updateSpellCheckWin.
+    foreach w {
+        .spellcheckWin.buttons.ambig
+        .spellcheckWin.buttons.ok
+        .spellcheckWin.buttons.cancel
+        .spellcheckWin.buttons.surnames
+        .spellcheckWin.text.text
+    } {
+        if {![llength [info commands $w]]} {
+            ::scid_test::widgets::defineWidget $w
+        }
+    }
+
+    # ---- Stubs ----
+
+    ::spellchk_test::stubCommand tk_getOpenFile {args} {
+        lappend ::spellchk_test::tkGetOpenFileCalls $args
+        return $::spellchk_test::tkGetOpenFileReturn
+    }
+
+    ::spellchk_test::stubCommand progressWindow {args} {
+        lappend ::spellchk_test::progressCalls [list progressWindow {*}$args]
+        return
+    }
+
+    ::spellchk_test::stubCommand closeProgressWindow {} {
+        lappend ::spellchk_test::progressCalls [list closeProgressWindow]
+        return
+    }
+
+    ::spellchk_test::stubCommand sc_name {subcmd args} {
+        lappend ::spellchk_test::scNameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            read {
+                if {$::spellchk_test::scNameReadError} {
+                    return -code error "read failed"
+                }
+                return $::spellchk_test::scNameReadReturn
+            }
+            spellcheck {
+                if {$::spellchk_test::scNameSpellcheckError} {
+                    return -code error "spellcheck failed"
+                }
+                return $::spellchk_test::scNameSpellcheckReturn
+            }
+            default {
+                error "sc_name $subcmd not stubbed in spellchk tests"
+            }
+        }
+    }
+
+    ::spellchk_test::stubCommand tk_messageBox {args} {
+        lappend ::spellchk_test::messageBoxCalls $args
+
+        # Fail closed for confirmation prompts.
+        set typeIdx [lsearch -exact $args "-type"]
+        if {$typeIdx != -1 && ($typeIdx + 1) < [llength $args]} {
+            set type [lindex $args [expr {$typeIdx + 1}]]
+            if {$type eq "yesno"} {
+                if {![info exists ::scid_test::tk_messageBox_answer]} {
+                    error "tk_messageBox -type yesno called without ::scid_test::tk_messageBox_answer"
+                }
+                return $::scid_test::tk_messageBox_answer
+            }
+        }
+
+        return "ok"
+    }
+
+    ::spellchk_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                if {[lindex $args 0] eq ".spellcheckWin"} {
+                    return $::spellchk_test::winfoExistsSpellcheckWin
+                }
+                return 0
+            }
+            toplevel {
+                return $::spellchk_test::winfoTopLevel
+            }
+            default {
+                error "winfo $subcmd not stubbed in spellchk tests"
+            }
+        }
+    }
+
+    ::spellchk_test::stubCommand bind {w sequence script} {
+        lappend ::spellchk_test::bindCalls [list $w $sequence $script]
+        return
+    }
+
+    ::spellchk_test::stubCommand update {args} {
+        lappend ::spellchk_test::updateCalls $args
+        return
+    }
+
+    ::spellchk_test::stubCommand progressBarSet {w width height} {
+        lappend ::spellchk_test::progressBarSetCalls [list $w $width $height]
+        return
+    }
+
+    ::spellchk_test::stubCommand ::ERROR::MessageBox {args} {
+        lappend ::spellchk_test::errorMessageBoxCalls $args
+        return "MESSAGEBOX"
+    }
+}
+
+proc ::spellchk_test::cleanup {} {
+    ::spellchk_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+    unset -nocomplain ::spellCheckFile
+    unset -nocomplain ::spellstate
+    unset -nocomplain ::spellcheckType
+
+    catch {unset ::tr(Cancel)}
+}
+
+# ---- Tests ----
+
+test spellchk-loadSpellCheckFile-cancel-1.0 {loadSpellCheckFile returns empty string when file picker is cancelled} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set ::spellchk_test::tkGetOpenFileReturn ""
+    set ::spellCheckFile "/tmp/previous.ssp"
+
+    # Act
+    set res [loadSpellCheckFile 0]
+
+    # Assert
+    list $res $::spellCheckFile [llength $::spellchk_test::progressCalls] [llength $::spellchk_test::messageBoxCalls]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result {{} /tmp/previous.ssp 0 0}
+
+
+test spellchk-loadSpellCheckFile-success-1.0 {loadSpellCheckFile reads the file, updates spellCheckFile, and optionally shows a message} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set file [file join [::scid_test::tempDir] test.ssp]
+    set ::spellchk_test::tkGetOpenFileReturn $file
+    set ::spellchk_test::scNameReadReturn {10 20 30 40}
+
+    # Act
+    set res [loadSpellCheckFile 1]
+
+    # Assert
+    list \
+        $res \
+        $::spellCheckFile \
+        [llength $::spellchk_test::progressCalls] \
+        [llength $::spellchk_test::messageBoxCalls] \
+        [lindex [lindex $::spellchk_test::scNameCalls 0] 0]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result [list \
+    [file join [::scid_test::tempDir] test.ssp] \
+    [file join [::scid_test::tempDir] test.ssp] \
+    2 \
+    1 \
+    read \
+]
+
+
+test spellchk-loadSpellCheckFile-read-error-1.0 {loadSpellCheckFile returns empty string on read error (and does not update spellCheckFile)} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set ::spellchk_test::tkGetOpenFileReturn [file join [::scid_test::tempDir] bad.ssp]
+    set ::spellchk_test::scNameReadError 1
+    set ::spellCheckFile "/tmp/previous.ssp"
+
+    # Act
+    set res [loadSpellCheckFile 0]
+
+    # Assert
+    list $res $::spellCheckFile [llength $::spellchk_test::messageBoxCalls]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result {{} /tmp/previous.ssp 0}
+
+
+test spellchk-readSpellCheckFile-success-1.0 {readSpellCheckFile returns 1 on success and updates spellCheckFile} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set file [file join [::scid_test::tempDir] r.ssp]
+    set ::spellchk_test::scNameReadReturn {1 2 3 4}
+
+    # Act
+    set ok [readSpellCheckFile $file 0]
+
+    # Assert
+    list $ok $::spellCheckFile [llength $::spellchk_test::messageBoxCalls]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result [list 1 [file join [::scid_test::tempDir] r.ssp] 0]
+
+
+test spellchk-readSpellCheckFile-error-1.0 {readSpellCheckFile returns 0 on error and does not update spellCheckFile} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set ::spellchk_test::scNameReadError 1
+    set ::spellCheckFile "/tmp/previous.ssp"
+
+    # Act
+    set ok [readSpellCheckFile "/tmp/bad.ssp" 0]
+
+    # Assert
+    list $ok $::spellCheckFile
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result {0 /tmp/previous.ssp}
+
+
+test spellchk-getSpellCheckFile-updates-widget-1.0 {getSpellCheckFile updates the entry widget when readSpellCheckFile succeeds} -setup {
+    ::spellchk_test::setup
+
+    ::spellchk_test::stubCommand readSpellCheckFile {fullname {message 1}} {
+        return 1
+    }
+} -body {
+    # Arrange
+    set w .test.entry
+    ::scid_test::widgets::defineWidget $w
+
+    set chosen [file join [::scid_test::tempDir] c.ssp]
+    set ::spellchk_test::tkGetOpenFileReturn $chosen
+    set ::spellchk_test::winfoTopLevel .top
+
+    # Act
+    getSpellCheckFile $w
+
+    # Assert
+    ::scid_test::widgets::getText $w
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result [file join [::scid_test::tempDir] c.ssp]
+
+
+test spellchk-start-stop-correcting-1.0 {start/stop scanning and correcting update button states and spellstate} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set ::spellcheckType Player
+
+    # Act
+    startScanning
+    set scanState [list \
+        $::spellstate \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.ambig -state] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.ok -state] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.cancel -text] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.surnames -state] \
+        [llength $::spellchk_test::bindCalls] \
+    ]
+
+    stopScanning
+    set stopState [list \
+        $::spellstate \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.ambig -state] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.ok -state] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.cancel -text] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.surnames -state] \
+        [llength $::spellchk_test::bindCalls] \
+    ]
+
+    startCorrecting
+    set corrState [list \
+        $::spellstate \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.ambig -state] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.ok -state] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.cancel -state] \
+        [::scid_test::widgets::getState .spellcheckWin.buttons.surnames -state] \
+    ]
+
+    # Assert
+    list $scanState $stopState $corrState
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result [list \
+    [list scanning disabled disabled Stop disabled 1] \
+    [list idle enabled enabled Cancel enabled 2] \
+    [list correcting disabled disabled disabled disabled] \
+]
+
+
+test spellchk-updateSpellCheckWin-success-1.0 {updateSpellCheckWin writes the spellcheck results to the text widget} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set ::spell_maxCorrections 12
+    set ::spellcheckSurnames 1
+    set ::spellcheckAmbiguous 0
+    set ::spellcheckType Player
+
+    set ::spellchk_test::scNameSpellcheckReturn "LINE1\nLINE2"
+
+    # Act
+    updateSpellCheckWin Player
+
+    # Assert
+    list \
+        [lindex $::spellchk_test::progressBarSetCalls 0] \
+        [lindex [lindex $::spellchk_test::scNameCalls end] 0] \
+        [string match "*LINE2*" [::scid_test::widgets::getText .spellcheckWin.text.text]]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result [list \
+    [list .spellcheckWin.progress 451 21] \
+    spellcheck \
+    1 \
+]
+
+
+test spellchk-updateSpellCheckWin-error-1.0 {updateSpellCheckWin reports errors via ERROR::MessageBox} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set ::spellchk_test::scNameSpellcheckError 1
+
+    # Act
+    updateSpellCheckWin Player
+
+    # Assert
+    list \
+        [llength $::spellchk_test::errorMessageBoxCalls] \
+        [string match "*Please wait*" [::scid_test::widgets::getText .spellcheckWin.text.text]]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result {1 1}
+
+
+test spellchk-openSpellCheckWin-already-open-1.0 {openSpellCheckWin warns and returns if the window already exists} -setup {
+    ::spellchk_test::setup
+} -body {
+    # Arrange
+    set ::spellchk_test::winfoExistsSpellcheckWin 1
+
+    # Act
+    openSpellCheckWin Player .
+
+    # Assert
+    list \
+        [llength $::spellchk_test::messageBoxCalls] \
+        [llength $::spellchk_test::progressCalls]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result {1 0}
+
+
+test spellchk-openSpellCheckWin-no-file-cancel-1.0 {openSpellCheckWin returns if no spellcheck file is loaded and loadSpellCheckFile fails} -setup {
+    ::spellchk_test::setup
+
+    ::spellchk_test::stubCommand loadSpellCheckFile {{message 1}} {
+        return ""
+    }
+
+    ::spellchk_test::stubCommand win::createDialog {w} {
+        error "win::createDialog must not be called"
+    }
+} -body {
+    # Arrange
+    set ::spellchk_test::winfoExistsSpellcheckWin 0
+    set ::spellchk_test::scNameReadReturn {0}
+
+    # Act
+    openSpellCheckWin Player .
+
+    # Assert
+    return [llength $::spellchk_test::messageBoxCalls]
+} -cleanup {
+    ::spellchk_test::cleanup
+} -result 0
+
+
+cleanupTests
