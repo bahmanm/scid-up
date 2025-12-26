@@ -88,7 +88,7 @@ if(GTEST)
   add_subdirectory(gtest)
 endif()
 
-option(TCL_TESTS "Add Tcl test targets" OFF)
+option(TCL_TESTS "Add Tcl test targets" ON)
 if(TCL_TESTS)
   set(SCID_TCL_TEST_RUNNER "${CMAKE_SOURCE_DIR}/tcl/tests/run_all_tests.tcl")
 
