@@ -8,8 +8,8 @@
 # Example: filter_spellcheck_file.tcl ratings.ssp filterdata.ssp
 # Copyright (C) 2023 Uwe Klimmek
 
-package require Tcl 8.5
-package require Tk  8.5
+package require Tcl 9
+package require Tk  9
 package require fileutil
 
 proc initProgress { size {msg ""} } {
