@@ -9,7 +9,7 @@ set testsDir [file dirname [info script]]
 set runner [file join $testsDir run_one_test.tcl]
 set tclsh [info nameofexecutable]
 
-set patterns [list "*.test" "tools/*.test"]
+set patterns [list "*.test" "tools/*.test" "file/*.test"]
 set suiteFiles {}
 
 foreach pattern $patterns {

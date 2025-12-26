@@ -1,0 +1,455 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Source production string helpers relied upon by `::bookmarks::New`.
+namespace eval ::utils {}
+namespace eval ::utils::string {}
+source [file join [::scid_test::tclDir] utils string.tcl]
+
+# Ensure the bookmarks config file does not leak state across runs.
+catch {file delete -force [scidConfigFile bookmarks]}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] file bookmark.tcl]
+
+namespace eval ::bookmark_test {
+    variable stubbedCommands {}
+
+    variable scGameCalls {}
+    variable scBaseCalls {}
+    variable fileCalls {}
+    variable bookmarksCalls {}
+    variable gameCalls {}
+
+    variable sc_game_number 1
+    variable sc_game_info {}
+    variable sc_game_find_return 1
+
+    variable sc_base_inUse 1
+    variable sc_base_filename ""
+
+    variable sc_pos_pgnOffset 0
+
+    # Use the test temp directory for any filesystem-looking paths.
+    variable testBaseFile [file join [::scid_test::tempDir] testbase.si4]
+    variable testDbFile [file join [::scid_test::tempDir] mybase.si4]
+}
+
+proc ::bookmark_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::bookmark_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::bookmark_test::setup {} {
+    ::bookmark_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::bookmark_test::scGameCalls {}
+    set ::bookmark_test::scBaseCalls {}
+    set ::bookmark_test::fileCalls {}
+    set ::bookmark_test::bookmarksCalls {}
+    set ::bookmark_test::gameCalls {}
+
+    set ::bookmark_test::sc_game_number 1
+    set ::bookmark_test::sc_game_info [dict create]
+    set ::bookmark_test::sc_game_find_return 1
+
+    set ::bookmark_test::sc_base_inUse 1
+    set ::bookmark_test::sc_base_filename $::bookmark_test::testBaseFile
+
+    set ::bookmark_test::sc_pos_pgnOffset 0
+
+    set ::curr_db 1
+    set ::clipbase_db 9
+
+    set ::scidVersion "test"
+
+    set ::bookmarks(data) {}
+    set ::bookmarks(subMenus) 0
+
+    catch {file delete -force [scidConfigFile bookmarks]}
+
+    # Minimal stubs for non-Tk procs under test.
+    ::bookmark_test::stubCommand sc_game {subcmd args} {
+        lappend ::bookmark_test::scGameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            number {
+                return $::bookmark_test::sc_game_number
+            }
+            info {
+                set field [lindex $args 0]
+                if {$field eq ""} {
+                    error "sc_game info missing field"
+                }
+                if {![dict exists $::bookmark_test::sc_game_info $field]} {
+                    error "sc_game info $field not stubbed in bookmark tests"
+                }
+                return [dict get $::bookmark_test::sc_game_info $field]
+            }
+            pgn {
+                return
+            }
+            find {
+                # `sc_game find <gnum> <white> <black> <site> <round> <year> <result>`
+                return $::bookmark_test::sc_game_find_return
+            }
+            default {
+                error "sc_game $subcmd not stubbed in bookmark tests"
+            }
+        }
+    }
+
+    ::bookmark_test::stubCommand sc_base {subcmd args} {
+        lappend ::bookmark_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            inUse {
+                return $::bookmark_test::sc_base_inUse
+            }
+            filename {
+                set db [lindex $args 0]
+                if {$db ne $::curr_db} {
+                    error "Unexpected sc_base filename db: $db"
+                }
+                return $::bookmark_test::sc_base_filename
+            }
+            default {
+                error "sc_base $subcmd not stubbed in bookmark tests"
+            }
+        }
+    }
+
+    ::bookmark_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            pgnOffset { return $::bookmark_test::sc_pos_pgnOffset }
+            default { error "sc_pos $subcmd not stubbed in bookmark tests" }
+        }
+    }
+
+    namespace eval ::file {}
+    ::bookmark_test::stubCommand ::file::OpenOrSwitch {fname} {
+        lappend ::bookmark_test::fileCalls [list OpenOrSwitch $fname]
+        return [list 0]
+    }
+
+    namespace eval ::game {}
+    ::bookmark_test::stubCommand ::game::Load {gnum ply} {
+        lappend ::bookmark_test::gameCalls [list Load $gnum $ply]
+        return
+    }
+}
+
+proc ::bookmark_test::cleanup {} {
+    ::bookmark_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::curr_db
+    unset -nocomplain ::clipbase_db
+    unset -nocomplain ::scidVersion
+
+    catch {file delete -force [scidConfigFile bookmarks]}
+
+    set ::bookmarks(data) {}
+    set ::bookmarks(subMenus) 0
+}
+
+# ---- Tests ----
+
+test bookmark-canAdd-1.0 {CanAdd returns 0 for game number 0} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+    set ::bookmark_test::sc_game_number 0
+
+    # Act
+    ::bookmarks::CanAdd
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result 0
+
+test bookmark-canAdd-2.0 {CanAdd returns 0 for the clipbase database} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+    set ::bookmark_test::sc_game_number 1
+    set ::curr_db 9
+    set ::clipbase_db 9
+
+    # Act
+    ::bookmarks::CanAdd
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result 0
+
+test bookmark-canAdd-3.0 {CanAdd returns 1 for a normal database game} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+    set ::bookmark_test::sc_game_number 1
+    set ::curr_db 1
+    set ::clipbase_db 9
+
+    # Act
+    ::bookmarks::CanAdd
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result 1
+
+
+test bookmark-isfolder-1.0 {isfolder identifies folder entries} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    list \
+        [::bookmarks::isfolder [list f "Folder"]] \
+        [::bookmarks::isfolder [list g "Game"]]
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result {1 0}
+
+
+test bookmark-indexText-1.0 {IndexText formats folder and game entries} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    list \
+        [::bookmarks::IndexText [list f "Folder"]] \
+        [::bookmarks::IndexText [list g "Game"]]
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result {{[Folder]} {    Game}}
+
+
+test bookmark-new-folder-1.0 {New folder returns a folder entry} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::bookmarks::New folder
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result {f {}}
+
+
+test bookmark-new-game-1.0 {New game builds a deterministic bookmark entry list} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+    set ::bookmark_test::sc_game_number 99
+    set ::bookmark_test::sc_pos_pgnOffset 42
+    set ::bookmark_test::sc_base_filename $::bookmark_test::testDbFile
+    set ::bookmark_test::sc_game_info [dict create \
+        result "1-0" \
+        white "Carlsen, Magnus" \
+        black "Nepomniachtchi, Ian" \
+        site "New York, USA" \
+        round "3" \
+        year "2020" \
+    ]
+
+    # Act
+    set entry [::bookmarks::New game]
+
+    # Assert
+    list \
+        $entry \
+        $::bookmark_test::scGameCalls
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result [list \
+    [list g \
+        "mybase.si4: 1-0, Carlsen - Nepomniachtchi, New York (3) 2020" \
+        $::bookmark_test::testDbFile \
+        99 \
+        42 \
+        "Carlsen, Magnus" \
+        "Nepomniachtchi, Ian" \
+        "2020" \
+        "New York, USA" \
+        "3" \
+        "1-0" \
+    ] \
+    [list \
+        [list info result] \
+        [list info white] \
+        [list info black] \
+        [list info site] \
+        [list info round] \
+        [list info year] \
+        [list pgn] \
+        [list number] \
+        [list info white] \
+        [list info black] \
+        [list info year] \
+        [list info site] \
+        [list info round] \
+        [list info result] \
+    ] \
+]
+
+
+test bookmark-addCurrent-1.0 {AddCurrent inserts new game before the selected folder index and saves/refreshes} -setup {
+    ::bookmark_test::setup
+
+    ::bookmark_test::stubCommand ::bookmarks::New {type} {
+        if {$type ne "game"} {
+            error "Unexpected ::bookmarks::New type: $type"
+        }
+        return [list g "NEW"]
+    }
+    ::bookmark_test::stubCommand ::bookmarks::Save {{reportError 0}} {
+        lappend ::bookmark_test::bookmarksCalls [list Save $reportError]
+        return
+    }
+    ::bookmark_test::stubCommand ::bookmarks::Refresh {} {
+        lappend ::bookmark_test::bookmarksCalls [list Refresh]
+        return
+    }
+} -body {
+    # Arrange
+    set ::bookmarks(data) [list \
+        [list f "F1"] \
+        [list g "G1"] \
+        [list f "F2"] \
+        [list g "G2"] \
+    ]
+
+    # Act
+    ::bookmarks::AddCurrent 1
+
+    # Assert
+    list $::bookmarks(data) $::bookmark_test::bookmarksCalls
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result [list \
+    [list \
+        [list f F1] \
+        [list g G1] \
+        [list g NEW] \
+        [list f F2] \
+        [list g G2] \
+    ] \
+    [list [list Save 0] [list Refresh]] \
+]
+
+
+test bookmark-addCurrent-2.0 {AddCurrent is a no-op when there is no open database} -setup {
+    ::bookmark_test::setup
+
+    ::bookmark_test::stubCommand ::bookmarks::New {type} { return [list g "NEW"] }
+    ::bookmark_test::stubCommand ::bookmarks::Save {{reportError 0}} {
+        error "Save must not be called"
+    }
+    ::bookmark_test::stubCommand ::bookmarks::Refresh {} {
+        error "Refresh must not be called"
+    }
+} -body {
+    # Arrange
+    set ::bookmark_test::sc_base_inUse 0
+    set ::bookmarks(data) [list [list g "G1"]]
+
+    # Act
+    ::bookmarks::AddCurrent 0
+
+    # Assert
+    return $::bookmarks(data)
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result {{g G1}}
+
+
+test bookmark-go-1.0 {Go opens/switches databases, finds the best matching game, and loads it} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+    set ::bookmark_test::sc_game_find_return 321
+
+    set entry [list g "T" $::bookmark_test::testDbFile 123 88 \
+        "White" "Black" "2020" "Site" "Round" "1-0"]
+
+    # Act
+    ::bookmarks::Go $entry
+
+    # Assert
+    list \
+        $::bookmark_test::fileCalls \
+        $::bookmark_test::scGameCalls \
+        $::bookmark_test::gameCalls
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result [list \
+    [list [list OpenOrSwitch $::bookmark_test::testDbFile]] \
+    [list [list find 123 White Black Site Round 2020 1-0]] \
+    [list [list Load 321 88]] \
+]
+
+
+test bookmark-go-2.0 {Go returns immediately when OpenOrSwitch fails} -setup {
+    ::bookmark_test::setup
+
+    ::bookmark_test::stubCommand ::file::OpenOrSwitch {fname} {
+        lappend ::bookmark_test::fileCalls [list OpenOrSwitch $fname]
+        return [list 1]
+    }
+} -body {
+    # Arrange
+    set entry [list g "T" $::bookmark_test::testDbFile 123 88 \
+        "White" "Black" "2020" "Site" "Round" "1-0"]
+
+    # Act
+    ::bookmarks::Go $entry
+
+    # Assert
+    list $::bookmark_test::fileCalls $::bookmark_test::scGameCalls $::bookmark_test::gameCalls
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result [list \
+    [list [list OpenOrSwitch $::bookmark_test::testDbFile]] \
+    {} \
+    {} \
+]
+
+
+test bookmark-save-1.0 {Save writes the bookmarks config file} -setup {
+    ::bookmark_test::setup
+} -body {
+    # Arrange
+    set ::scidVersion "X"
+    set ::bookmarks(subMenus) 1
+    set ::bookmarks(data) [list [list f "F1"] [list g "G1"]]
+
+    set path [scidConfigFile bookmarks]
+    catch {file delete -force $path}
+
+    # Act
+    ::bookmarks::Save
+
+    # Assert
+    set content ""
+    set ch [open $path r]
+    set content [read $ch]
+    close $ch
+
+    list \
+        [file exists $path] \
+        [string match "*# Scid X bookmarks file*" $content] \
+        [string match "*set bookmarks(subMenus) 1*" $content] \
+        [string match "*set bookmarks(data) {{f F1} {g G1}}*" $content]
+} -cleanup {
+    ::bookmark_test::cleanup
+} -result {1 1 1 1}
+
+
+cleanupTests
