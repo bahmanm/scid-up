@@ -22,9 +22,18 @@ namespace eval uci {
     set optionImportant { MultiPV Hash OwnBook BookFile UCI_LimitStrength UCI_Elo }
     set optionToKeep { UCI_LimitStrength UCI_Elo UCI_ShredderbasesPath }
     array set uciInfo {}
-    ################################################################################
-    #
-    ################################################################################
+################################################################################
+# ::uci::resetUciInfo
+#   Initialises per-slot UCI info fields.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Optional engine slot number. Defaults to 1.
+# Returns:
+#   - None.
+# Side effects:
+#   - Initialises `::uci::uciInfo(*)` fields for slot `n`.
+################################################################################
     proc resetUciInfo { { n 1 }} {
         global ::uci::uciInfo
         set uciInfo(depth$n) 0
@@ -49,10 +58,25 @@ namespace eval uci {
         set uciInfo(currline$n) ""
         # set uciInfo(bestmove$n) ""
     }
-    ################################################################################
-    # if analyze = 0 -> engine mode
-    # if analyze = 1 -> analysis mode
-    ################################################################################
+################################################################################
+# ::uci::processAnalysisInput
+#   Handles the initial readable event and schedules parsing of engine output.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Optional engine slot number. Defaults to 1.
+#   - analyze: Optional flag indicating analysis mode.
+#       - 0: playing/engine mode (`::uci::uciInfo(pipe$n)`).
+#       - 1: analysis mode (`analysis(pipe$n)`).
+#     Defaults to 1.
+# Returns:
+#   - None.
+# Side effects:
+#   - Verifies the engine is alive; may return early.
+#   - On first output line, marks the engine as seen and sends initial `uci`.
+#   - Schedules `::uci::processInput_` via `after idle` and disables the current
+#     `fileevent` handler to avoid re-entrancy.
+################################################################################
     proc  processAnalysisInput { { n 1 } { analyze 1 } } {
         global analysis ::uci::uciInfo
         
@@ -84,6 +108,33 @@ namespace eval uci {
         fileevent $pipe readable {}
     }
 
+################################################################################
+# ::uci::processInput_
+#   Parses one line of UCI output and updates engine/analysis state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+#   - analyze: Flag indicating analysis mode.
+#       - 0: playing/engine mode (`::uci::uciInfo(pipe$n)`).
+#       - 1: analysis mode (`analysis(pipe$n)`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads one line from the engine pipe and re-schedules itself via `after idle`.
+#   - Updates `::uci::uciInfo(*)` and, for analysis mode, `analysis(*)`.
+#   - On `bestmove`, updates `::uci::uciInfo(bestmove$n)`/`ponder$n` and triggers
+#     `::uci::onReady_ $n`.
+#   - On `info`, parses depth/time/nodes/score/pv (incl. multiPV) and updates:
+#       - For analysis mode and multiPV 1: updates the "best line" fields such as
+#         `analysis(score$n)`, `analysis(moves$n)`, `analysis(depth$n)`, etc.
+#       - For any multiPV index within `analysis(multiPVCount$n)`: updates the PV
+#         lists `analysis(multiPV$n)` and `analysis(multiPVraw$n)`.
+#   - On `option name ...` lines in analysis mode: appends `{name min max}` tuples
+#     to `analysis(uciOptions$n)`.
+#   - On `uciok`/`readyok`, updates ready flags and may execute queued callbacks.
+#   - Calls `updateAnalysisText $n` in analysis mode.
+################################################################################
     proc processInput_ { {n} {analyze} } {
         global analysis ::uci::uciInfo ::uci::infoToken ::uci::optionToken
         
@@ -326,9 +377,21 @@ namespace eval uci {
             updateAnalysisText $n
         }
     }
-    ################################################################################
-    #
-    ################################################################################
+################################################################################
+# ::uci::readUCI
+#   Reads UCI option output from a temporary engine process used for configuration.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads from `::uci::uciInfo(pipe$n)`.
+#   - Appends raw `option name ...` lines to `::uci::uciOptions`.
+#   - On `uciok`, closes the engine (`::uci::closeUCIengine`) and opens the
+#     configuration dialog (`::uci::uciConfigWin`).
+################################################################################
     proc readUCI { n } {
         global ::uci::uciOptions
         
@@ -344,10 +407,28 @@ namespace eval uci {
             lappend uciOptions $line
         }
     }
-    ################################################################################
-    # build a dialog with UCI options published by the engine
-    # and available in analysis(uciOptions)
-    ################################################################################
+################################################################################
+# ::uci::uciConfig
+#   Starts an engine briefly to query its UCI options and then launches the
+#   configuration UI.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n: Engine slot number.
+#   - cmd: Engine executable.
+#   - arg: Engine arguments.
+#   - dir: Working directory to run the engine from.
+#   - options: Previously saved UCI options for this engine.
+# Returns:
+#   - None.
+# Side effects:
+#   - Starts a temporary engine process and assigns `::uci::uciInfo(pipe$n)`.
+#   - Sends `uci` to the engine and listens for `option name ...` lines.
+#   - Stores collected option lines in `::uci::uciOptions`.
+#   - Schedules a timeout close (`after 5000 ::uci::closeUCIengine $n 0`) to
+#     detect non-UCI engines.
+#   - Shows a `tk_messageBox` on start/running errors.
+################################################################################
     proc uciConfig { n cmd arg dir options } {
         global ::uci::uciOptions ::uci::oldOptions
         
@@ -392,9 +473,23 @@ namespace eval uci {
         after 5000  "::uci::closeUCIengine $n 0"
     }
     
-    ################################################################################
-    #   builds the dialog for UCI engine configuration
-    ################################################################################
+################################################################################
+# ::uci::uciConfigWin
+#   Builds the UI window for editing UCI options reported by an engine.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.uciConfigWin` and its child widgets.
+#   - Defines (or redefines) `::uci::tokeep` helper procedure.
+#   - Parses `::uci::uciOptions` into `::uci::optList`.
+#   - Initialises UI state from `::uci::oldOptions`.
+#   - Updates `::uci::check(*)` variables for checkbuttons.
+#   - Installs bindings and attempts to grab the window.
+################################################################################
     proc uciConfigWin {} {
         global ::uci::uciOptions ::uci::optList ::uci::optionToken ::uci::oldOptions ::uci::optionImportant
         
@@ -413,6 +508,19 @@ namespace eval uci {
         $w.c create window 0 0 -window $w.c.f -anchor nw
         set w $w.c.f
 
+        ################################################################################
+        # ::uci::tokeep
+        #   Determines whether a UCI option should be kept even if it matches the
+        #   default skip rules (e.g. `UCI_*` or `Ponder`).
+        # Visibility:
+        #   Private.
+        # Inputs:
+        #   - opt: Raw option line token list.
+        # Returns:
+        #   - 1 if the option should be kept; otherwise 0.
+        # Side effects:
+        #   - None.
+        ################################################################################
         proc tokeep {opt} {
             foreach tokeep $::uci::optionToKeep {
                 if { [lsearch $opt $tokeep] != -1 } {
@@ -602,9 +710,19 @@ namespace eval uci {
         bind $w <Escape> "destroy .uciConfigWin"
         catch {grab .uciConfigWin}
     }
-    ################################################################################
-    # will generate a list of list {{name}/value} pairs
-    ################################################################################
+################################################################################
+# ::uci::saveConfig
+#   Extracts option values from the configuration UI.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Populates `::uci::newOptions` as a list of `{name value}` pairs.
+#   - Reads widget state from `.uciConfigWin.c.f.fopt.opt*`.
+################################################################################
     proc saveConfig {} {
         global ::uci::optList ::uci::newOptions
         set newOptions {}
@@ -627,23 +745,57 @@ namespace eval uci {
         }
     }
 
-    # Send the options in the array ::uciOptions$n to the engine.
-    # If the engine is analyzing, send "stop" and wait for "bestmove" (max 5 sec).
-    # Send "isready" after the options.
+################################################################################
+# ::uci::sendUCIoptions
+#   Sends queued UCI options to an analysis engine, ensuring the engine is ready.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n: Engine slot number.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::uci::sendStop` and waits for readiness via `::uci::whenReady`.
+#   - Eventually sends `setoption ...` commands via `::uci::sendOptions_`.
+################################################################################
     proc sendUCIoptions {n} {
         ::uci::sendStop $n
         ::uci::whenReady $n [list ::uci::sendOptions_ $n] 5000
     }
 
-    # Send the current position and "go" to the engine.
-    # If the engine is analyzing, send "stop" and wait for "bestmove".
-    # Send the position when the engine is ready, or after 5 seconds send it anyway.
+################################################################################
+# ::uci::sendPositionGo
+#   Sends the current position and a `go` command to the engine.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n: Engine slot number.
+#   - go_time: Argument string appended to the UCI `go` command.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::uci::sendStop` and waits for readiness via `::uci::whenReady`.
+#   - Eventually sends the position/go sequence via `::uci::sendPositionGo_`.
+################################################################################
     proc sendPositionGo {n go_time} {
         ::uci::sendStop $n
         ::uci::whenReady $n [list ::uci::sendPositionGo_ $n $go_time] 5000
     }
 
-    # If the engine is analyzing, send "stop" to ask it to stop as soon as possible.
+################################################################################
+# ::uci::sendStop
+#   Requests that the engine stops analysis as soon as possible.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `analysis(thinking$n)` exists and `analysis(waitForBestMove$n)` is false,
+#     sets `analysis(waitForBestMove$n)` and sends UCI `stop`.
+#   - Clears `analysis(fen$n)`.
+################################################################################
     proc sendStop {n} {
         if {[info exists ::analysis(thinking$n)] && ! $::analysis(waitForBestMove$n)} {
             set ::analysis(waitForBestMove$n) 1
@@ -652,7 +804,18 @@ namespace eval uci {
         set ::analysis(fen$n) {}
     }
 
-    # Send "isready" if we are not already waiting for "readyok".
+################################################################################
+# ::uci::sendIsReady
+#   Sends `isready` unless we are already waiting for `readyok`.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::analysis(waitForReadyOk$n)` and sends UCI `isready`.
+################################################################################
     proc sendIsReady {n} {
         if { ! $::analysis(waitForReadyOk$n) } {
             set ::analysis(waitForReadyOk$n) 1
@@ -660,7 +823,22 @@ namespace eval uci {
         }
     }
 
-    # Execute $cmd when the engine is ready (not waiting for bestmove or readyok).
+################################################################################
+# ::uci::whenReady
+#   Executes a command when the engine is ready (not awaiting `bestmove`/`readyok`).
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+#   - cmd: Tcl command list to execute.
+#   - max_wait: Optional maximum wait time in milliseconds before forcing a
+#     readiness check. Defaults to -1 (no timeout).
+# Returns:
+#   - None.
+# Side effects:
+#   - Queues `cmd` into `::analysis(whenReady$n)` when the engine is busy.
+#   - May schedule `::uci::onReady_ $n` after `max_wait`.
+################################################################################
     proc whenReady {n cmd {max_wait -1}} {
         if { $::analysis(waitForBestMove$n) || $::analysis(waitForReadyOk$n) } {
             set idx [lsearch  -index 0 $::analysis(whenReady$n) [lindex $cmd 0]]
@@ -678,6 +856,20 @@ namespace eval uci {
         }
     }
 
+################################################################################
+# ::uci::sendOptions_
+#   Sends `setoption` commands for options queued in `::uciOptions$n`.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sends one `setoption name ... value ...` command per option.
+#   - Updates `::analysis(multiPVCount$n)` when setting `MultiPV`.
+#   - Unsets `::uciOptions$n` and calls `::uci::sendIsReady`.
+################################################################################
     proc sendOptions_ {n} {
         if {[array exists ::uciOptions$n]} {
             foreach {name value} [array get ::uciOptions$n] {
@@ -690,12 +882,41 @@ namespace eval uci {
         }
     }
 
+################################################################################
+# ::uci::sendPositionGo_
+#   Sends the current movelist and a `go` command to start analysis.
+# Visibility:
+#   Private.
+# Inputs:
+#   - engine_n: Engine slot number.
+#   - time: Argument string appended to the UCI `go` command.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::analysis(thinking$engine_n)`.
+#   - Sends `analysis(movelist$engine_n)` and `go $time` via `::sendToEngine`.
+################################################################################
     proc sendPositionGo_ {engine_n time} {
         set ::analysis(thinking$engine_n) 1
         ::sendToEngine $engine_n "$::analysis(movelist$engine_n)"
         ::sendToEngine $engine_n "go $time"
     }
 
+################################################################################
+# ::uci::onReady_
+#   Marks the engine as ready and drains any queued `whenReady` commands.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears `::analysis(waitForBestMove$n)` and `::analysis(waitForReadyOk$n)`.
+#   - Unsets `::analysis(thinking$n)`.
+#   - Executes queued commands from `::analysis(whenReady$n)` until the engine is
+#     busy again.
+################################################################################
     proc onReady_ {n} {
         unset -nocomplain ::analysis(thinking$n)
         set ::analysis(waitForBestMove$n) 0
@@ -710,9 +931,23 @@ namespace eval uci {
         }
     }
 
-    ################################################################################
-    # will start an engine for playing (not analysis)
-    ################################################################################
+################################################################################
+# ::uci::startEngine
+#   Starts a UCI engine for playing (non-analysis mode).
+# Visibility:
+#   Public.
+# Inputs:
+#   - index: Index into `::engines(list)`.
+#   - n: Engine slot number.
+# Returns:
+#   - 0 on success; 1 on failure to start the engine.
+# Side effects:
+#   - Opens the engine process and assigns `::uci::uciInfo(pipe$n)`.
+#   - Configures `fileevent` to parse output via `::uci::processAnalysisInput $n 0`.
+#   - Polls until `uciok` is observed or a timeout occurs.
+#   - Updates `analysis(index$n)` and `analysis(pipe$n)`.
+#   - Shows a `tk_messageBox` on start failure.
+################################################################################
     proc startEngine {index n} {
         global ::uci::uciInfo
         resetUciInfo $n
@@ -759,16 +994,37 @@ namespace eval uci {
         }
         return 0
     }
-    ################################################################################
-    #
-    ################################################################################
+################################################################################
+# ::uci::sendToEngine
+#   Sends a command to a running UCI engine process.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n: Engine slot number.
+#   - text: UCI command text to send.
+# Returns:
+#   - None.
+# Side effects:
+#   - Logs the outgoing command via `logEngine` (not guarded).
+#   - Writes to `::uci::uciInfo(pipe$n)` (best-effort; `puts` errors are caught).
+################################################################################
     proc sendToEngine {n text} {
         logEngine $n "Scid  : $text"
         catch {puts $::uci::uciInfo(pipe$n) $text}
     }
-    ################################################################################
-    # returns 0 if engine died abruptly or 1 otherwise
-    ################################################################################
+################################################################################
+# ::uci::checkEngineIsAlive
+#   Checks whether the engine process for a given slot is still alive.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Engine slot number.
+# Returns:
+#   - 1 if the engine is alive; otherwise 0.
+# Side effects:
+#   - On EOF, disables `fileevent`, closes the pipe, clears `::uci::uciInfo(pipe$n)`,
+#     logs the termination, and shows a `tk_messageBox`.
+################################################################################
     proc checkEngineIsAlive { n } {
         global ::uci::uciInfo
         if { $uciInfo(pipe$n) == "" } { return 0 }
@@ -795,10 +1051,23 @@ namespace eval uci {
         }
         return 1
     }
-    ################################################################################
-    # close the engine
-    # It may be not an UCI one (if the user made an error, trying to configure an xboard engine)
-    ################################################################################
+################################################################################
+# ::uci::closeUCIengine
+#   Closes a running engine process and resets its slot state.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n: Engine slot number.
+#   - uciok: Optional flag indicating whether the engine identified as UCI.
+#     Defaults to 1.
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels any scheduled close timeout and disables `fileevent`.
+#   - Sends `stop`/`quit` (and `exit`/`quit` as a fallback) and closes the pipe.
+#   - Clears `::uci::uciInfo(pipe$n)`.
+#   - If `uciok` is false, shows a warning `tk_messageBox`.
+################################################################################
     proc closeUCIengine { n { uciok 1 } } {
         global windowsOS ::uci::uciInfo
         
@@ -831,10 +1100,19 @@ namespace eval uci {
         catch { close $pipe }
         set uciInfo(pipe$n) ""
     }
-    ################################################################################
-    # UCI moves use long notation
-    # returns 1 if an error occurred when entering a move
-    ################################################################################
+################################################################################
+# ::uci::sc_move_add
+#   Plays a list of UCI long-notation moves on the current position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - moves: List of UCI moves (e.g. `e2e4`, `e7e8q`). Leading piece letters
+#     (e.g. `Ne7e5`) are ignored.
+# Returns:
+#   - 0 on success; 1 if a move cannot be entered.
+# Side effects:
+#   - Calls `sc_move add` for each parsed move.
+################################################################################
     proc sc_move_add { moves } {
         
         foreach m $moves {
@@ -863,9 +1141,21 @@ namespace eval uci {
         }
         return 0
     }
-    ################################################################################
-    #make UCI output more readable (b1c3 -> Nc3)
-    ################################################################################
+################################################################################
+# ::uci::formatPv
+#   Formats a PV expressed in UCI long notation into a readable move list.
+# Visibility:
+#   Public.
+# Inputs:
+#   - moves: List of UCI moves.
+#   - fen: Optional FEN to start from. Defaults to the current game position.
+# Returns:
+#   - A space-separated list of moves as reported by `sc_game info previousMoveNT`.
+# Side effects:
+#   - Pushes a temporary game (`sc_game push`) and pops it on completion.
+#   - If `fen` is provided, uses `sc_game startBoard $fen`.
+#   - Uses `::uci::sc_move_add` to apply moves.
+################################################################################
     proc formatPv { moves { fen "" } } {
         # Push a temporary copy of the current game:
         if {$fen != ""} {
@@ -887,9 +1177,21 @@ namespace eval uci {
 
         return $tmp
     }
-    ################################################################################
-    #   Format a line starting at current position where <moves> were played (in San notation)
-    ################################################################################
+################################################################################
+# ::uci::formatPvAfterMoves
+#   Formats a PV after first applying one or more SAN moves.
+# Visibility:
+#   Public.
+# Inputs:
+#   - played_moves: SAN move(s) to apply before formatting the PV.
+#   - moves: PV moves in UCI long notation.
+# Returns:
+#   - A space-separated list of moves as reported by `sc_game info previousMoveNT`.
+# Side effects:
+#   - Pushes a temporary game (`sc_game push copyfast`) and pops it on completion.
+#   - Applies `played_moves` via `sc_move addSan`.
+#   - Uses `::uci::sc_move_add` to apply the PV moves.
+################################################################################
     proc formatPvAfterMoves { played_moves moves } {
         sc_game push copyfast
         sc_move addSan $played_moves
