@@ -101,6 +101,13 @@ if {![llength [info commands winfo]]} {
     }
 }
 
+# Minimal `update` stub so modules that call `update` / `update idletasks` can be
+# exercised under plain `tclsh`.
+# The real command is provided by Tk (`wish`).
+if {![llength [info commands update]]} {
+    proc update {args} { return }
+}
+
 # `strIsPrefix` is normally provided by Scid's Tcl runtime; keep a tiny local
 # implementation for pure formatting helpers such as `formatAnalysisMoves`.
 if {![llength [info commands strIsPrefix]]} {

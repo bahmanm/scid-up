@@ -1,5 +1,5 @@
 # bookmark.tcl:
-# Bookmarks list and Recently-used files list in Scid.
+# Bookmarks list in Scid.
 
 set bookmarks(data) {}
 set bookmarks(subMenus) 0
@@ -7,12 +7,21 @@ set bookmarks(subMenus) 0
 # Read the bookmarks file if it exists:
 catch {source [scidConfigFile bookmarks]}
 
-
 namespace eval ::bookmarks {}
 
-# ::bookmarks::PostMenu:
-#   Posts the bookmarks toolbar menu.
-#
+################################################################################
+# ::bookmarks::PostMenu
+#   Posts the bookmarks toolbar menu at the current pointer location.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Posts `.main.tb.bkm.menu`.
+#   - Activates a menu entry depending on whether `::bookmarks::CanAdd` is true.
+################################################################################
 proc ::bookmarks::PostMenu {} {
   .main.tb.bkm.menu post [winfo pointerx .] [winfo pointery .]
   if {[::bookmarks::CanAdd]} {
@@ -22,15 +31,40 @@ proc ::bookmarks::PostMenu {} {
   }
 }
 
-# ::bookmarks::Refresh:
-#   Updates all bookmarks submenus.
-#
+################################################################################
+# ::bookmarks::Refresh
+#   Refreshes all bookmark menus.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Rebuilds `.menu.file.bookmarks` and `.main.tb.bkm.menu` via
+#     `::bookmarks::RefreshMenu`.
+################################################################################
 proc ::bookmarks::Refresh {} {
   foreach menu {.menu.file.bookmarks .main.tb.bkm.menu} {
     ::bookmarks::RefreshMenu $menu
   }
 }
 
+################################################################################
+# ::bookmarks::RefreshMenu
+#   Rebuilds a bookmark menu from the current `bookmarks(data)`.
+# Visibility:
+#   Public.
+# Inputs:
+#   - menu: A Tk menu widget path to populate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys existing submenus under `menu`.
+#   - Creates the folder menu `"$menu.file"`.
+#   - Reconfigures `helpMessage($menu,*)` entries.
+#   - Creates menu commands that call various `::bookmarks::*` procedures.
+################################################################################
 proc ::bookmarks::RefreshMenu {menu} {
   global bookmarks helpMessage
 
@@ -106,19 +140,44 @@ proc ::bookmarks::RefreshMenu {menu} {
   }
 }
 
-# ::bookmarks::CanAdd:
-#   Returns 1 if the current game can be added as a bookmark.
-#   It must be in an open database and not game number 0.
-#
+################################################################################
+# ::bookmarks::CanAdd
+#   Returns whether the current game is eligible to be bookmarked.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - 1 if `sc_game number` is not 0 and `::curr_db` is not `::clipbase_db`,
+#     otherwise 0.
+# Side effects:
+#   - None.
+################################################################################
 proc ::bookmarks::CanAdd {} {
   if {[sc_game number] == 0} { return 0 }
   if {$::curr_db == $::clipbase_db} { return 0 }
   return 1
 }
 
-# ::bookmarks::AddCurrent:
-#   Adds the current game to the bookmarks list.
-#
+################################################################################
+# ::bookmarks::AddCurrent
+#   Adds the current game as a bookmark entry.
+# Visibility:
+#   Public.
+# Inputs:
+#   - folder: Optional folder selector.
+#       - 0 adds the bookmark at the top level (before the first folder marker).
+#       - 1 adds the bookmark to the first folder (inserted before the second
+#         folder marker, i.e. appended to the end of that folder's entries).
+#       - 2 adds the bookmark to the second folder, and so on.
+# Returns:
+#   - None.
+# Side effects:
+#   - No-ops when no database is open (`sc_base inUse` is false).
+#   - Updates `bookmarks(data)`.
+#   - Persists changes via `::bookmarks::Save`.
+#   - Refreshes menus via `::bookmarks::Refresh`.
+################################################################################
 proc ::bookmarks::AddCurrent {{folder 0}} {
   global bookmarks
   if {! [sc_base inUse]} {
@@ -138,9 +197,19 @@ proc ::bookmarks::AddCurrent {{folder 0}} {
   ::bookmarks::Refresh
 }
 
-# ::bookmarks::New:
-#   Returns a bookmarks list entry for the current game or a new folder.
-#
+################################################################################
+# ::bookmarks::New
+#   Builds a bookmark entry list for either a new folder or the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - type: Either "folder" or "game".
+# Returns:
+#   - A bookmark entry list.
+# Side effects:
+#   - For type "game": queries `sc_game`, `sc_base`, and `sc_pos` for metadata,
+#     and calls `sc_game pgn`.
+################################################################################
 proc ::bookmarks::New {type} {
   if {$type == "folder"} { return [list "f" ""] }
   set text "[file tail [sc_base filename $::curr_db]]: [sc_game info result], "
@@ -159,10 +228,20 @@ proc ::bookmarks::New {type} {
   return $list
 }
 
+################################################################################
 # ::bookmarks::Go
-#
-#   Jumps to a selected bookmark.
-#
+#   Navigates to the game referenced by a bookmark entry.
+# Visibility:
+#   Public.
+# Inputs:
+#   - entry: A bookmark entry list (game entry).
+# Returns:
+#   - None.
+# Side effects:
+#   - Switches/opens databases via `::file::OpenOrSwitch`.
+#   - Locates a matching game via `sc_game find`.
+#   - Loads the game and position via `::game::Load`.
+################################################################################
 proc ::bookmarks::Go {entry} {
   if {[::bookmarks::isfolder $entry]} { return }
   set fname [lindex $entry 2]
@@ -184,10 +263,18 @@ proc ::bookmarks::Go {entry} {
   ::game::Load $best $ply
 }
 
+################################################################################
 # ::bookmarks::DeleteChildren
-#
-#   Deletes all submenus of a bookmark menu.
-#
+#   Recursively destroys all child widgets of the given menu.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: A Tk widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys child widgets under `w`.
+################################################################################
 proc ::bookmarks::DeleteChildren {w} {
   foreach child [winfo children $w] {
     ::bookmarks::DeleteChildren $child
@@ -195,10 +282,20 @@ proc ::bookmarks::DeleteChildren {w} {
   }
 }
 
+################################################################################
 # ::bookmarks::NewSubMenu
-#
-#   Creates a new bookmark submenu.
-#
+#   Creates a submenu (folder) under a menu and returns its path.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Parent menu widget path.
+#   - entry: Folder bookmark entry.
+# Returns:
+#   - The new submenu widget path.
+# Side effects:
+#   - Creates a new `menu` widget.
+#   - Adds a `cascade` entry to the parent menu.
+################################################################################
 proc ::bookmarks::NewSubMenu {w entry} {
   set i 1
   while {[winfo exists $w.m$i]} { incr i }
@@ -212,11 +309,21 @@ proc ::bookmarks::NewSubMenu {w entry} {
 set bookmarks(edit) ""
 set bookmarks(ismenu) 0
 
-
+################################################################################
 # ::bookmarks::Edit
-#
-#   Creates the bookmark editing window.
-#
+#   Opens the bookmark editing window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and populates the `.bmedit` toplevel and its child widgets.
+#   - Stores the pre-edit list in `bookmarks(old)`.
+#   - Sets `bookmarks(edit)`.
+#   - Uses a grab on `.bmedit`.
+################################################################################
 proc ::bookmarks::Edit {} {
   global bookmarks
   set w .bmedit
@@ -270,10 +377,20 @@ proc ::bookmarks::Edit {} {
   catch {grab .bmedit}
 }
 
+################################################################################
 # ::bookmarks::EditDone
-#
-#    Updates the bookmarks and closes the bookmark editing window.
-#
+#   Closes the bookmark editor and persists changes.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Releases the grab and destroys `.bmedit`.
+#   - Saves the bookmarks file via `::bookmarks::Save`.
+#   - Refreshes bookmark menus via `::bookmarks::Refresh`.
+################################################################################
 proc ::bookmarks::EditDone {} {
   catch {grab release .bmedit}
   destroy .bmedit
@@ -281,11 +398,18 @@ proc ::bookmarks::EditDone {} {
   ::bookmarks::Refresh
 }
 
+################################################################################
 # ::bookmarks::EditRefresh
-#
-#   Updates the bookmarks whenever the contents of the bookmark
-#   editing entry box are changed.
-#
+#   Updates the selected bookmark's display text from the editor entry widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `bookmarks(data)` and the `.bmedit.f.list` treeview item text.
+################################################################################
 proc ::bookmarks::EditRefresh {} {
   global bookmarks
   set list .bmedit.f.list
@@ -300,10 +424,19 @@ proc ::bookmarks::EditRefresh {} {
   $list selection set $sel
 }
 
+################################################################################
 # ::bookmarks::EditSelect
-#
-#   Sets the bookmark editing entry box when a bookmark is selected.
-#
+#   Synchronises the editor entry widget with the current tree selection.
+# Visibility:
+#   Private.
+# Inputs:
+#   - sel: Optional (ignored); selection is read from `.bmedit.f.list`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `bookmarks(ismenu)` and `bookmarks(edit)`.
+#   - Clears `.bmedit.e` when no selection exists.
+################################################################################
 proc ::bookmarks::EditSelect {{sel ""}} {
   global bookmarks
   set list .bmedit.f.list
@@ -321,21 +454,51 @@ proc ::bookmarks::EditSelect {{sel ""}} {
   set bookmarks(edit) [::bookmarks::Text $e]
 }
 
-# ::bookmarks::isfolder:
-#   Returns 1 if this bookmark entry is a folder (submenu).
-#
+################################################################################
+# ::bookmarks::isfolder
+#   Returns whether the entry is a folder marker.
+# Visibility:
+#   Private.
+# Inputs:
+#   - entry: A bookmark entry list.
+# Returns:
+#   - 1 if the entry is a folder, otherwise 0.
+# Side effects:
+#   - None.
+################################################################################
 proc ::bookmarks::isfolder {entry} {
   if {[lindex $entry 0] == "f"} { return 1 }
   return 0
 }
 
-# ::bookmarks::Text:
-#   Returns the entry text of a bookmark.
-#
+################################################################################
+# ::bookmarks::Text
+#   Returns the display text of a bookmark entry.
+# Visibility:
+#   Private.
+# Inputs:
+#   - entry: A bookmark entry list.
+# Returns:
+#   - The display text portion of the entry.
+# Side effects:
+#   - None.
+################################################################################
 proc ::bookmarks::Text {entry} {
   return [lindex $entry 1]
 }
 
+################################################################################
+# ::bookmarks::IndexText
+#   Formats a bookmark entry for display in the editor list.
+# Visibility:
+#   Private.
+# Inputs:
+#   - entry: A bookmark entry list.
+# Returns:
+#   - A formatted display string.
+# Side effects:
+#   - None.
+################################################################################
 proc ::bookmarks::IndexText {entry} {
   set text ""
   if {[lindex $entry 0] == "f"} {
@@ -346,14 +509,35 @@ proc ::bookmarks::IndexText {entry} {
   return $text
 }
 
+################################################################################
+# ::bookmarks::SetText
+#   Returns a copy of `entry` with its display text replaced.
+# Visibility:
+#   Private.
+# Inputs:
+#   - entry: A bookmark entry list.
+#   - text: New display text.
+# Returns:
+#   - A new entry list with the text replaced.
+# Side effects:
+#   - None.
+################################################################################
 proc ::bookmarks::SetText {entry text} {
   return [lreplace $entry 1 1 $text]
 }
 
+################################################################################
 # ::bookmarks::EditMove
-#
-#   Moves the selected bookmark "up" or "down" one place.
-#
+#   Moves the selected bookmark up or down in the list.
+# Visibility:
+#   Private.
+# Inputs:
+#   - dir: Optional direction, either "up" or "down".
+# Returns:
+#   - None.
+# Side effects:
+#   - Reorders `bookmarks(data)` and updates `.bmedit.f.list`.
+################################################################################
 proc ::bookmarks::EditMove {{dir "up"}} {
   global bookmarks
   set w .bmedit
@@ -380,10 +564,19 @@ proc ::bookmarks::EditMove {{dir "up"}} {
   $list selection set $newsel
 }
 
+################################################################################
 # ::bookmarks::EditDelete
-#
-#   Deletes the selected bookmark.
-#
+#   Deletes the currently selected bookmark.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Removes an entry from `bookmarks(data)`.
+#   - Updates `.bmedit.f.list` and clears `bookmarks(edit)`.
+################################################################################
 proc ::bookmarks::EditDelete {} {
   global bookmarks
   set w .bmedit
@@ -395,11 +588,19 @@ proc ::bookmarks::EditDelete {} {
   set bookmarks(edit) ""
 }
 
+################################################################################
 # ::bookmarks::EditNew
-#
-#   Inserts a new entry ("folder" for a submenu or "game" for the
-#   current game) after the selected bookmark.
-#
+#   Inserts a new folder or current-game bookmark.
+# Visibility:
+#   Private.
+# Inputs:
+#   - type: Optional. Either "folder" or "game".
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `bookmarks(data)` by inserting after the current selection.
+#   - Appends a new item to `.bmedit.f.list` and selects it.
+################################################################################
 proc ::bookmarks::EditNew {{type "folder"}} {
   global bookmarks
   set w .bmedit
@@ -429,11 +630,19 @@ proc ::bookmarks::EditNew {{type "folder"}} {
   ::bookmarks::EditSelect
 }
 
+################################################################################
 # ::bookmarks::Save
-#
-#   Saves the bookmarks file, reporting any error in a message box if
-#   reportError is true.
-#
+#   Persists `bookmarks(data)` and related settings to the bookmarks file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - reportError: Optional boolean controlling whether write errors are shown.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes `[scidConfigFile bookmarks]`.
+#   - May show a `tk_messageBox` warning when `reportError` is true.
+################################################################################
 proc ::bookmarks::Save {{reportError 0}} {
   global bookmarks
   set f {}
@@ -452,6 +661,5 @@ proc ::bookmarks::Save {{reportError 0}} {
   }
   close $f
 }
-
 
 # End of file: bookmark.tcl

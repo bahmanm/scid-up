@@ -11,6 +11,20 @@ set ::file::finder::data(Rep) 1
 set ::file::finder::data(EPD) 1
 set ::file::finder::data(Old) 1
 
+################################################################################
+# ::file::finder::Open
+#   Opens the File Finder window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and lays out `.finder`.
+#   - Binds UI events for navigation and context menus.
+#   - Calls `::file::finder::Refresh`.
+################################################################################
 proc ::file::finder::Open {} {
   set w .finder
   if {[winfo exists $w]} { return }
@@ -93,6 +107,25 @@ proc ::file::finder::Open {} {
   ::file::finder::Refresh
 }
 
+################################################################################
+# ::file::finder::Refresh
+#   Refreshes the finder view for the current directory.
+# Visibility:
+#   Public.
+# Inputs:
+#   - newdir: Optional.
+#       - "" keeps the current directory.
+#       - ".." navigates to the parent of `data(dir)`.
+#       - "-fast" re-sorts `data(flist)` without re-scanning the filesystem.
+#       - Any other non-empty string becomes the new `data(dir)`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::file::finder::data(dir)`, `data(flist)`, and `data(stop)`.
+#   - Scans the filesystem via `::file::finder::GetFiles` unless in fast mode.
+#   - Updates `.finder` widgets, bindings, and directory menu entries.
+#   - Uses `busyCursor` / `unbusyCursor`, and may take a grab on `.finder.p.stop`.
+################################################################################
 proc ::file::finder::Refresh {{newdir ""}} {
   variable data
   set w .finder
@@ -271,7 +304,21 @@ proc ::file::finder::Refresh {{newdir ""}} {
   
 }
 ################################################################################
-#
+# ::file::finder::contextMenu
+#   Posts a context menu for a file entry in the finder list.
+# Visibility:
+#   Private.
+# Inputs:
+#   - win: A Tk widget path used as the menu parent (typically `.finder.t.text`).
+#   - fullPath: Full path to the selected file.
+#   - x, y: Widget-relative pointer coordinates (unused).
+#   - xc, yc: Screen pointer coordinates (unused).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/destroys `$win.ctxtMenu`.
+#   - Posts the menu at the current pointer position.
+#   - Menu commands call `::file::Open` and `::file::finder::*` operations.
 ################################################################################
 proc ::file::finder::contextMenu {win fullPath x y xc yc} {
   
@@ -293,7 +340,19 @@ proc ::file::finder::contextMenu {win fullPath x y xc yc} {
   
 }
 ################################################################################
-# will backup a base in the form name-date.ext
+# ::file::finder::backup
+#   Creates a timestamp-suffixed backup copy of the given file.
+# Visibility:
+#   Private.
+# Inputs:
+#   - f: Path to a file to back up.
+# Returns:
+#   - None.
+# Side effects:
+#   - Copies `f` to a sibling file whose name includes a timestamp.
+#   - For `.si4` / `.si5`, also copies companion files (`.sg*`, `.sn*`, `.stc`).
+#   - Shows a `tk_messageBox` error when a copy fails.
+#   - Calls `::file::finder::Refresh` on success.
 ################################################################################
 proc ::file::finder::backup { f } {
   set r [file rootname $f]
@@ -316,7 +375,19 @@ proc ::file::finder::backup { f } {
   ::file::finder::Refresh
 }
 ################################################################################
-#
+# ::file::finder::copy
+#   Copies a database file to a user-selected directory.
+# Visibility:
+#   Private.
+# Inputs:
+#   - f: Path to a file to copy.
+# Returns:
+#   - None.
+# Side effects:
+#   - Refuses to operate if the base is open (`sc_base slot` is not 0).
+#   - Prompts for a destination via `tk_chooseDirectory`.
+#   - Copies `f` (and for `.si4` / `.si5`, companion files) to the destination.
+#   - Shows a `tk_messageBox` error when a copy fails.
 ################################################################################
 proc ::file::finder::copy { f } {
   if {[sc_base slot $f] != 0} {
@@ -344,7 +415,22 @@ proc ::file::finder::copy { f } {
   }
 }
 ################################################################################
-#
+# ::file::finder::move
+#   Moves a database file to a user-selected directory.
+# Visibility:
+#   Private.
+# Inputs:
+#   - f: Path to a file to move.
+# Returns:
+#   - None.
+# Side effects:
+#   - Refuses to operate if the base is open (`sc_base slot` is not 0).
+#   - Prompts for a destination via `tk_chooseDirectory`.
+#   - Renames `f` (and for `.si4` / `.si5`, companion files) into the destination.
+#   - Shows a `tk_messageBox` error when a rename fails.
+#   - Calls `::file::finder::Refresh` unless the procedure returns early due to
+#     the base-open check or a rename error (refresh is still performed when the
+#     directory chooser is cancelled).
 ################################################################################
 proc ::file::finder::move { f } {
   if {[sc_base slot $f] != 0} {
@@ -371,7 +457,20 @@ proc ::file::finder::move { f } {
   ::file::finder::Refresh
 }
 ################################################################################
-#
+# ::file::finder::delete
+#   Deletes a file after confirmation.
+# Visibility:
+#   Private.
+# Inputs:
+#   - f: Path to a file to delete.
+# Returns:
+#   - None.
+# Side effects:
+#   - Refuses to operate if the base is open (`sc_base slot` is not 0).
+#   - Prompts for confirmation via `tk_messageBox -type yesno`.
+#   - Deletes `f` and, for `.si4` / `.si5`, companion files (`.sg*`, `.sn*`, `.stc`).
+#   - Calls `::file::finder::Refresh` unless the procedure returns early due to
+#     the base-open check (refresh is still performed when the user declines).
 ################################################################################
 proc ::file::finder::delete { f } {
   if {[sc_base slot $f] != 0} {
@@ -390,6 +489,28 @@ proc ::file::finder::delete { f } {
   ::file::finder::Refresh
 }
 
+################################################################################
+# ::file::finder::GetFiles
+#   Scans a directory and returns a list of candidate files for display.
+# Visibility:
+#   Private.
+# Inputs:
+#   - dir: Directory to scan.
+#   - len: Optional prefix length used to compute relative display paths.
+# Returns:
+#   - A list of entries of the form: `{size type name path mtime est}`.
+#       - size: For Scid bases (`.si3/.si4/.si5`), an estimated game count; for
+#         other supported files, size in kB.
+#       - type: One of `Scid`, `Old`, `PGN`, `Rep`, `EPD`.
+#       - name: File base name (without extension).
+#       - path: Display path relative to `dir` (or `./<file>` at top level).
+#       - mtime: File modification time (integer seconds since epoch).
+#       - est: Boolean indicating whether `size` should be displayed with a
+#         trailing " kB".
+# Side effects:
+#   - Reads the filesystem (`glob`, `file size`, `file mtime`, etc.).
+#   - Calls `update` during iteration and honours `data(stop)`.
+################################################################################
 proc ::file::finder::GetFiles {dir {len -1}} {
   variable data
   set dlist {}

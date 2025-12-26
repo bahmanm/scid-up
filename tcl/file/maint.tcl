@@ -9,12 +9,22 @@ namespace eval ::maint {}
 
 ################################################################################
 # ::maint::SetGameFlags
-#
-#   Updates a flag for the current game, all filtered games, or all games.
-#   <type> should be "current", "filter" or "all".
-#   <flag> should be "delete", "user", "endgame", etc.
-#   <value> should be 0 or 1
-#
+#   Sets or clears a game flag for the current game, the filter, or the entire
+#   database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - flag: Flag name (e.g. "delete", "user"). The special value "mark" uses the
+#     current maintenance flag stored in `::maintFlag`.
+#   - type: One of "current", "filter", or "all".
+#   - value: 1 to set the flag, 0 to unset it.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates database flags via `sc_base gameflag`.
+#   - May show a busy cursor and process UI events.
+#   - Updates the board display and notifies `::notify::DatabaseModified`.
+################################################################################
 proc ::maint::SetGameFlags {flag type value} {
   if {$flag == "mark"} { set flag $::maintFlag }
   if {$value} {
@@ -71,10 +81,20 @@ array set maintFlags {
 
 set maintWin 0
 
+################################################################################
 # ::maint::OpenClose
-#
-#   Creates the database maintenance window.
-#
+#   Toggles the database maintenance window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or destroys the `.maintWin` toplevel and its child widgets.
+#   - Updates globals such as `maintWin`, `::maint::dbdesc`, and `::autoloadGame`.
+#   - Reads database state via `sc_base` and refreshes the UI via `::maint::Refresh`.
+################################################################################
 proc ::maint::OpenClose {} {
   global maintWin maintFlag maintFlags maintFlaglist
   set w .maintWin
@@ -224,11 +244,37 @@ proc ::maint::OpenClose {} {
   ::maint::Refresh
 }
 
+################################################################################
+# ::maint::validateCustomFlag
+#   Validates a custom-flag label and enables the Save button when editable.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Maintenance window path (e.g. `.maintWin`).
+#   - val: Proposed entry value.
+# Returns:
+#   - Boolean: true if the value is accepted; false otherwise.
+# Side effects:
+#   - Enables `$w.customFlags.edit` when the value is accepted.
+################################################################################
 proc ::maint::validateCustomFlag {w val} {
   if {[string length $val] > 8} { return false }
   $w.customFlags.edit configure -state normal
   return true
 }
+################################################################################
+# ::maint::saveCustomFlags
+#   Persists custom-flag labels into the current database and refreshes the window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Maintenance window path (e.g. `.maintWin`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes `flag1..flag6` extras via `sc_base extra` on `::curr_db`.
+#   - Calls `::maint::Refresh`.
+################################################################################
 proc ::maint::saveCustomFlags {w} {
     for {set i 1} {$i <7} {incr i} {
       set desc [$w.customFlags.text$i get]
@@ -237,6 +283,21 @@ proc ::maint::saveCustomFlags {w} {
     ::maint::Refresh
 }
 
+################################################################################
+# ::maint::Refresh
+#   Refreshes the maintenance window with current database statistics and state.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads database information via `sc_base` and `sc_filter`.
+#   - Updates `.maintWin` widgets, including enabling/disabling controls.
+#   - Updates globals such as `::curr_db`, `::maint::dbdesc`, and `::autoloadGame`.
+#   - Calls `updateClassifyWin`.
+################################################################################
 proc ::maint::Refresh {} {
   global maintFlag maintFlags
   updateClassifyWin
@@ -324,11 +385,20 @@ proc ::maint::Refresh {} {
   }
 }
 
-# markTwins:
-#   Finds twin games and marks them for deletion.
-#   Takes parent window as parameter since it can be the main window,
-#   or the maintenance window.
-#
+################################################################################
+# ::markTwins
+#   Opens the twin-detection criteria dialog.
+# Visibility:
+#   Public.
+# Inputs:
+#   - parent: Parent window for modal dialogs (defaults to `.`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and manages the `.twinSettings` dialog.
+#   - Does not modify the database unless the user proceeds (the actual marking is
+#     performed via the dialog callback into `doMarkDups`).
+################################################################################
 proc markTwins {{parent .}} {
   global twinSettings
   if {[sc_base numGames $::curr_db] == 0} {
@@ -444,11 +514,18 @@ proc markTwins {{parent .}} {
   return
 }
 
-# twinCriteriaOK:
-#   Check that the user specified at least three of the the same site,
-#   same round, and same year settings, since otherwise it is quite
-#   likely that actual games with similar moves will be marked as twins:
-#
+################################################################################
+# ::twinCriteriaOK
+#   Validates twin criteria settings and warns when the selection is risky.
+# Visibility:
+#   Private.
+# Inputs:
+#   - parent: Parent window for warning prompts (defaults to `.`).
+# Returns:
+#   - Boolean: 1 if the criteria are accepted; 0 if the user declines.
+# Side effects:
+#   - May show warning confirmation dialogs.
+################################################################################
 proc twinCriteriaOK {{parent .}} {
   global twinSettings
   
@@ -484,6 +561,21 @@ proc twinCriteriaOK {{parent .}} {
 }
 
 
+################################################################################
+# ::doMarkDups
+#   Runs duplicate detection according to `twinSettings` and reports the result.
+# Visibility:
+#   Private.
+# Inputs:
+#   - parent: Parent window containing the progress bar (defaults to `.`).
+# Returns:
+#   - Integer: duplicates count; 0 may mean none found or an error (errors are
+#     reported via `ERROR::MessageBox`).
+# Side effects:
+#   - May clear delete flags, then calls `sc_base duplicates`.
+#   - Updates a progress bar and shows result/error message boxes.
+#   - Calls `::maint::Refresh`.
+################################################################################
 proc doMarkDups {{parent .}} {
   global twinSettings
   
@@ -526,15 +618,36 @@ proc doMarkDups {{parent .}} {
 set classifyOption(AllGames) all
 set classifyOption(ExtendedCodes) 1
 
-# ClassifyAllGames:
-#   Reclassifies all games (recomputes the ECO code of each game).
-#   User can choose to reclassify all games, or only those games that
-#   currently have no ECO code assigned.
-#
+################################################################################
+# ::classifyAllGames
+#   Opens the ECO reclassification window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates (or raises) the `.classify` window via `makeClassifyWin`.
+################################################################################
 proc classifyAllGames {} {
   makeClassifyWin
 }
 
+################################################################################
+# ::makeClassifyWin
+#   Creates the ECO reclassification dialog.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures `.classify` widgets.
+#   - May invoke `sc_eco base` when the user runs classification.
+#   - Refreshes the game list UI.
+################################################################################
 proc makeClassifyWin {} {
   global classifyOption
   set w .classify
@@ -609,6 +722,18 @@ proc makeClassifyWin {} {
   updateClassifyWin
 }
 
+################################################################################
+# ::updateClassifyWin
+#   Updates the Classify dialog controls based on database availability.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Enables or disables `.classify.f.b.go`.
+################################################################################
 proc updateClassifyWin {} {
   set w .classify
   if {! [winfo exists $w]} { return }
@@ -623,6 +748,20 @@ proc updateClassifyWin {} {
 set twincheck(left) 0
 set twincheck(right) 0
 
+################################################################################
+# ::updateTwinChecker
+#   Creates or refreshes the twin-checker window for the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.twinchecker` and updates its widgets.
+#   - Reads game/duplicate information via `sc_game` and flags via `sc_base`.
+#   - May enable actions such as sharing tags or marking twins.
+################################################################################
 proc updateTwinChecker {} {
   global twincheck
   set w .twinchecker
@@ -785,11 +924,21 @@ proc updateTwinChecker {} {
   
 }
 
-# shareTwinTags:
-#   Updates the tags of two twin games by sharing information,
-#   filling in the date, round or ratings of each game based on
-#   the other where possible.
-#
+################################################################################
+# ::shareTwinTags
+#   Shares selected tag values between two twin games after confirmation.
+# Visibility:
+#   Private.
+# Inputs:
+#   - g1: First game number.
+#   - g2: Second game number.
+#   - parent: Parent window for the confirmation dialog (defaults to `.`).
+# Returns:
+#   - None.
+# Side effects:
+#   - May modify game tags via `sc_game tags share update`.
+#   - Reloads tags, updates the board, and refreshes the game list.
+################################################################################
 proc shareTwinTags {g1 g2 {parent .}} {
   set sharelist [sc_game tags share check $g1 $g2]
   if {[llength $sharelist] == 0} { return }
@@ -808,9 +957,18 @@ proc shareTwinTags {g1 g2 {parent .}} {
   ::windows::gamelist::Refresh
 }
 
-# baseIsCompactable:
-#   Returns true only if the current base is compactable.
-#
+################################################################################
+# ::baseIsCompactable
+#   Checks that the current database is not read-only and not the clipbase.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - Boolean: 1 if compactable; 0 otherwise.
+# Side effects:
+#   - None.
+################################################################################
 proc baseIsCompactable {} {
   # Only a database that is in use, not read-only, and not the
   # clipbase, can be compacted:
@@ -820,6 +978,23 @@ proc baseIsCompactable {} {
   return 1
 }
 
+################################################################################
+# ::compactDB
+#   Compacts a Scid database after confirmation, then notifies the UI of changes.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Database slot to compact (defaults to the current base).
+# Returns:
+#   - None (no meaningful return value); may return whatever `ERROR::MessageBox`
+#     returns if `sc_base compact ... stats` fails.
+# Side effects:
+#   - Prompts for confirmation and may show progress windows.
+#   - Temporarily destroys analysis/engine-related windows to avoid file-handle
+#     inheritance issues on Windows.
+#   - Runs `sc_base compact` and notifies `::notify::DatabaseModified` (success)
+#     or switches to clipbase and notifies `::notify::DatabaseChanged` (error).
+################################################################################
 proc compactDB {{base -1}} {
   if {$base < 0} { set base [sc_base current] }
   if {[::game::Clear] == "cancel"} { return }
@@ -876,12 +1051,19 @@ proc compactDB {{base -1}} {
   }
 }
 
-# allocateRatings:
-#   Allocate player ratings to games based on the spellcheck file.
-#
-set addRatings(overwrite) 0
-set addRatings(filter) 0
-
+################################################################################
+# ::allocateRatings
+#   Opens a dialog to allocate Elo ratings into games based on the ratings file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates the `.ardialog` window and reads `addRatings(*)` settings.
+#   - Validates availability via `sc_name ratings -test`.
+################################################################################
 proc allocateRatings {} {
   if {[catch {sc_name ratings -test 1} result]} {
     tk_messageBox -type ok -icon info -parent . -title "Scid" -message $result
@@ -912,6 +1094,19 @@ proc allocateRatings {} {
   focus $w.b.ok
 }
 
+################################################################################
+# ::doAllocateRatings
+#   Applies rating allocation and reports the outcome.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Runs `sc_name ratings -change ...` and shows progress and message dialogs.
+#   - Notifies `::notify::DatabaseModified` for the current database.
+################################################################################
 proc doAllocateRatings {} {
   global addRatings
   if {[catch {sc_name ratings -test 1} result]} {
@@ -933,11 +1128,19 @@ proc doAllocateRatings {} {
 }
 
 
-# stripTags:
-#   Strip unwanted PGN tags from the current database.
-
-array set stripTagCount {}
-
+################################################################################
+# ::stripTags
+#   Finds extra PGN tags in the current database and offers to remove them.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Queries tags via `sc_base taglist` and initialises `stripTagCount`.
+#   - Creates the `.striptags` selection dialog.
+################################################################################
 proc stripTags {} {
   global stripTagChoice stripTagCount
   set w .striptags
@@ -1004,6 +1207,20 @@ proc stripTags {} {
   catch {grab $w}
 }
 
+################################################################################
+# ::doStripTags
+#   Removes selected extra PGN tags from the current database.
+# Visibility:
+#   Private.
+# Inputs:
+#   - topwin: The `.striptags` window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts for confirmation, then calls `sc_base strip`.
+#   - Shows progress and informational dialogs.
+#   - Notifies `::notify::GameChanged` and `::notify::DatabaseModified`.
+################################################################################
 proc doStripTags {topwin} {
   set msg "Do you really want to remove all occurrences of the PGN tags:\n"
   set tags {}
@@ -1038,19 +1255,19 @@ proc doStripTags {topwin} {
   ::notify::DatabaseModified $::curr_db
 }
 
-# cleanerWin:
-#   Open a dialog so the user can choose several maintenance tasks
-#   in one action.
-
-set cleaner(players) 1
-set cleaner(events) 1
-set cleaner(sites) 1
-set cleaner(rounds) 1
-set cleaner(eco) 1
-set cleaner(elo) 1
-set cleaner(twins) 1
-set cleaner(cgames) 0
-
+################################################################################
+# ::cleanerWin
+#   Opens a dialog to run several maintenance tasks in a single action.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.mtoolWin` and allows the user to select `cleaner(*)` tasks.
+#   - Executes `doCleaner` when the user confirms.
+################################################################################
 proc cleanerWin {} {
   set w .mtoolWin
   if {[winfo exists $w]} { return }
@@ -1095,6 +1312,21 @@ proc cleanerWin {} {
 set cleaner_maxSpellCorrections 0
 
 
+################################################################################
+# ::doCleaner
+#   Executes the selected Cleaner tasks and streams progress to a status window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - May run spellcheck/corrections, ECO reclassification, rating allocation,
+#     twin deletion, and/or database compaction.
+#   - Creates/updates `.mtoolStatus`, shows message boxes, and modifies databases.
+#   - Notifies `::notify::GameChanged` and `::notify::DatabaseModified`.
+################################################################################
 proc doCleaner {} {
   global cleaner twinSettings
   global cleaner_maxSpellCorrections
@@ -1233,6 +1465,19 @@ proc doCleaner {} {
   unbusyCursor .
 }
 
+################################################################################
+# ::mtoolAdd
+#   Appends a timestamped step header to a status text widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - tw: Text widget path.
+#   - title: Title line to append (may be empty).
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes to the widget, scrolls to the end, and calls `update`.
+################################################################################
 proc mtoolAdd {tw title} {
   set time [clock format [clock seconds] -format "%H:%M:%S"]
   $tw insert end "\n\[$time\]\n"
