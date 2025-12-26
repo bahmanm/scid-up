@@ -1,0 +1,516 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# `finder.tcl` expects its namespace to exist prior to sourcing.
+namespace eval ::file {}
+namespace eval ::file::finder {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] file finder.tcl]
+
+namespace eval ::finder_test {
+    variable stubbedCommands {}
+
+    variable tkMessageBoxCalls {}
+    variable tkChooseDirectoryCalls {}
+    variable refreshCalls {}
+
+    variable tempPaths {}
+    variable counter 0
+}
+
+proc ::finder_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::finder_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::finder_test::makeTempDir {suffix} {
+    incr ::finder_test::counter
+    set dir [file join [::scid_test::tempDir] "finder_${suffix}_$::finder_test::counter"]
+    file mkdir $dir
+    lappend ::finder_test::tempPaths $dir
+    return $dir
+}
+
+proc ::finder_test::writeFileOfSize {path sizeBytes} {
+    set ch [open $path w]
+    if {$sizeBytes > 0} {
+        seek $ch [expr {$sizeBytes - 1}] start
+        puts -nonewline $ch "x"
+    }
+    close $ch
+}
+
+proc ::finder_test::setup {} {
+    ::finder_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::finder_test::tkMessageBoxCalls {}
+    set ::finder_test::tkChooseDirectoryCalls {}
+    set ::finder_test::refreshCalls {}
+
+    # Finder state defaults.
+    set ::file::finder::data(recurse) 0
+    set ::file::finder::data(stop) 0
+
+    foreach type {Scid Old PGN Rep EPD} {
+        set ::file::finder::data($type) 1
+    }
+
+    # Stub Refresh so tests can call file operations without Tk.
+    ::finder_test::stubCommand ::file::finder::Refresh {{newdir ""}} {
+        lappend ::finder_test::refreshCalls $newdir
+        return
+    }
+
+    # Stub `sc_base slot` as required by copy/move/delete.
+    ::finder_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd eq "slot"} {
+            # Default: file is not open.
+            return 0
+        }
+        error "sc_base $subcmd not stubbed in finder tests"
+    }
+
+    # Stub message box to record calls.
+    ::finder_test::stubCommand tk_messageBox {args} {
+        lappend ::finder_test::tkMessageBoxCalls $args
+
+        set typeIdx [lsearch -exact $args "-type"]
+        if {$typeIdx != -1 && ($typeIdx + 1) < [llength $args]} {
+            set type [lindex $args [expr {$typeIdx + 1}]]
+            if {$type eq "yesno"} {
+                if {![info exists ::scid_test::tk_messageBox_answer]} {
+                    error "tk_messageBox -type yesno called without ::scid_test::tk_messageBox_answer"
+                }
+                return $::scid_test::tk_messageBox_answer
+            }
+        }
+
+        return "ok"
+    }
+
+    # Stub directory chooser.
+    ::finder_test::stubCommand tk_chooseDirectory {args} {
+        lappend ::finder_test::tkChooseDirectoryCalls $args
+        if {[info exists ::finder_test::tk_chooseDirectory_return]} {
+            return $::finder_test::tk_chooseDirectory_return
+        }
+        return ""
+    }
+}
+
+proc ::finder_test::cleanup {} {
+    ::finder_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    foreach path $::finder_test::tempPaths {
+        catch {file delete -force $path}
+    }
+    set ::finder_test::tempPaths {}
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+    unset -nocomplain ::finder_test::tk_chooseDirectory_return
+
+    set ::file::finder::data(recurse) 0
+    set ::file::finder::data(stop) 0
+}
+
+# ---- Tests ----
+
+test finder-GetFiles-1.0 {GetFiles filters by extension and formats entries} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir files]
+
+    set mtime 1700000000
+
+    set pgn [file join $root a.pgn]
+    ::finder_test::writeFileOfSize $pgn 2048
+    file mtime $pgn $mtime
+
+    set epd [file join $root b.epd]
+    ::finder_test::writeFileOfSize $epd 1024
+    file mtime $epd $mtime
+
+    set rep [file join $root c.sor]
+    ::finder_test::writeFileOfSize $rep 3072
+    file mtime $rep $mtime
+
+    set si4 [file join $root d.si4]
+    ::finder_test::writeFileOfSize $si4 [expr {182 + 47 * 10}]
+    file mtime $si4 $mtime
+
+    set si5 [file join $root e.si5]
+    ::finder_test::writeFileOfSize $si5 [expr {56 * 7}]
+    file mtime $si5 $mtime
+
+    set si3 [file join $root f.si3]
+    ::finder_test::writeFileOfSize $si3 [expr {128 + 46 * 5}]
+    file mtime $si3 $mtime
+
+    ::finder_test::writeFileOfSize [file join $root ignore.txt] 2048
+
+    # Only show PGN and Scid.
+    set ::file::finder::data(EPD) 0
+    set ::file::finder::data(Rep) 0
+    set ::file::finder::data(Old) 0
+
+    # Act
+    set out [::file::finder::GetFiles $root]
+
+    # Assert
+    set projection {}
+    foreach e $out {
+        lassign $e size type name path mtimeOut est
+        lappend projection [list $type $name $path $size $est $mtimeOut]
+    }
+
+    set projection [lsort -dict -index 2 $projection]
+
+    set expected [list \
+        [list PGN a ./a.pgn 2 1 $mtime] \
+        [list Scid d ./d.si4 10 0 $mtime] \
+        [list Scid e ./e.si5 7 0 $mtime] \
+    ]
+
+    if {$projection ne $expected} {
+        error "Unexpected GetFiles output: $projection"
+    }
+
+    return [llength $projection]
+} -cleanup {
+    ::finder_test::cleanup
+} -result 3
+
+
+test finder-GetFiles-2.0 {GetFiles recurses into subdirectories when enabled} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir recurse]
+    set sub [file join $root subdir]
+    file mkdir $sub
+
+    set f [file join $sub x.pgn]
+    ::finder_test::writeFileOfSize $f 1024
+
+    set ::file::finder::data(PGN) 1
+    set ::file::finder::data(recurse) 0
+
+    # Act
+    set outNo [::file::finder::GetFiles $root]
+
+    set ::file::finder::data(recurse) 1
+    set outYes [::file::finder::GetFiles $root]
+
+    # Assert
+    set pathsNo {}
+    foreach e $outNo { lappend pathsNo [lindex $e 3] }
+    set pathsYes {}
+    foreach e $outYes { lappend pathsYes [lindex $e 3] }
+
+    list \
+        [expr {[lsearch -exact $pathsNo "subdir/x.pgn"] == -1}] \
+        [expr {[lsearch -exact $pathsYes "subdir/x.pgn"] != -1}]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 1}
+
+
+test finder-delete-1.0 {delete refuses to delete an open base} -setup {
+    ::finder_test::setup
+
+    ::finder_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd eq "slot"} {
+            return 1
+        }
+        error "sc_base $subcmd not stubbed in finder tests"
+    }
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir delete_open]
+    set f [file join $root g.pgn]
+    ::finder_test::writeFileOfSize $f 1
+
+    # Act
+    ::file::finder::delete $f
+
+    # Assert
+    list \
+        [file exists $f] \
+        [llength $::finder_test::tkMessageBoxCalls] \
+        [llength $::finder_test::refreshCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 1 0}
+
+
+test finder-delete-2.0 {delete removes si4 companion files when confirmed} -setup {
+    ::finder_test::setup
+
+    set ::scid_test::tk_messageBox_answer yes
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir delete_si4]
+    set base [file join $root base.si4]
+    set rootname [file rootname $base]
+
+    ::finder_test::writeFileOfSize $base 10
+    ::finder_test::writeFileOfSize ${rootname}.sg4 1
+    ::finder_test::writeFileOfSize ${rootname}.sn4 1
+    ::finder_test::writeFileOfSize ${rootname}.stc 1
+
+    # Act
+    ::file::finder::delete $base
+
+    # Assert
+    list \
+        [file exists $base] \
+        [file exists ${rootname}.sg4] \
+        [file exists ${rootname}.sn4] \
+        [file exists ${rootname}.stc] \
+        [llength $::finder_test::refreshCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {0 0 0 0 1}
+
+
+test finder-delete-3.0 {delete leaves file intact when user declines} -setup {
+    ::finder_test::setup
+
+    set ::scid_test::tk_messageBox_answer no
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir delete_no]
+    set f [file join $root h.pgn]
+    ::finder_test::writeFileOfSize $f 1
+
+    # Act
+    ::file::finder::delete $f
+
+    # Assert
+    list [file exists $f] [llength $::finder_test::refreshCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 1}
+
+
+test finder-copy-1.0 {copy refuses to copy an open base} -setup {
+    ::finder_test::setup
+
+    ::finder_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd eq "slot"} {
+            return 1
+        }
+        error "sc_base $subcmd not stubbed in finder tests"
+    }
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir copy_open]
+    set f [file join $root i.si4]
+    ::finder_test::writeFileOfSize $f 10
+
+    # Act
+    ::file::finder::copy $f
+
+    # Assert
+    list \
+        [llength $::finder_test::tkChooseDirectoryCalls] \
+        [llength $::finder_test::tkMessageBoxCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {0 1}
+
+
+test finder-copy-2.0 {copy copies si4 companion files to the selected directory} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set src [::finder_test::makeTempDir copy_src]
+    set dst [::finder_test::makeTempDir copy_dst]
+
+    set base [file join $src j.si4]
+    set rootname [file rootname $base]
+
+    ::finder_test::writeFileOfSize $base 10
+    ::finder_test::writeFileOfSize ${rootname}.sg4 1
+    ::finder_test::writeFileOfSize ${rootname}.sn4 1
+    ::finder_test::writeFileOfSize ${rootname}.stc 1
+
+    set ::finder_test::tk_chooseDirectory_return $dst
+
+    # Act
+    ::file::finder::copy $base
+
+    # Assert
+    list \
+        [file exists [file join $dst [file tail $base]]] \
+        [file exists [file join $dst [file tail ${rootname}.sg4]]] \
+        [file exists [file join $dst [file tail ${rootname}.sn4]]] \
+        [file exists [file join $dst [file tail ${rootname}.stc]]]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 1 1 1}
+
+
+test finder-move-1.0 {move relocates si5 companion files and refreshes} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set src [::finder_test::makeTempDir move_src]
+    set dst [::finder_test::makeTempDir move_dst]
+
+    set base [file join $src k.si5]
+    set rootname [file rootname $base]
+
+    ::finder_test::writeFileOfSize $base 10
+    ::finder_test::writeFileOfSize ${rootname}.sg5 1
+    ::finder_test::writeFileOfSize ${rootname}.sn5 1
+    ::finder_test::writeFileOfSize ${rootname}.stc 1
+
+    set ::finder_test::tk_chooseDirectory_return $dst
+
+    # Act
+    ::file::finder::move $base
+
+    # Assert
+    list \
+        [file exists $base] \
+        [file exists ${rootname}.sg5] \
+        [file exists ${rootname}.sn5] \
+        [file exists ${rootname}.stc] \
+        [file exists [file join $dst [file tail $base]]] \
+        [file exists [file join $dst [file tail ${rootname}.sg5]]] \
+        [file exists [file join $dst [file tail ${rootname}.sn5]]] \
+        [file exists [file join $dst [file tail ${rootname}.stc]]] \
+        [llength $::finder_test::refreshCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {0 0 0 0 1 1 1 1 1}
+
+
+test finder-backup-1.0 {backup copies si4 base and companions with timestamp suffix and refreshes} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir backup_si4]
+
+    set base [file join $root base.si4]
+    set rootname [file rootname $base]
+
+    ::finder_test::writeFileOfSize $base 10
+    ::finder_test::writeFileOfSize ${rootname}.sg4 1
+    ::finder_test::writeFileOfSize ${rootname}.sn4 1
+    ::finder_test::writeFileOfSize ${rootname}.stc 1
+
+    # Act
+    ::file::finder::backup $base
+
+    # Assert
+    set copyBase [glob -nocomplain "${rootname}-????.??.??-????.si4"]
+    set copySg [glob -nocomplain "${rootname}-????.??.??-????.sg4"]
+    set copySn [glob -nocomplain "${rootname}-????.??.??-????.sn4"]
+    set copyStc [glob -nocomplain "${rootname}-????.??.??-????.stc"]
+
+    list \
+        [expr {[llength $copyBase] == 1}] \
+        [expr {[llength $copySg] == 1}] \
+        [expr {[llength $copySn] == 1}] \
+        [expr {[llength $copyStc] == 1}] \
+        [llength $::finder_test::refreshCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 1 1 1 1}
+
+
+test finder-backup-2.0 {backup reports an error when companion copy fails and does not refresh} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set root [::finder_test::makeTempDir backup_missing]
+
+    set base [file join $root base.si4]
+    set rootname [file rootname $base]
+
+    ::finder_test::writeFileOfSize $base 10
+    # Deliberately omit `${rootname}.sg4` / `${rootname}.sn4`.
+
+    # Act
+    ::file::finder::backup $base
+
+    # Assert
+    set msg [lindex [lindex $::finder_test::tkMessageBoxCalls 0] end]
+    set copyBase [glob -nocomplain "${rootname}-????.??.??-????.si4"]
+
+    list \
+        [expr {[string match "File copy error*" $msg]}] \
+        [expr {[llength $copyBase] == 0}] \
+        [llength $::finder_test::refreshCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 1 0}
+
+
+test finder-copy-3.0 {copy reports an error when companion copy fails} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set src [::finder_test::makeTempDir copy_missing_src]
+    set dst [::finder_test::makeTempDir copy_missing_dst]
+
+    set base [file join $src l.si4]
+    ::finder_test::writeFileOfSize $base 10
+
+    set ::finder_test::tk_chooseDirectory_return $dst
+
+    # Act
+    ::file::finder::copy $base
+
+    # Assert
+    set msg [lindex [lindex $::finder_test::tkMessageBoxCalls 0] end]
+
+    list \
+        [expr {[string match "File copy error*" $msg]}] \
+        [file exists [file join $dst [file tail $base]]]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 0}
+
+
+test finder-move-2.0 {move reports an error when companion move fails and does not refresh} -setup {
+    ::finder_test::setup
+} -body {
+    # Arrange
+    set src [::finder_test::makeTempDir move_missing_src]
+    set dst [::finder_test::makeTempDir move_missing_dst]
+
+    set base [file join $src m.si5]
+    ::finder_test::writeFileOfSize $base 10
+
+    set ::finder_test::tk_chooseDirectory_return $dst
+
+    # Act
+    ::file::finder::move $base
+
+    # Assert
+    set msg [lindex [lindex $::finder_test::tkMessageBoxCalls 0] end]
+
+    list \
+        [expr {[string match "File rename error*" $msg]}] \
+        [file exists $base] \
+        [llength $::finder_test::refreshCalls]
+} -cleanup {
+    ::finder_test::cleanup
+} -result {1 1 0}
+
+
+cleanupTests

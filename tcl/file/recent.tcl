@@ -11,10 +11,21 @@ catch {source [scidConfigFile recentfiles]}
 
 namespace eval ::recentFiles {}
 
+################################################################################
 # ::recentFiles::save
-#   Saves the recent-file-list file, reporting any error in a message box
-#   if reportError is true.
-#
+#   Persists the recent-files list to disk.
+# Visibility:
+#   Public.
+# Inputs:
+#   - reportError: Boolean. If true, shows a warning dialog on write failure.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes `[scidConfigFile recentfiles]`.
+#   - May persist `::recentSort` if it exists.
+#   - Calls `::file::autoLoadBases.save`.
+#   - May show a `tk_messageBox` on failure.
+################################################################################
 proc ::recentFiles::save {{reportError 0}} {
   global recentFiles
   set f {}
@@ -39,10 +50,18 @@ proc ::recentFiles::save {{reportError 0}} {
   close $f
 }
 
+################################################################################
 # ::recentFiles::add
-#   Adds a file to the recent files list, or moves it to the front
-#   if that file is already in the list.
-#
+#   Adds a file to the front of the recent-files list.
+# Visibility:
+#   Public.
+# Inputs:
+#   - fname: File path to add (ignored if empty).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `recentFiles(data)`.
+################################################################################
 proc ::recentFiles::add {fname} {
   global recentFiles
   
@@ -62,23 +81,42 @@ proc ::recentFiles::add {fname} {
   set rlist [linsert $rlist 0 $fname]
   
   # Trim the list if necessary:
-  if {[llength $rlist] < $recentFiles(limit)} {
-    set rlist [lrange $rlist 0 [expr {$recentFiles(limit) - 1} ]]
+  if {[llength $rlist] > $recentFiles(limit)} {
+    set rlist [lrange $rlist 0 [expr {$recentFiles(limit) - 1}]]
   }
   
   set recentFiles(data) $rlist
   # ::recentFiles::save
 }
 
+################################################################################
 # ::recentFiles::load
-#   Loads the selected recent file, or switches to its database slot
-#   if it is already open.
-#
+#   Loads a recent file by delegating to `::file::Open`.
+# Visibility:
+#   Public.
+# Inputs:
+#   - fname: File path to open.
+# Returns:
+#   - Integer: the return value of `::file::Open`.
+# Side effects:
+#   - Calls `::file::Open`, which is responsible for any open-or-switch behaviour.
+################################################################################
 proc ::recentFiles::load {fname} {
   ::file::Open $fname
 }
 
-#################################################################################
+################################################################################
+# ::recentFiles::treeshow
+#   Populates a menu with recent databases, opening each as a tree view.
+# Visibility:
+#   Public.
+# Inputs:
+#   - menu: Tk menu widget path to populate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears and inserts commands into the given menu.
+################################################################################
 proc ::recentFiles::treeshow {menu} {
   global recentFiles
   set rlist $recentFiles(data)
@@ -92,11 +130,22 @@ proc ::recentFiles::treeshow {menu} {
   }
 }
 
-#################################################################################
+################################################################################
 # ::recentFiles::show
-#   Adds the recent files to the end of the specified menu.
-#   Returns the number of menu entries added.
-#
+#   Inserts recent files into a menu at a given index, optionally creating an
+#   overflow submenu.
+# Visibility:
+#   Public.
+# Inputs:
+#   - menu: Tk menu widget path to insert into.
+#   - idx: Menu index at which to start inserting.
+# Returns:
+#   - Integer: number of entries inserted into `menu` (including the "..." cascade
+#     entry, if created; excludes entries inserted into `$menu.recentFiles`).
+# Side effects:
+#   - Inserts entries into `menu` and may create/destroy `$menu.recentFiles`.
+#   - Populates `::helpMessage` for the inserted menu entries.
+################################################################################
 proc ::recentFiles::show {menu idx} {
   global recentFiles
   set rlist $recentFiles(data)
@@ -148,17 +197,24 @@ proc ::recentFiles::show {menu idx} {
   return [expr {$nfiles + 1} ]
 }
 
+################################################################################
 # ::recentFiles::menuname
-#   Given a full-path filename, returns a possibly shortened
-#   version suitable for displaying in a menu, such as
-#   "..../my/files/abc.pgn" instead of "/long/path/to/my/files/abc.pgn"
-#
+#   Formats a filename for display in a menu (may shorten long paths).
+# Visibility:
+#   Private.
+# Inputs:
+#   - fname: File path.
+# Returns:
+#   - String: menu-friendly filename.
+# Side effects:
+#   - None.
+################################################################################
 proc ::recentFiles::menuname {fname} {
-  set mname $fname
-  set mname [file nativename $mname]
-  if {[string length $mname] < 25} { return $mname }
-  
-  # Generate a menu name " ..../path/filename" for the file:
+  set nativeName [file nativename $fname]
+  if {[string length $nativeName] < 25} { return $nativeName }
+
+  # Generate a menu name "..../path/filename" for the file.
+  set mname [file tail $fname]
   set dir [file dirname $fname]
   while {1} {
     set tail [file join [file tail $dir] $mname]
@@ -166,15 +222,25 @@ proc ::recentFiles::menuname {fname} {
     if {[string length $tail] > 20} { break }
     set mname $tail
   }
+
   set mname [file join .... $mname]
   set mname [file nativename $mname]
   return $mname
 }
 
+################################################################################
 # ::recentFiles::configure
-#   Produces a dialog box for configuring the number of recent files
-#   to display in the File menu and in a submenu.
-#
+#   Populates a container with preference widgets for recent-files menu sizing.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Parent widget path to populate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and grids child widgets under `w`.
+#   - Binds widgets to `recentFiles(menu)` and `recentFiles(extra)`.
+################################################################################
 proc ::recentFiles::configure { w } {
   global recentFiles
 

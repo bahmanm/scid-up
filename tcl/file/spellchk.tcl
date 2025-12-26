@@ -20,12 +20,20 @@ set spellcheckAmbiguous 0
 #
 set spellstate idle
 
-# loadSpellCheckFile:
-#    Presents a File Open dialog box for a Scid spellcheck file,
-#    then tries to read the file. If the parameter "message" is true
-#    (which is the default), a message box indicating the results
-#    is displayed.
-#
+################################################################################
+# ::loadSpellCheckFile
+#   Loads a Scid spellcheck file, optionally reporting the outcome.
+# Visibility:
+#   Public.
+# Inputs:
+#   - message: Boolean (defaults to 1). If true, shows success/failure dialogs.
+# Returns:
+#   - String: selected file path, or "" if cancelled or loading fails.
+# Side effects:
+#   - Opens a `tk_getOpenFile` dialog.
+#   - Calls `sc_name read` and updates `::spellCheckFile`.
+#   - Shows a progress window and may show `tk_messageBox` dialogs.
+################################################################################
 proc loadSpellCheckFile {{message 1}} {
   global spellCheckFile
   set ftype { { "Scid Spellcheck files" {".ssp"} } }
@@ -50,9 +58,20 @@ proc loadSpellCheckFile {{message 1}} {
   return $fullname
 }
 
-# TODO: remove getSpellCheckFile
-# - change loadSpellCheckFile {message 1} to {dlg_parent ""} and use it for tk_getOpenFile
-# - move $widget delete and insert to the caller
+################################################################################
+# ::getSpellCheckFile
+#   (Deprecated) Prompts for a spellcheck file and updates a widget with the path.
+# Visibility:
+#   Private.
+# Inputs:
+#   - widget: Entry-like widget to update.
+# Returns:
+#   - None.
+# Side effects:
+#   - Opens a `tk_getOpenFile` dialog.
+#   - Calls `readSpellCheckFile` and, on success, updates `widget` via `delete` and
+#     `insert`.
+################################################################################
 proc getSpellCheckFile { widget } {
     global spellCheckFile
     set ftype { { "Scid Spellcheck files" {".ssp"} } }
@@ -63,9 +82,20 @@ proc getSpellCheckFile { widget } {
     }
 }
 
-# TODO: remove readSpellCheckFile
-# - add {fn_fullname ""} to loadSpellCheckFile and if ne "" use it instead of tk_getOpenFile
-# - use loadSpellCheckFile's dlg_parent instead of hardcoding .resDialog
+################################################################################
+# ::readSpellCheckFile
+#   (Deprecated) Loads a spellcheck file from a provided path.
+# Visibility:
+#   Private.
+# Inputs:
+#   - fullname: Full path to the spellcheck file.
+#   - message: Boolean (defaults to 1). If true, shows success/failure dialogs.
+# Returns:
+#   - Boolean: 1 on success, 0 on failure.
+# Side effects:
+#   - Calls `sc_name read` and updates `::spellCheckFile`.
+#   - Shows a progress window and may show `tk_messageBox` dialogs.
+################################################################################
 proc readSpellCheckFile { fullname {message 1}} {
   global spellCheckFile
 
@@ -89,8 +119,20 @@ proc readSpellCheckFile { fullname {message 1}} {
     return 1
 }
 
-# Set the environment when the correction scan starts
-#
+################################################################################
+# ::startScanning
+#   Switches the spellcheck window into the scanning UI state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::spellstate` to "scanning".
+#   - Disables buttons in `.spellcheckWin.buttons.*`, sets the Cancel button text
+#     to "Stop", and binds <Alt-s> to stop.
+################################################################################
 proc startScanning {} {
     global spellstate
     global spellcheckType
@@ -111,8 +153,20 @@ proc startScanning {} {
     }
 }
 
-# Set the environment when the correction scan stops
-#
+################################################################################
+# ::stopScanning
+#   Restores the spellcheck window to the idle UI state after scanning.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::spellstate` to "idle".
+#   - Re-enables buttons in `.spellcheckWin.buttons.*`, restores the Cancel button
+#     text, and binds <Alt-c> to cancel/close.
+################################################################################
 proc stopScanning {} {
     global spellstate
     global spellcheckType
@@ -133,8 +187,19 @@ proc stopScanning {} {
 }
 
 
-# Set the environment when correction starts
-#
+################################################################################
+# ::startCorrecting
+#   Switches the spellcheck window into the correction UI state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::spellstate` to "correcting".
+#   - Disables buttons in `.spellcheckWin.buttons.*`.
+################################################################################
 proc startCorrecting {} {
     global spellstate
     global spellcheckType
@@ -155,13 +220,20 @@ proc startCorrecting {} {
 }
 
 
-# Start the correction scan and dump the results into the
-# text window. After this the user may edit the correction
-# 'script' and actually make the corrections.
-#
-# While the scan is running, all buttons except a stop button
-# are disabled.
-#
+################################################################################
+# ::updateSpellCheckWin
+#   Runs a spellcheck scan for the given name type and displays the results.
+# Visibility:
+#   Private.
+# Inputs:
+#   - type: One of the Scid name types (e.g. "Player", "Event", "Site", "Round").
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.spellcheckWin.text.text` with a status message and results.
+#   - Calls `sc_name spellcheck` and uses `progressBarSet` for progress reporting.
+#   - Shows `ERROR::MessageBox` on failure.
+################################################################################
 proc updateSpellCheckWin {type} {
     global spellcheckType spell_maxCorrections spellcheckSurnames
     global spellcheckAmbiguous
@@ -190,9 +262,24 @@ proc updateSpellCheckWin {type} {
 }
 
 
-# Create the spell checking window with its event handlers
-# and start the initial correction scan
-#
+################################################################################
+# ::openSpellCheckWin
+#   Opens the spellcheck window for a given name type.
+# Visibility:
+#   Public.
+# Inputs:
+#   - type: One of the Scid name types (e.g. "Player", "Event", "Site", "Round").
+#   - parent: Parent window for error dialogs (defaults to `.`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::spellcheckType`.
+#   - Creates `.spellcheckWin` and its widgets, plus key bindings.
+#   - May show error dialogs (e.g. window already open; spellcheck file load
+#     cancelled/failed).
+#   - Ensures a spellcheck file is loaded (may call `loadSpellCheckFile`).
+#   - Kicks off an initial scan via `updateSpellCheckWin`.
+################################################################################
 proc openSpellCheckWin {type {parent .}} {
     global spellcheckType spellcheckSurnames
     global spellcheckAmbiguous

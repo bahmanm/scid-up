@@ -1,0 +1,357 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure the config file does not leak state across runs.
+catch {file delete -force [scidConfigFile recentfiles]}
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::recentFiles {}
+namespace eval ::file {}
+namespace eval ::file::autoLoadBases {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] file recent.tcl]
+
+namespace eval ::recent_test {
+    variable stubbedCommands {}
+
+    variable fileCalls {}
+    variable autoLoadBasesSaveCalls {}
+
+    variable menuOps
+    array set menuOps {}
+
+    variable destroyedMenus {}
+}
+
+proc ::recent_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::recent_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::recent_test::defineMenu {path} {
+    if {[llength [info commands $path]]} {
+        error "Menu command already exists: $path"
+    }
+    interp alias {} $path {} ::recent_test::dispatchMenu $path
+    return $path
+}
+
+proc ::recent_test::dispatchMenu {path subcmd args} {
+    variable menuOps
+
+    switch -- $subcmd {
+        delete -
+        insert -
+        add {
+            lappend menuOps($path) [list $subcmd {*}$args]
+            return
+        }
+        default {
+            error "Menu $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::recent_test::menuOps {path} {
+    variable menuOps
+    if {![info exists menuOps($path)]} {
+        return {}
+    }
+    return $menuOps($path)
+}
+
+proc ::recent_test::setup {} {
+    ::recent_test::restoreStubs
+
+    set ::recent_test::fileCalls {}
+    set ::recent_test::autoLoadBasesSaveCalls {}
+
+    catch {array unset ::recent_test::menuOps}
+    array set ::recent_test::menuOps {}
+
+    set ::recent_test::destroyedMenus {}
+
+    unset -nocomplain ::helpMessage
+    unset -nocomplain ::recentSort
+
+    set ::scidVersion "test"
+
+    # Reset defaults.
+    set ::recentFiles(limit) 10
+    set ::recentFiles(menu) 9
+    set ::recentFiles(extra) 9
+    set ::recentFiles(data) {}
+
+    catch {file delete -force [scidConfigFile recentfiles]}
+
+    # ---- Stubs ----
+
+    ::recent_test::stubCommand ::file::Open {fname} {
+        lappend ::recent_test::fileCalls [list Open $fname]
+        return
+    }
+
+    ::recent_test::stubCommand ::file::openBaseAsTree {fname} {
+        lappend ::recent_test::fileCalls [list openBaseAsTree $fname]
+        return
+    }
+
+    ::recent_test::stubCommand ::file::autoLoadBases.save {ch} {
+        lappend ::recent_test::autoLoadBasesSaveCalls [list $ch]
+        return
+    }
+
+    ::recent_test::stubCommand menu {path args} {
+        # Minimal `menu` creation helper for headless tests.
+        ::recent_test::defineMenu $path
+        return $path
+    }
+
+    ::recent_test::stubCommand destroy {path} {
+        lappend ::recent_test::destroyedMenus $path
+        if {[llength [info commands $path]]} {
+            rename $path ""
+        }
+        return
+    }
+}
+
+proc ::recent_test::cleanup {} {
+    ::recent_test::restoreStubs
+
+    foreach cmd [info commands .testMenu*] {
+        catch {rename $cmd ""}
+    }
+
+    unset -nocomplain ::helpMessage
+    unset -nocomplain ::recentSort
+
+    catch {file delete -force [scidConfigFile recentfiles]}
+}
+
+# ---- Tests ----
+
+test recent-add-ignores-empty-1.0 {add ignores empty filenames} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set ::recentFiles(data) [list a b]
+
+    # Act
+    ::recentFiles::add ""
+
+    # Assert
+    return $::recentFiles(data)
+} -cleanup {
+    ::recent_test::cleanup
+} -result {a b}
+
+
+test recent-add-dedupes-and-prepends-1.0 {add dedupes and prepends existing filenames} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set ::recentFiles(data) [list /a /b /c /b]
+
+    # Act
+    ::recentFiles::add /b
+
+    # Assert
+    return $::recentFiles(data)
+} -cleanup {
+    ::recent_test::cleanup
+} -result {/b /a /c}
+
+
+test recent-add-trims-to-limit-1.0 {add trims the list to recentFiles(limit)} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set ::recentFiles(limit) 3
+
+    # Act
+    ::recentFiles::add /a
+    ::recentFiles::add /b
+    ::recentFiles::add /c
+    ::recentFiles::add /d
+    ::recentFiles::add /e
+
+    # Assert
+    return $::recentFiles(data)
+} -cleanup {
+    ::recent_test::cleanup
+} -result {/e /d /c}
+
+
+test recent-load-1.0 {load delegates to ::file::Open} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::recentFiles::load /tmp/x.si4
+
+    # Assert
+    return $::recent_test::fileCalls
+} -cleanup {
+    ::recent_test::cleanup
+} -result {{Open /tmp/x.si4}}
+
+
+test recent-menuname-short-1.0 {menuname returns short native paths unchanged} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set fname [file nativename [file join /tmp a.pgn]]
+
+    # Act
+    ::recentFiles::menuname $fname
+} -cleanup {
+    ::recent_test::cleanup
+} -result [file nativename [file join /tmp a.pgn]]
+
+
+test recent-menuname-long-1.0 {menuname shortens long paths with an ellipsis prefix} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set fname [file join /this/is/a/very/long/path/that/should/be/shortened abcdef.pgn]
+
+    # Act
+    set mname [::recentFiles::menuname $fname]
+
+    # Assert
+    list \
+        [string match "*....*" $mname] \
+        [string match "*abcdef.pgn" $mname] \
+        [expr {[string length $mname] < [string length [file nativename $fname]]}]
+} -cleanup {
+    ::recent_test::cleanup
+} -result {1 1 1}
+
+
+test recent-treeshow-1.0 {treeshow builds menu commands for each recent file} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set m .testMenu
+    ::recent_test::defineMenu $m
+    set ::recentFiles(limit) 5
+    set ::recentFiles(data) [list /a /b]
+
+    # Act
+    ::recentFiles::treeshow $m
+
+    # Assert
+    set ops [::recent_test::menuOps $m]
+    list \
+        [lindex $ops 0] \
+        [lindex $ops 1] \
+        [lindex $ops 2]
+} -cleanup {
+    ::recent_test::cleanup
+} -result [list \
+    {delete 0 end} \
+    [list add command -label /a -command [list ::file::openBaseAsTree /a]] \
+    [list add command -label /b -command [list ::file::openBaseAsTree /b]] \
+]
+
+
+test recent-show-no-extra-1.0 {show inserts recent files and returns the count when no extra submenu is needed} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set m .testMenu
+    ::recent_test::defineMenu $m
+
+    set ::recentFiles(menu) 5
+    set ::recentFiles(extra) 5
+    set ::recentFiles(data) [list /a /b /c]
+
+    # Act
+    set added [::recentFiles::show $m 0]
+
+    # Assert
+    set ops [::recent_test::menuOps $m]
+
+    list \
+        $added \
+        [llength $ops] \
+        [array size ::helpMessage]
+} -cleanup {
+    ::recent_test::cleanup
+} -result {3 3 3}
+
+
+test recent-show-extra-submenu-1.0 {show creates an extra submenu when there are more files than recentFiles(menu)} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set m .testMenu
+    ::recent_test::defineMenu $m
+
+    set ::recentFiles(menu) 2
+    set ::recentFiles(extra) 2
+    set ::recentFiles(data) [list /a /b /c /d]
+
+    # Act
+    set added [::recentFiles::show $m 0]
+
+    # Assert
+    set ops [::recent_test::menuOps $m]
+    set subOps [::recent_test::menuOps $m.recentFiles]
+
+    list \
+        $added \
+        [expr {[llength $ops] >= 3}] \
+        [expr {[llength $subOps] == 2}] \
+        [expr {[array size ::helpMessage] >= 4}]
+} -cleanup {
+    ::recent_test::cleanup
+} -result {3 1 1 1}
+
+
+test recent-save-writes-config-1.0 {save writes recent-files config including recentSort and autoload bases} -setup {
+    ::recent_test::setup
+} -body {
+    # Arrange
+    set ::scidVersion "X"
+    set ::recentFiles(limit) 7
+    set ::recentFiles(menu) 3
+    set ::recentFiles(extra) 2
+    set ::recentFiles(data) [list /a /b]
+    set ::recentSort "name"
+
+    set path [scidConfigFile recentfiles]
+
+    # Act
+    ::recentFiles::save
+
+    # Assert
+    set ch [open $path r]
+    set content [read $ch]
+    close $ch
+
+    list \
+        [file exists $path] \
+        [string match "*# Scid X recent files list*" $content] \
+        [string match "*set recentFiles(limit) 7*" $content] \
+        [string match "*set recentFiles(menu) 3*" $content] \
+        [string match "*set recentFiles(extra) 2*" $content] \
+        [string match "*set recentFiles(data) {/a /b}*" $content] \
+        [string match "*set ::recentSort name*" $content] \
+        [expr {[llength $::recent_test::autoLoadBasesSaveCalls] == 1}]
+} -cleanup {
+    ::recent_test::cleanup
+} -result {1 1 1 1 1 1 1 1}
+
+
+cleanupTests
