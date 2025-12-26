@@ -1,0 +1,636 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::maint {}
+
+source [file join [::scid_test::tclDir] file maint.tcl]
+
+namespace eval ::maint_test {
+    variable stubbedCommands {}
+
+    variable scBaseCalls {}
+    variable scGameCalls {}
+    variable updateCalls {}
+
+    variable busyCalls {}
+    variable unbusyCalls {}
+    variable updateBoardCalls {}
+    variable notifyCalls {}
+    variable refreshCalls {}
+
+    variable tkMessageBoxCalls {}
+    variable destroyCalls {}
+    variable progressCalls {}
+
+    variable errorMessageBoxCalls {}
+    variable fileSwitchCalls {}
+    variable gameClearCalls {}
+
+    variable sc_base_current 1
+    variable sc_base_isReadOnly 0
+    variable sc_game_number 1
+
+    variable sc_base_compact_stats_error 0
+    variable sc_base_compact_stats {0 0 0 0}
+
+    variable sc_base_compact_error 0
+}
+
+proc ::maint_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::maint_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::maint_test::defineEntryGetWidget {path value} {
+    variable entryValues
+
+    set entryValues($path) $value
+
+    ::maint_test::stubCommand $path {subcmd args} [format {
+        switch -- $subcmd {
+            get { return $::maint_test::entryValues(%s) }
+            default { error "Widget %s subcommand $subcmd not stubbed" }
+        }
+    } [list $path] [list $path]]
+}
+
+proc ::maint_test::setup {} {
+    ::maint_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {array unset ::maint_test::entryValues}
+
+    # Arrange
+    set ::maint_test::scBaseCalls {}
+    set ::maint_test::scGameCalls {}
+    set ::maint_test::updateCalls {}
+
+    set ::maint_test::busyCalls {}
+    set ::maint_test::unbusyCalls {}
+    set ::maint_test::updateBoardCalls {}
+    set ::maint_test::notifyCalls {}
+    set ::maint_test::refreshCalls {}
+
+    set ::maint_test::tkMessageBoxCalls {}
+    set ::maint_test::destroyCalls {}
+    set ::maint_test::progressCalls {}
+
+    set ::maint_test::errorMessageBoxCalls {}
+    set ::maint_test::fileSwitchCalls {}
+    set ::maint_test::gameClearCalls {}
+
+    set ::maint_test::sc_base_current 1
+    set ::maint_test::sc_base_isReadOnly 0
+    set ::maint_test::sc_game_number 1
+
+    set ::maint_test::sc_base_compact_stats_error 0
+    set ::maint_test::sc_base_compact_stats {0 0 0 0}
+
+    set ::maint_test::sc_base_compact_error 0
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+
+    set ::curr_db 1
+    set ::clipbase_db 9
+
+    set ::maintFlag W
+
+    # Minimal translations used by `compactDB`.
+    array set ::tr {
+        CompactDatabase "Compact database"
+        Cancel "Cancel"
+    }
+
+    ::maint_test::stubCommand ::tr {key} {
+        return $key
+    }
+
+    # ---- Core stubs ----
+
+    ::maint_test::stubCommand sc_base {subcmd args} {
+        lappend ::maint_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            current {
+                return $::maint_test::sc_base_current
+            }
+            isReadOnly {
+                return $::maint_test::sc_base_isReadOnly
+            }
+            gameflag {
+                return
+            }
+            extra {
+                return
+            }
+            filename {
+                return "testbase.si4"
+            }
+            compact {
+                set base [lindex $args 0]
+                set maybeStats [lindex $args 1]
+                if {$maybeStats eq "stats"} {
+                    if {$::maint_test::sc_base_compact_stats_error} {
+                        return -code error "compact stats failed"
+                    }
+                    return $::maint_test::sc_base_compact_stats
+                }
+
+                if {$::maint_test::sc_base_compact_error} {
+                    # Mirror Scid’s numeric error codes contract used by `compactDB`.
+                    set ::ERROR::FileOpen 1
+                    set ::ERROR::msg(CompactCreate) "Compact create failed"
+                    return -code error -errorcode 1 "compact failed"
+                }
+                return ""
+            }
+            default {
+                error "sc_base $subcmd not stubbed in maint tests"
+            }
+        }
+    }
+
+    ::maint_test::stubCommand sc_game {subcmd args} {
+        lappend ::maint_test::scGameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            number { return $::maint_test::sc_game_number }
+            default { error "sc_game $subcmd not stubbed in maint tests" }
+        }
+    }
+
+    ::maint_test::stubCommand update {args} {
+        lappend ::maint_test::updateCalls $args
+        return
+    }
+
+    ::maint_test::stubCommand busyCursor {w} {
+        lappend ::maint_test::busyCalls $w
+        return
+    }
+
+    ::maint_test::stubCommand unbusyCursor {w} {
+        lappend ::maint_test::unbusyCalls $w
+        return
+    }
+
+    ::maint_test::stubCommand updateBoard {args} {
+        lappend ::maint_test::updateBoardCalls $args
+        return
+    }
+
+    namespace eval ::notify {}
+    ::maint_test::stubCommand ::notify::DatabaseModified {base} {
+        lappend ::maint_test::notifyCalls [list DatabaseModified $base]
+        return
+    }
+    ::maint_test::stubCommand ::notify::DatabaseChanged {} {
+        lappend ::maint_test::notifyCalls [list DatabaseChanged]
+        return
+    }
+
+    namespace eval ::game {}
+    ::maint_test::stubCommand ::game::Clear {} {
+        lappend ::maint_test::gameClearCalls {}
+        if {[info exists ::maint_test::game_clear_return]} {
+            return $::maint_test::game_clear_return
+        }
+        return "ok"
+    }
+
+    ::maint_test::stubCommand tk_messageBox {args} {
+        lappend ::maint_test::tkMessageBoxCalls $args
+
+        set answer ""
+        if {[info exists ::scid_test::tk_messageBox_answer]} {
+            set answer $::scid_test::tk_messageBox_answer
+        }
+
+        set typeIdx [lsearch -exact $args "-type"]
+        if {$typeIdx != -1 && ($typeIdx + 1) < [llength $args]} {
+            set type [lindex $args [expr {$typeIdx + 1}]]
+            if {$type eq "yesno"} {
+                if {$answer eq ""} {
+                    error "tk_messageBox -type yesno called without ::scid_test::tk_messageBox_answer"
+                }
+                return $answer
+            }
+            if {$type eq "okcancel"} {
+                if {$answer ne ""} {
+                    return $answer
+                }
+                return "ok"
+            }
+        }
+
+        return "ok"
+    }
+
+    ::maint_test::stubCommand destroy {w} {
+        lappend ::maint_test::destroyCalls $w
+        return
+    }
+
+    ::maint_test::stubCommand progressWindow {title message cancelText} {
+        lappend ::maint_test::progressCalls [list progressWindow $title $message $cancelText]
+        return
+    }
+
+    ::maint_test::stubCommand closeProgressWindow {} {
+        lappend ::maint_test::progressCalls [list closeProgressWindow]
+        return
+    }
+
+    namespace eval ::ERROR {}
+    ::maint_test::stubCommand ::ERROR::MessageBox {{extra ""}} {
+        lappend ::maint_test::errorMessageBoxCalls $extra
+        return "MESSAGEBOX"
+    }
+
+    namespace eval ::file {}
+    ::maint_test::stubCommand ::file::SwitchToBase {base keepGame} {
+        lappend ::maint_test::fileSwitchCalls [list $base $keepGame]
+        return
+    }
+
+    # Default: never treat .calvarWin as existing.
+    ::maint_test::stubCommand winfo {subcmd args} {
+        if {$subcmd eq "exists"} {
+            return 0
+        }
+        error "winfo $subcmd not stubbed in maint tests"
+    }
+}
+
+proc ::maint_test::cleanup {} {
+    ::maint_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::curr_db
+    unset -nocomplain ::clipbase_db
+    unset -nocomplain ::maintFlag
+
+    unset -nocomplain ::maint_test::game_clear_return
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+
+    catch {array unset ::maint_test::entryValues}
+    catch {array unset ::tr}
+}
+
+# ---- Tests ----
+
+test maint-SetGameFlags-current-1.0 {SetGameFlags current sets/unsets the correct game flag} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_current 3
+    set ::maint_test::sc_game_number 7
+
+    # Act
+    ::maint::SetGameFlags delete current 1
+
+    # Assert
+    list \
+        $::maint_test::scBaseCalls \
+        $::maint_test::busyCalls \
+        $::maint_test::unbusyCalls \
+        $::maint_test::updateBoardCalls \
+        $::maint_test::notifyCalls
+} -cleanup {
+    ::maint_test::cleanup
+} -result [list \
+    [list \
+        [list current] \
+        [list gameflag 3 7 set delete] \
+        [list current] \
+    ] \
+    {} \
+    {} \
+    [list {}] \
+    [list [list DatabaseModified 3]] \
+]
+
+
+test maint-SetGameFlags-filter-1.0 {SetGameFlags filter uses dbfilter and shows a busy cursor} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_current 2
+
+    # Act
+    ::maint::SetGameFlags user filter 0
+
+    # Assert
+    list \
+        $::maint_test::busyCalls \
+        $::maint_test::updateCalls \
+        $::maint_test::scBaseCalls \
+        $::maint_test::unbusyCalls
+} -cleanup {
+    ::maint_test::cleanup
+} -result [list \
+    [list .] \
+    [list [list idletasks]] \
+    [list \
+        [list current] \
+        [list gameflag 2 dbfilter unset user] \
+        [list current] \
+    ] \
+    [list .] \
+]
+
+
+test maint-SetGameFlags-all-mark-1.0 {SetGameFlags all respects the current maintFlag when using mark} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_current 4
+    set ::maintFlag U
+
+    # Act
+    ::maint::SetGameFlags mark all 1
+
+    # Assert
+    list $::maint_test::scBaseCalls $::maint_test::busyCalls $::maint_test::unbusyCalls
+} -cleanup {
+    ::maint_test::cleanup
+} -result [list \
+    [list \
+        [list current] \
+        [list gameflag 4 all set U] \
+        [list current] \
+    ] \
+    [list .] \
+    [list .] \
+]
+
+
+test maint-SetGameFlags-unknown-1.0 {SetGameFlags returns early for unknown type} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::maint::SetGameFlags delete nonsense 1
+
+    # Assert
+    list $::maint_test::scBaseCalls $::maint_test::updateBoardCalls $::maint_test::notifyCalls
+} -cleanup {
+    ::maint_test::cleanup
+} -result [list \
+    [list [list current]] \
+    {} \
+    {} \
+]
+
+
+test maint-validateCustomFlag-1.0 {validateCustomFlag enables the Save button for a valid value} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set w .maintWin
+    ::scid_test::widgets::defineWidget $w.customFlags.edit
+
+    # Act
+    set ok [::maint::validateCustomFlag $w "abcd"]
+
+    # Assert
+    list \
+        $ok \
+        [::scid_test::widgets::getState $w.customFlags.edit -state]
+} -cleanup {
+    ::maint_test::cleanup
+} -result {true normal}
+
+
+test maint-validateCustomFlag-2.0 {validateCustomFlag rejects values longer than 8 chars without enabling Save} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set w .maintWin
+    ::scid_test::widgets::defineWidget $w.customFlags.edit
+
+    # Act
+    set ok [::maint::validateCustomFlag $w "123456789"]
+
+    # Assert
+    list \
+        $ok \
+        [::scid_test::widgets::hasState $w.customFlags.edit -state]
+} -cleanup {
+    ::maint_test::cleanup
+} -result {false 0}
+
+
+test maint-saveCustomFlags-1.0 {saveCustomFlags stores all six custom flag descriptions and refreshes} -setup {
+    ::maint_test::setup
+
+    ::maint_test::stubCommand ::maint::Refresh {} {
+        lappend ::maint_test::refreshCalls [list Refresh]
+        return
+    }
+} -body {
+    # Arrange
+    set w .maintWin
+    set ::curr_db 5
+
+    ::maint_test::defineEntryGetWidget $w.customFlags.text1 "A"
+    ::maint_test::defineEntryGetWidget $w.customFlags.text2 "B"
+    ::maint_test::defineEntryGetWidget $w.customFlags.text3 "C"
+    ::maint_test::defineEntryGetWidget $w.customFlags.text4 "D"
+    ::maint_test::defineEntryGetWidget $w.customFlags.text5 "E"
+    ::maint_test::defineEntryGetWidget $w.customFlags.text6 "F"
+
+    # Act
+    ::maint::saveCustomFlags $w
+
+    # Assert
+    set extras {}
+    foreach call $::maint_test::scBaseCalls {
+        if {[lindex $call 0] eq "extra"} {
+            lappend extras $call
+        }
+    }
+
+    list $extras $::maint_test::refreshCalls
+} -cleanup {
+    ::maint_test::cleanup
+} -result [list \
+    [list \
+        [list extra 5 flag1 A] \
+        [list extra 5 flag2 B] \
+        [list extra 5 flag3 C] \
+        [list extra 5 flag4 D] \
+        [list extra 5 flag5 E] \
+        [list extra 5 flag6 F] \
+    ] \
+    [list [list Refresh]] \
+]
+
+
+test maint-baseIsCompactable-1.0 {baseIsCompactable rejects read-only databases} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_current 2
+    set ::maint_test::sc_base_isReadOnly 1
+
+    # Act
+    baseIsCompactable
+} -cleanup {
+    ::maint_test::cleanup
+} -result 0
+
+
+test maint-baseIsCompactable-2.0 {baseIsCompactable rejects the clipbase database} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_current 9
+    set ::maint_test::sc_base_isReadOnly 0
+    set ::clipbase_db 9
+
+    # Act
+    baseIsCompactable
+} -cleanup {
+    ::maint_test::cleanup
+} -result 0
+
+
+test maint-baseIsCompactable-3.0 {baseIsCompactable accepts a normal writable database} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_current 7
+    set ::maint_test::sc_base_isReadOnly 0
+    set ::clipbase_db 9
+
+    # Act
+    baseIsCompactable
+} -cleanup {
+    ::maint_test::cleanup
+} -result 1
+
+
+test maint-compactDB-cancel-1.0 {compactDB returns immediately when Clear is cancelled} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::game_clear_return "cancel"
+
+    # Act
+    compactDB 2
+
+    # Assert
+    list \
+        [llength $::maint_test::gameClearCalls] \
+        [llength $::maint_test::tkMessageBoxCalls] \
+        [llength $::maint_test::progressCalls]
+} -cleanup {
+    ::maint_test::cleanup
+} -result {1 0 0}
+
+
+test maint-compactDB-statsError-1.0 {compactDB reports stats errors via ERROR::MessageBox} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_compact_stats_error 1
+
+    # Act
+    set res [compactDB 2]
+
+    # Assert
+    list \
+        $res \
+        [llength $::maint_test::errorMessageBoxCalls] \
+        [expr {[string match "*Compact database*" [lindex $::maint_test::errorMessageBoxCalls 0]]}]
+} -cleanup {
+    ::maint_test::cleanup
+} -result {MESSAGEBOX 1 1}
+
+
+test maint-compactDB-confirmCancel-1.0 {compactDB does not compact when confirmation is cancelled} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_compact_stats {1 2 3 4}
+    set ::scid_test::tk_messageBox_answer "cancel"
+
+    # Act
+    compactDB 2
+
+    # Assert
+    set didCompact 0
+    foreach call $::maint_test::scBaseCalls {
+        if {[lindex $call 0] eq "compact" && [llength $call] == 2} {
+            set didCompact 1
+        }
+    }
+
+    list $didCompact [llength $::maint_test::progressCalls]
+} -cleanup {
+    ::maint_test::cleanup
+} -result {0 0}
+
+
+test maint-compactDB-success-1.0 {compactDB compacts after confirmation and notifies DatabaseModified} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_compact_stats {1 2 3 4}
+
+    # Act
+    compactDB 2
+
+    # Assert
+    set destroyed [lsort -dict $::maint_test::destroyCalls]
+    set expectedDestroyed [lsort -dict [list .analysisWin1 .analysisWin2 .coachWin .inputengineconsole .reviewgame .tacticsWin]]
+
+    list \
+        [expr {$destroyed eq $expectedDestroyed}] \
+        [llength $::maint_test::progressCalls] \
+        $::maint_test::notifyCalls \
+        [llength $::maint_test::gameClearCalls]
+} -cleanup {
+    ::maint_test::cleanup
+} -result [list \
+    1 \
+    2 \
+    [list [list DatabaseModified 2]] \
+    2 \
+]
+
+
+test maint-compactDB-error-1.0 {compactDB switches to clipbase and notifies DatabaseChanged on error} -setup {
+    ::maint_test::setup
+} -body {
+    # Arrange
+    set ::maint_test::sc_base_compact_stats {1 2 3 4}
+    set ::maint_test::sc_base_compact_error 1
+
+    # Act
+    compactDB 2
+
+    # Assert
+    list \
+        [llength $::maint_test::errorMessageBoxCalls] \
+        $::maint_test::fileSwitchCalls \
+        $::maint_test::notifyCalls
+} -cleanup {
+    ::maint_test::cleanup
+} -result [list \
+    1 \
+    [list [list 9 0]] \
+    [list [list DatabaseChanged]] \
+]
+
+
+cleanupTests
