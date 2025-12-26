@@ -62,8 +62,8 @@ proc ::recentFiles::add {fname} {
   set rlist [linsert $rlist 0 $fname]
   
   # Trim the list if necessary:
-  if {[llength $rlist] < $recentFiles(limit)} {
-    set rlist [lrange $rlist 0 [expr {$recentFiles(limit) - 1} ]]
+  if {[llength $rlist] > $recentFiles(limit)} {
+    set rlist [lrange $rlist 0 [expr {$recentFiles(limit) - 1}]]
   }
   
   set recentFiles(data) $rlist
@@ -154,11 +154,11 @@ proc ::recentFiles::show {menu idx} {
 #   "..../my/files/abc.pgn" instead of "/long/path/to/my/files/abc.pgn"
 #
 proc ::recentFiles::menuname {fname} {
-  set mname $fname
-  set mname [file nativename $mname]
-  if {[string length $mname] < 25} { return $mname }
-  
-  # Generate a menu name " ..../path/filename" for the file:
+  set nativeName [file nativename $fname]
+  if {[string length $nativeName] < 25} { return $nativeName }
+
+  # Generate a menu name "..../path/filename" for the file.
+  set mname [file tail $fname]
   set dir [file dirname $fname]
   while {1} {
     set tail [file join [file tail $dir] $mname]
@@ -166,6 +166,7 @@ proc ::recentFiles::menuname {fname} {
     if {[string length $tail] > 20} { break }
     set mname $tail
   }
+
   set mname [file join .... $mname]
   set mname [file nativename $mname]
   return $mname
