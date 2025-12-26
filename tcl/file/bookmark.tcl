@@ -1,5 +1,5 @@
 # bookmark.tcl:
-# Bookmarks list and Recently-used files list in Scid.
+# Bookmarks list in Scid.
 
 set bookmarks(data) {}
 set bookmarks(subMenus) 0
@@ -142,12 +142,14 @@ proc ::bookmarks::RefreshMenu {menu} {
 
 ################################################################################
 # ::bookmarks::CanAdd
+#   Returns whether the current game is eligible to be bookmarked.
 # Visibility:
 #   Public.
 # Inputs:
 #   - None.
 # Returns:
-#   - 1 if the current game can be bookmarked, otherwise 0.
+#   - 1 if `sc_game number` is not 0 and `::curr_db` is not `::clipbase_db`,
+#     otherwise 0.
 # Side effects:
 #   - None.
 ################################################################################
@@ -163,11 +165,15 @@ proc ::bookmarks::CanAdd {} {
 # Visibility:
 #   Public.
 # Inputs:
-#   - folder: Optional folder index (0-based) indicating where to insert the
-#     entry relative to folder markers.
+#   - folder: Optional folder selector.
+#       - 0 adds the bookmark at the top level (before the first folder marker).
+#       - 1 adds the bookmark to the first folder (inserted before the second
+#         folder marker, i.e. appended to the end of that folder's entries).
+#       - 2 adds the bookmark to the second folder, and so on.
 # Returns:
 #   - None.
 # Side effects:
+#   - No-ops when no database is open (`sc_base inUse` is false).
 #   - Updates `bookmarks(data)`.
 #   - Persists changes via `::bookmarks::Save`.
 #   - Refreshes menus via `::bookmarks::Refresh`.
@@ -315,6 +321,7 @@ set bookmarks(ismenu) 0
 # Side effects:
 #   - Creates and populates the `.bmedit` toplevel and its child widgets.
 #   - Stores the pre-edit list in `bookmarks(old)`.
+#   - Sets `bookmarks(edit)`.
 #   - Uses a grab on `.bmedit`.
 ################################################################################
 proc ::bookmarks::Edit {} {
@@ -449,6 +456,7 @@ proc ::bookmarks::EditSelect {{sel ""}} {
 
 ################################################################################
 # ::bookmarks::isfolder
+#   Returns whether the entry is a folder marker.
 # Visibility:
 #   Private.
 # Inputs:
@@ -465,6 +473,7 @@ proc ::bookmarks::isfolder {entry} {
 
 ################################################################################
 # ::bookmarks::Text
+#   Returns the display text of a bookmark entry.
 # Visibility:
 #   Private.
 # Inputs:
@@ -502,6 +511,7 @@ proc ::bookmarks::IndexText {entry} {
 
 ################################################################################
 # ::bookmarks::SetText
+#   Returns a copy of `entry` with its display text replaced.
 # Visibility:
 #   Private.
 # Inputs:
@@ -580,7 +590,7 @@ proc ::bookmarks::EditDelete {} {
 
 ################################################################################
 # ::bookmarks::EditNew
-#   Inserts a new folder or current-game bookmark after the current selection.
+#   Inserts a new folder or current-game bookmark.
 # Visibility:
 #   Private.
 # Inputs:
@@ -588,8 +598,8 @@ proc ::bookmarks::EditDelete {} {
 # Returns:
 #   - None.
 # Side effects:
-#   - Updates `bookmarks(data)`.
-#   - Updates `.bmedit.f.list` and the selection.
+#   - Updates `bookmarks(data)` by inserting after the current selection.
+#   - Appends a new item to `.bmedit.f.list` and selects it.
 ################################################################################
 proc ::bookmarks::EditNew {{type "folder"}} {
   global bookmarks
