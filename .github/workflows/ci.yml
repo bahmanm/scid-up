@@ -40,7 +40,7 @@ jobs:
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get update && sudo apt-get install -y tcl-dev tk-dev
+        sudo apt-get update && sudo apt-get install -y tcl9.0-dev tk-dev
 
     - name: Configure CMake
       run: >
