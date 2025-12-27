@@ -16,12 +16,32 @@
 
 namespace eval ::search {}
 
-# Create a search window using a common framework.
-# It manages the database, the filter and the and/or/reset combination of the
-# results with the previous filter's values.
-# @param create_subwnd: a function that creates all the specific widgets of a
-#                       search window. Should return a valid command that when
-#                       evaluated returns a list of the search's options.
+################################################################################
+# ::search::Open
+#   Creates a search window using a shared search framework.
+# Visibility:
+#   Public.
+# Inputs:
+#   - ref_base: Initial database selection value passed to `CreateSelectDBWidget`.
+#     The selected database is stored in `::search::dbase_($w)`.
+#   - ref_filter: Initial filter name for the search window.
+#   - title: Translation key used for the window title (and window path suffix).
+#   - create_subwnd: Callback that creates the search-specific widgets. It must
+#     return an `options_cmd` command which supports the following call shapes:
+#       - `$options_cmd <widgetPath>`: Returns a widget configuration list (used
+#         to configure the presets menubutton).
+#       - `$options_cmd reset`: Resets the search-specific option values.
+#       - `$options_cmd`: Returns a list whose first element is the options list
+#         to pass to `sc_filter search`, and whose optional second element is a
+#         secondary options list for a follow-up "ignore colours" search.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates (and may destroy/recreate) the dialog `.wnd_$title`.
+#   - Writes `::search::dbase_($w)` and `::search::filter_($w)`.
+#   - Registers a variable trace and event bindings to keep the UI in sync.
+#   - Calls `::search::refresh_` to populate filter size information.
+################################################################################
 proc ::search::Open {ref_base ref_filter title create_subwnd} {
 	set w ".wnd_$title"
 	if {[winfo exists $w]} { destroy $w }
@@ -77,12 +97,35 @@ proc ::search::Open {ref_base ref_filter title create_subwnd} {
 	::search::refresh_ $w
 }
 
+################################################################################
+# ::search::CloseAll
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys all active search windows tracked in `::search::dbase_`.
+################################################################################
 proc ::search::CloseAll {} {
 	foreach {w} [array names ::search::dbase_] {
 		destroy $w
 	}
 }
 
+################################################################################
+# ::search::DatabaseModified
+#   Refreshes any open search windows that target the given database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - dbase: Database handle/slot identifier.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::search::refresh_` for each matching search window.
+################################################################################
 proc ::search::DatabaseModified {dbase} {
 	foreach {w w_base} [array get ::search::dbase_] {
 		if {$dbase == $w_base} {
@@ -91,6 +134,19 @@ proc ::search::DatabaseModified {dbase} {
 	}
 }
 
+################################################################################
+# ::search::refresh_
+#   Updates the filter-operation label with the current filter/game counts.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Search window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_filter sizes` and updates `$w.filterOp` label text.
+#   - Destroys `w` if filter sizes cannot be retrieved.
+################################################################################
 proc ::search::refresh_ {w} {
 	if {[catch {
 		lassign [sc_filter sizes $::search::dbase_($w) $::search::filter_($w)] filterSz gameSz
@@ -102,10 +158,39 @@ proc ::search::refresh_ {w} {
 	$w.filterOp configure -text "[::tr FilterOperation] ($n_games)"
 }
 
+################################################################################
+# ::search::use_dbfilter_
+#   Switches the active filter reference for a window to `dbfilter`.
+# Visibility:
+#   Private.
+# Inputs:
+#   - unused1: Trace callback argument (unused).
+#   - w: Search window path.
+#   - unused2: Trace callback argument (unused).
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::search::filter_($w)` to `dbfilter`.
+################################################################################
 proc ::search::use_dbfilter_ { unused1 w {unused2 ""} } {
 	set ::search::filter_($w) dbfilter
 }
 
+################################################################################
+# ::search::progressbar_
+#   Shows or hides the search progress bar and stop button.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Search window path.
+#   - show_hide: Either "show" or "hide".
+# Returns:
+#   - None.
+# Side effects:
+#   - Reconfigures the window layout (grid remove/add).
+#   - Updates the progress bar via `progressBarSet`.
+#   - Acquires/releases a grab on the stop button.
+################################################################################
 proc ::search::progressbar_ {w show_hide} {
 	if {$show_hide eq "show"} {
 		grid remove $w.buttons.save
@@ -127,6 +212,26 @@ proc ::search::progressbar_ {w show_hide} {
 	}
 }
 
+################################################################################
+# ::search::start_
+#   Executes a search and updates the active filter for the search window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - new_filter: When true, creates a new filter and opens a new game list.
+#   - w: Search window path.
+#   - options_cmd: Command that returns a list where the first element is the
+#     search options list, and the optional second element is the
+#     ignore-colours-hack options list.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/composes filters via `sc_filter new` / `sc_filter compose`.
+#   - Optionally copies the prior filter contents, depending on filter operation.
+#   - Calls `::search::do_search_` (and optionally a second pass) with UI progress.
+#   - Updates `::search::filter_($w)` and notifies listeners via `::notify::filter`.
+#   - May open a new game list window when `new_filter` is true.
+################################################################################
 proc ::search::start_ {new_filter w options_cmd} {
 	set dbase $::search::dbase_($w)
 	set src_filter $::search::filter_($w)
@@ -174,6 +279,24 @@ proc ::search::start_ {new_filter w options_cmd} {
 	}
 }
 
+################################################################################
+# ::search::do_search_
+#   Applies a search to a filter, respecting the selected filter operation.
+# Visibility:
+#   Private.
+# Inputs:
+#   - dbase: Database handle/slot identifier.
+#   - filter: Filter identifier to populate.
+#   - filter_op: One of "reset", "and", or "or".
+#   - options: List of options to pass to `sc_filter search`.
+#   - reset_progressbar: Command to execute to reset/refresh the UI progress.
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates `filter` contents via `sc_filter reset/search/or/negate`.
+#   - If `filter_op` is "or", creates and releases a temporary filter.
+#   - Executes additional tag searches for any `-tag_pair` options.
+################################################################################
 proc ::search::do_search_ {dbase filter filter_op options reset_progressbar} {
 	switch $filter_op {
 		reset {
@@ -208,13 +331,39 @@ proc ::search::do_search_ {dbase filter filter_op options reset_progressbar} {
 }
 
 
+################################################################################
 # ::search::board
 #   Opens the search window for the current board position.
-#
+# Visibility:
+#   Public.
+# Inputs:
+#   - ref_base: Initial database selection value passed to `CreateSelectDBWidget`.
+#   - ref_filter: Initial filter name for the search window.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates (and may destroy/recreate) the Board Search window.
+################################################################################
 proc ::search::board {{ref_base ""} {ref_filter "dbfilter"}} {
 	::search::Open $ref_base $ref_filter BoardSearch ::search::boardCreateFrame
 }
 
+################################################################################
+# ::search::boardCreateFrame
+#   Creates the board-search specific widgets and returns the options command.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Parent widget path for the board-search options area.
+# Returns:
+#   - options_cmd: A command name that implements the shared search framework
+#     contract documented in `::search::Open`. For board search, the no-argument
+#     form returns a 1-item list containing the board-search options list (i.e.
+#     it omits the optional ignore-colours-hack second element).
+# Side effects:
+#   - Creates child ttk widgets under `w`.
+#   - Initialises board-search option variables on first use.
+################################################################################
 proc ::search::boardCreateFrame {w} {
 	if {![info exists ::search::boardOptType_]} {
 		::search::boardOptions reset
@@ -242,6 +391,23 @@ proc ::search::boardCreateFrame {w} {
 	return "::search::boardOptions"
 }
 
+################################################################################
+# ::search::boardOptions
+#   Implements the board-search preset/options command contract.
+# Visibility:
+#   Private.
+# Inputs:
+#   - cmd: Optional control argument. Recognised values:
+#       - "reset": Restores default board-search option values.
+#       - <widgetPath>: When it begins with '.', returns a menu configuration list.
+# Returns:
+#   - When cmd is a widget path: Returns `{-state disabled}`.
+#   - When cmd is "reset": Returns None.
+#   - Otherwise: Returns a 1-item list containing the board-search options list.
+# Side effects:
+#   - May initialise or update `::search::boardOptType_`, `::search::boardOptInVars_`,
+#     and `::search::boardOptIgnoreCol_`.
+################################################################################
 proc ::search::boardOptions {{cmd ""}} {
 	if {[string index $cmd 0] eq "."} {
 		return [list -state disabled]
