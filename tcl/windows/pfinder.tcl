@@ -20,10 +20,10 @@ proc ::plist::defaults {} {
 
 ::plist::defaults
 
-trace variable ::plist::minElo w [list ::utils::validate::Integer [sc_info limit elo] 0]
-trace variable ::plist::maxElo w [list ::utils::validate::Integer [sc_info limit elo] 0]
-trace variable ::plist::minGames w [list ::utils::validate::Integer 9999 0]
-trace variable ::plist::maxGames w [list ::utils::validate::Integer 9999 0]
+trace add variable ::plist::minElo write [list ::utils::validate::Integer [sc_info limit elo] 0]
+trace add variable ::plist::maxElo write [list ::utils::validate::Integer [sc_info limit elo] 0]
+trace add variable ::plist::minGames write [list ::utils::validate::Integer 9999 0]
+trace add variable ::plist::maxGames write [list ::utils::validate::Integer 9999 0]
 
 proc ::plist::toggle {} {
   set w .plist
@@ -67,7 +67,7 @@ proc ::plist::Open {} {
   focus $f.name
   ttk::label $f.size -text $::tr(TmtLimit:) -font $fbold
   ttk::combobox $f.esize -width 4 -justify right -textvar ::plist::size -values {50 100 200 500 1000}
-  trace variable ::plist::size w {::utils::validate::Integer 1000 0}
+  trace add variable ::plist::size write {::utils::validate::Integer 1000 0}
   # foreach n {50 100 200 500 1000} {
     # $f.esize list insert end $n
   # }

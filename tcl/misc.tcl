@@ -492,6 +492,26 @@ proc format_clock_from_seconds {seconds} {
     return $res
 }
 
+proc clock_to_seconds {clk} {
+    if {$clk eq ""} { return "" }
+
+    set sign 1
+    if {[string index $clk 0] eq "-"} {
+        set sign -1
+        set clk [string range $clk 1 end]
+    }
+
+    if {[regexp {^([0-9]+):([0-9]{2}):([0-9]{2})$} $clk -> h m s]} {
+        # ok
+    } elseif {[regexp {^([0-9]+):([0-9]{2})$} $clk -> m s]} {
+        set h 0
+    } else {
+        return ""
+    }
+
+    return [expr {$sign * (3600 * $h + 60 * $m + $s)}]
+}
+
 ################################################################################
 # clock widget
 ################################################################################

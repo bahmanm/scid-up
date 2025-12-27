@@ -12,8 +12,8 @@ set ::ptrack::mode "-games"
 set ::ptrack::color blue
 set ::ptrack::colors [list black red yellow cyan blue xblack xred xyellow xcyan xblue]
 
-trace variable ::ptrack::moves(start) w {::utils::validate::Integer 999 0}
-trace variable ::ptrack::moves(end) w {::utils::validate::Integer 999 0}
+trace add variable ::ptrack::moves(start) write {::utils::validate::Integer 999 0}
+trace add variable ::ptrack::moves(end) write {::utils::validate::Integer 999 0}
 
 ################################################################################
 # ::ptrack::sq

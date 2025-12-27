@@ -10,11 +10,11 @@ foreach {n v} {start 0000.00.00 end 2047.12.31 minPlayers 2 maxPlayers 999 \
   set ::tourney::$n $v
 }
 
-trace variable ::tourney::start w ::utils::validate::Date
-trace variable ::tourney::end w ::utils::validate::Date
+trace add variable ::tourney::start write ::utils::validate::Date
+trace add variable ::tourney::end write ::utils::validate::Date
 foreach {n v} {minPlayers 999 maxPlayers 999 minGames 9999 maxGames 9999 \
                  minElo [sc_info limit elo] maxElo [sc_info limit elo]} {
-  trace variable ::tourney::$n w [list ::utils::validate::Integer $v 0]
+  trace add variable ::tourney::$n write [list ::utils::validate::Integer $v 0]
 }
 
 set tourneyWin 0
@@ -84,7 +84,7 @@ proc ::tourney::Open {} {
 
   ttk::label $f.size -text $::tr(TmtLimit:) -font $fbold
   ttk::combobox $f.esize -width 4 -justify right -textvar ::tourney::size -values {10 20 50 100 200 500 1000}
-  trace variable ::tourney::size w {::utils::validate::Integer 1000 0}
+  trace add variable ::tourney::size write {::utils::validate::Integer 1000 0}
 
   pack $f.esize $f.size -side right -pady "2 0"
 

@@ -150,22 +150,22 @@ public:
 };
 
 inline Tcl_Obj* ObjMaker(bool v) {
-	return Tcl_NewBooleanObj(v);
+	return Tcl_NewWideIntObj(v);
 }
 inline Tcl_Obj* ObjMaker(int v) {
-	return Tcl_NewIntObj(v);
+	return Tcl_NewWideIntObj(v);
 }
 inline Tcl_Obj* ObjMaker(unsigned int v) {
 	ASSERT(v <= static_cast<unsigned int>(std::numeric_limits<int>::max()));
-	return Tcl_NewIntObj(static_cast<int>(v));
+	return Tcl_NewWideIntObj(static_cast<int>(v));
 }
 inline Tcl_Obj* ObjMaker(unsigned long v) {
 	ASSERT(v <= static_cast<unsigned long>(std::numeric_limits<int>::max()));
-	return Tcl_NewIntObj(static_cast<int>(v));
+	return Tcl_NewWideIntObj(static_cast<int>(v));
 }
 inline Tcl_Obj* ObjMaker(unsigned long long v) {
 	ASSERT(v <= static_cast<unsigned long long>(std::numeric_limits<int>::max()));
-	return Tcl_NewIntObj(static_cast<int>(v));
+	return Tcl_NewWideIntObj(static_cast<int>(v));
 }
 inline Tcl_Obj* ObjMaker(double v) {
 	return Tcl_NewDoubleObj(v);
@@ -191,7 +191,7 @@ inline void List::push_back(const T& value) {
 
 inline UI_res_t ResultHelper(UI_handle_t ti, errorT res) {
 	if (res == OK) return TCL_OK;
-	Tcl_SetObjErrorCode(ti, Tcl_NewIntObj(res));
+	Tcl_SetObjErrorCode(ti, Tcl_NewWideIntObj(res));
 	return TCL_ERROR;
 }
 

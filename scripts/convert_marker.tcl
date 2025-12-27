@@ -8,7 +8,7 @@
 # Example: convert_marker.tcl in.pgn out.pgn
 # Copyright (C) 2025 Uwe Klimmek
 
-package require Tcl 8.6
+package require Tcl 9
 
 proc mapColor { color } {
     set col [string toupper [string index $color 0 ]]

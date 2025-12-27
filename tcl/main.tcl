@@ -187,11 +187,10 @@ proc updateStatusBar {} {
         regexp $clkExp $comment -> ::gamePlayers(clockW)
         regexp $clkExp $prevCom -> ::gamePlayers(clockB)
         regexp $clkExp $movetime -> movetime
-        catch {
-            set movetime [expr {
-                [clock scan $movetime -format {%H:%M:%S}] - \
-                [clock scan $::gamePlayers(clockW) -format {%H:%M:%S}] }]
-            set ::gamePlayers(movetime) [format_clock_from_seconds $movetime]
+        set _mt [clock_to_seconds $movetime]
+        set _cw [clock_to_seconds $::gamePlayers(clockW)]
+        if {$_mt ne "" && $_cw ne ""} {
+            set ::gamePlayers(movetime) [format_clock_from_seconds [expr {$_mt - $_cw}]]
         }
         if {$toMove == "white"} {
             set temp_swap $::gamePlayers(clockW)

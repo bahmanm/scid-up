@@ -113,7 +113,7 @@ static uint htmlDiagStyle = 0;
 inline int
 setResult (Tcl_Interp * ti, const char * str)
 {
-    Tcl_SetResult (ti, (char *) str, TCL_STATIC);
+    Tcl_SetObjResult (ti, Tcl_NewStringObj(str, -1));
     return TCL_OK;
 }
 
@@ -124,9 +124,7 @@ setResult (Tcl_Interp * ti, const char * str)
 inline int
 setIntResult (Tcl_Interp * ti, int i)
 {
-    char temp [20];
-    sprintf (temp, "%d", i);
-    Tcl_SetResult (ti, temp, TCL_VOLATILE);
+    Tcl_SetObjResult (ti, Tcl_NewWideIntObj(i));
     return TCL_OK;
 }
 
@@ -137,9 +135,7 @@ setIntResult (Tcl_Interp * ti, int i)
 inline int
 setUintResult (Tcl_Interp * ti, uint i)
 {
-    char temp [20];
-    sprintf (temp, "%u", i);
-    Tcl_SetResult (ti, temp, TCL_VOLATILE);
+    Tcl_SetObjResult (ti, Tcl_NewWideIntObj(i));
     return TCL_OK;
 }
 
@@ -178,7 +174,7 @@ setUintWidthResult (Tcl_Interp * ti, uint i, uint width)
 {
     char temp [20];
     sprintf (temp, "%0*u", width, i);
-    Tcl_SetResult (ti, temp, TCL_VOLATILE);
+    Tcl_SetObjResult (ti, Tcl_NewStringObj(temp, -1));
     return TCL_OK;
 }
 
@@ -215,9 +211,9 @@ translate (Tcl_Interp * ti, const char * name)
 }
 
 inline int errorResult (Tcl_Interp * ti, errorT err, const char* errorMsg = 0) {
-    if (errorMsg != 0) Tcl_SetResult (ti, (char*) errorMsg, TCL_STATIC);
+    if (errorMsg != 0) Tcl_SetObjResult (ti, Tcl_NewStringObj(errorMsg, -1));
     ASSERT(err != OK);
-    Tcl_SetObjErrorCode(ti, Tcl_NewIntObj(err));
+    Tcl_SetObjErrorCode(ti, Tcl_NewWideIntObj(err));
     return TCL_ERROR;
 }
 inline int errorResult (Tcl_Interp * ti, const char* errorMsg) {
@@ -1349,7 +1345,7 @@ translateECO (Tcl_Interp * ti, const char * strFrom, DString * dstrTo)
     ecoTranslateT * trans = ecoTranslations;
     dstrTo->Clear();
     dstrTo->Append (strFrom);
-    const char * language = Tcl_GetVar (ti, "language", TCL_GLOBAL_ONLY);
+    const char * language = Tcl_GetVar2 (ti, "language", NULL, TCL_GLOBAL_ONLY);
     if (language == NULL) { return; }
     char lang = language[0];
     while (trans != NULL) {
@@ -7946,7 +7942,13 @@ sc_search_header (ClientData, Tcl_Interp * ti, scidBaseT* base, HFilter& filter,
     bool wToMove = true;
     bool bToMove = true;
 
-    int pgnTextCount = 0;
+	#if defined(TCL_MAJOR_VERSION) && TCL_MAJOR_VERSION >= 9
+	using scid_tcl_size = Tcl_Size;
+	#else
+	using scid_tcl_size = int;
+	#endif
+
+    scid_tcl_size pgnTextCount = 0;
     const char ** sPgnText = NULL;
 
     const char * options[] = {
@@ -7991,7 +7993,7 @@ sc_search_header (ClientData, Tcl_Interp * ti, scidBaseT* base, HFilter& filter,
             break;
 
         case OPT_PGN:
-            if (Tcl_SplitList (ti, (char *)value, &pgnTextCount,
+            if (Tcl_SplitList (ti, value, &pgnTextCount,
                                &sPgnText) != TCL_OK) {
                 delete[] wTitles;
                 delete[] bTitles;
@@ -8131,11 +8133,11 @@ sc_search_header (ClientData, Tcl_Interp * ti, scidBaseT* base, HFilter& filter,
 				scratchGame->AddPgnStyle(PGN_STYLE_SYMBOLS);
 				scratchGame->SetPgnFormat(PGN_FORMAT_Plain);
 				const char* buf = scratchGame->WriteToPGN().first;
-				for (int m = 0; m < pgnTextCount; m++) {
-					if (match) {
-						match = strContains(buf, sPgnText[m]);
+					for (scid_tcl_size m = 0; m < pgnTextCount; m++) {
+						if (match) {
+							match = strContains(buf, sPgnText[m]);
+						}
 					}
-				}
 			}
 		}
 

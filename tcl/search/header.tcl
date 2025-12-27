@@ -70,14 +70,14 @@ proc ::search::header::defaults {} {
 }
 ::search::header::defaults
 
-trace variable sDateMin w ::utils::validate::Date
-trace variable sDateMax w ::utils::validate::Date
-trace variable sEventDateMin w ::utils::validate::Date
-trace variable sEventDateMax w ::utils::validate::Date
+trace add variable sDateMin write ::utils::validate::Date
+trace add variable sDateMax write ::utils::validate::Date
+trace add variable sEventDateMin write ::utils::validate::Date
+trace add variable sEventDateMax write ::utils::validate::Date
 
 # Forcing ECO entry to be valid ECO codes:
 foreach i {sEcoMin sEcoMax} {
-  trace variable $i w {::utils::validate::Regexp {^$|^[A-Ea-e]$|^[A-Ea-e][0-9]$|^[A-Ea-e][0-9][0-9]$|^[A-Ea-e][0-9][0-9][a-z]$|^[A-Ea-e][0-9][0-9][a-z][1-4]$}}
+  trace add variable $i write {::utils::validate::Regexp {^$|^[A-Ea-e]$|^[A-Ea-e][0-9]$|^[A-Ea-e][0-9][0-9]$|^[A-Ea-e][0-9][0-9][a-z]$|^[A-Ea-e][0-9][0-9][a-z][1-4]$}}
 }
 
 set sHeaderFlagFrame 0
@@ -757,4 +757,3 @@ proc chooseEcoRange {} {
 
 ###
 ### End of file: search.tcl
-

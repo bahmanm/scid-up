@@ -453,15 +453,15 @@ set edate 0; set eyear 0; set emonth 0; set eday 0
 
 # Traces on game-save dialog variables to ensure sane values:
 
-trace variable resultVal w  ::utils::validate::Result
-trace variable whiteElo w {::utils::validate::Integer [sc_info limit elo] 0}
-trace variable blackElo w {::utils::validate::Integer [sc_info limit elo] 0}
-trace variable year w {::utils::validate::Integer [sc_info limit year] 1}
-trace variable month w {::utils::validate::Integer 12 1}
-trace variable day w {::utils::validate::Integer 31 1}
-trace variable eyear w {::utils::validate::Integer [sc_info limit year] 1}
-trace variable emonth w {::utils::validate::Integer 12 1}
-trace variable eday w {::utils::validate::Integer 31 1}
+trace add variable resultVal write  ::utils::validate::Result
+trace add variable whiteElo write {::utils::validate::Integer [sc_info limit elo] 0}
+trace add variable blackElo write {::utils::validate::Integer [sc_info limit elo] 0}
+trace add variable year write {::utils::validate::Integer [sc_info limit year] 1}
+trace add variable month write {::utils::validate::Integer 12 1}
+trace add variable day write {::utils::validate::Integer 31 1}
+trace add variable eyear write {::utils::validate::Integer [sc_info limit year] 1}
+trace add variable emonth write {::utils::validate::Integer 12 1}
+trace add variable eday write {::utils::validate::Integer 31 1}
 
 set gsaveNum 0
 set i 0; set j 0
@@ -507,11 +507,11 @@ proc clearMatchList { tw } {
 
 # Traces to update the match list as names are typed in:
 
-trace variable event w { updateMatchList .save.g.list e 9 }
-trace variable site  w { updateMatchList .save.g.list s 9 }
-trace variable white w { updateMatchList .save.g.list p 9 }
-trace variable black w { updateMatchList .save.g.list p 9 }
-trace variable round w { updateMatchList .save.g.list r 9 }
+trace add variable event write { updateMatchList .save.g.list e 9 }
+trace add variable site  write { updateMatchList .save.g.list s 9 }
+trace add variable white write { updateMatchList .save.g.list p 9 }
+trace add variable black write { updateMatchList .save.g.list p 9 }
+trace add variable round write { updateMatchList .save.g.list r 9 }
 
 set editName ""
 set editNameNew ""
@@ -522,10 +522,10 @@ set editNameRType "Elo"
 set editDate ""
 set editDateNew ""
 
-trace variable editNameRating w {::utils::validate::Integer [sc_info limit elo] 0}
-trace variable editName w { updateMatchList .nedit.g.list "" 9 }
-trace variable editDate w ::utils::validate::Date
-trace variable editDateNew w ::utils::validate::Date
+trace add variable editNameRating write {::utils::validate::Integer [sc_info limit elo] 0}
+trace add variable editName write { updateMatchList .nedit.g.list "" 9 }
+trace add variable editDate write ::utils::validate::Date
+trace add variable editDateNew write ::utils::validate::Date
 
 proc editNameNewProc { tw nametype maxMatches name el op } {
   global editNameNew
@@ -538,7 +538,7 @@ proc editNameNewProc { tw nametype maxMatches name el op } {
   catch {updateMatchList $tw $nametype $maxMatches $name $el $op}
 }
 
-trace variable editNameNew w { editNameNewProc .nedit.g.list "" 9 }
+trace add variable editNameNew write { editNameNewProc .nedit.g.list "" 9 }
 
 
 set nameEditorWin 0
