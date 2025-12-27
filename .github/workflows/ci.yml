@@ -14,18 +14,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-rolling ]
         build_type: [ Release ]
         c_compiler: [ gcc, clang, cl ]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-rolling
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
+          - os: ubuntu-rolling
             c_compiler: clang
             cpp_compiler: clang++
         exclude:
-          - os: ubuntu-latest
+          - os: ubuntu-rolling
             c_compiler: cl
 
     steps:
