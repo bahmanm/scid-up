@@ -103,7 +103,7 @@ proc ::utils::date::_month {win delta} {
       incr year 1
     }
   }
-  if {[catch {::date::_select $win "$year-$month-$day"}]} {
+  if {[catch {::utils::date::_select $win "$year-$month-$day"}]} {
     ::utils::date::_select $win "$year-$month-28"
   }
 }
