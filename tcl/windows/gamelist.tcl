@@ -785,6 +785,7 @@ proc glist.create {{w} {layout} {reset_layout false}} {
   } else {
     bind $w.glist <Menu> "glist.popupmenu_ %W %x %y %X %Y $layout"
   }
+  bind $w.glist <ButtonPress-1> "glist.press_ %W %x %y"
   bind $w.glist <2> "glist.popupmenu_ %W %x %y %X %Y $layout"
   bind $w.glist <3> "glist.popupmenu_ %W %x %y %X %Y $layout"
   bind $w.glist <ButtonRelease-1> "glist.release_ %W %x %y %s $layout"
@@ -1419,15 +1420,45 @@ proc glist.removecol_ {{w} {layout} {col}} {
   $w configure -displaycolumns $::glist_ColOrder($layout)
 }
 
+proc glist.press_ {{w} {x} {y}} {
+  set ::glist_pressMode($w) ""
+  set ::glist_activeHeading($w) ""
+  set ::glist_resizeColumn($w) ""
+
+  set region [$w identify region $x $y]
+  if {$region eq "separator"} {
+    set ::glist_pressMode($w) "resize"
+    set colX [expr {$x > 0 ? $x - 1 : 0}]
+    set ::glist_resizeColumn($w) [$w identify column $colX $y]
+  } elseif {$region eq "heading"} {
+    set ::glist_pressMode($w) "heading"
+    set ::glist_activeHeading($w) [$w identify column $x $y]
+  }
+}
+
+proc glist.persistResizedColumn_ {{w} {layout} {col}} {
+  if {![winfo exists $w]} { return }
+  if {$col eq ""} { return }
+
+  set col_id [$w column $col -id]
+  set i [lsearch -exact $::glist_Headers $col_id]
+  if {$i != -1} {
+    lset ::glist_ColWidth($layout) $i [$w column $col -width]
+  }
+}
+
 proc glist.release_ {{w} {x} {y} {event_state} {layout}} {
-  if {$::ttk::treeview::State(pressMode) eq "resize"} {
-    set col_id [$w column $::ttk::treeview::State(resizeColumn) -id]
-    set i [lsearch -exact $::glist_Headers $col_id]
-    if {$i != -1} {
-      lset ::glist_ColWidth($layout) $i [$w column $::ttk::treeview::State(resizeColumn) -width]
-    }
+  set pressMode ""
+  if {[info exists ::glist_pressMode($w)]} {
+    set pressMode $::glist_pressMode($w)
+  }
+
+  if {$pressMode eq "resize"} {
+    set col $::glist_resizeColumn($w)
+    # Let ttk's binding apply the resize first, then persist the new width.
+    after idle [list glist.persistResizedColumn_ $w $layout $col]
   } elseif {[$w identify region $x $y] eq "heading"} {
-    set from $::ttk::treeview::State(activeHeading)
+    set from $::glist_activeHeading($w)
     if {$from ne ""} {
       set to [$w identify column $x $y]
       if {$from != $to} {
@@ -1442,7 +1473,8 @@ proc glist.release_ {{w} {x} {y} {event_state} {layout}} {
       }
     }
   }
-  ttk::treeview::Release $w $x $y
+
+  unset -nocomplain ::glist_pressMode($w) ::glist_activeHeading($w) ::glist_resizeColumn($w)
 }
 
 image create bitmap ::glist_Arrows(0) -foreground DodgerBlue3 -data {

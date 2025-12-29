@@ -234,21 +234,36 @@ proc ::preferences::internationalization { w } {
 proc ::preferences::configureComboboxListboxFont {combo font} {
     if {![winfo exists $combo]} { return }
 
-    set popdown [ttk::combobox::PopdownWindow $combo]
-    if {![winfo exists $popdown]} {
-        after idle [list ::preferences::configureComboboxListboxFont $combo $font]
-        return
-    }
+    # Avoid ttk private APIs and instead locate the posted popdown via public geometry
+    # plus `winfo containing`.
+    after idle [list ::preferences::configureComboboxListboxFont_ $combo $font]
+}
 
-    set stack [list $popdown]
-    while {[llength $stack] > 0} {
-        set w [lindex $stack 0]
-        set stack [lrange $stack 1 end]
-        if {[winfo class $w] eq "Listbox"} {
-            catch { $w configure -font $font }
-            return
+proc ::preferences::configureComboboxListboxFont_ {combo font} {
+    if {![winfo exists $combo]} { return }
+
+    set rootX [winfo rootx $combo]
+    set rootY [winfo rooty $combo]
+    set h [winfo height $combo]
+
+    # Prefer a point just below the widget; also try just above for cases where
+    # Tk posts the list upwards (near the bottom of the screen).
+    set x [expr {$rootX + 2}]
+    foreach y [list [expr {$rootY + $h + 2}] [expr {$rootY - 2}]] {
+        set start [winfo containing $x $y]
+        if {$start eq ""} { continue }
+
+        set stack [list $start]
+        while {[llength $stack] > 0} {
+            set w [lindex $stack 0]
+            set stack [lrange $stack 1 end]
+            if {![winfo exists $w]} { continue }
+            if {[winfo class $w] eq "Listbox"} {
+                catch { $w configure -font $font }
+                return
+            }
+            set stack [concat [winfo children $w] $stack]
         }
-        set stack [concat [winfo children $w] $stack]
     }
 }
 
