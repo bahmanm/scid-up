@@ -75,6 +75,24 @@ for { set i 1 } { $i <= $nMaxPatterns } { incr i } {
   set pattPiece($i) "?";  set pattFyle($i) "?";  set pattRank($i) "?"
 }
 
+################################################################################
+# checkPieceCounts
+#   Validation callback that normalises piece-count constraints.
+# Visibility:
+#   Private.
+# Inputs:
+#   - name: Variable name passed by `trace variable`.
+#   - el: Element name passed by `trace variable`.
+#   - op: Operation name passed by `trace variable`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Validates and may modify `pMin(*)` and `pMax(*)`.
+#   - Attempts to clamp minor-piece totals (`wm`, `bm`) to the derived
+#     knight+bishop bounds; note the subsequent `pMax >= pMin` enforcement can
+#     override that clamp if the inputs are already inconsistent.
+#   - Ensures `pMax(piece) >= pMin(piece)` for all tracked pieces.
+################################################################################
 proc checkPieceCounts {name el op} {
   global pMin pMax
   ::utils::validate::Integer 9 0 $name $el $op
@@ -96,6 +114,20 @@ trace add variable pMin write checkPieceCounts
 trace add variable pMax write checkPieceCounts
 
 
+################################################################################
+# makeBoolMenu
+#   Creates a Yes/No menu button bound to a variable.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Widget path for the menubutton.
+#   - varName: Name of the variable to bind (in the global scope).
+# Returns:
+#   - Menu widget path (`$w.menu`).
+# Side effects:
+#   - Creates `$w` as a ttk menubutton and creates/configures `$w.menu`.
+#   - Initialises the variable to "Yes" if it does not yet exist.
+################################################################################
 proc makeBoolMenu {w varName} {
   upvar #0 $varName var
   if {![info exists var]} { set var "Yes" }
@@ -109,6 +141,20 @@ proc makeBoolMenu {w varName} {
   return $w.menu
 }
 
+################################################################################
+# makePieceMenu
+#   Creates a piece-selection menu button bound to a variable.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Widget path for the menubutton.
+#   - varName: Name of the variable to bind (in the global scope).
+# Returns:
+#   - Menu widget path (`$w.menu`).
+# Side effects:
+#   - Creates `$w` as a ttk menubutton and creates/configures `$w.menu`.
+#   - Initialises the variable to "?" if it does not yet exist.
+################################################################################
 proc makePieceMenu {w varName} {
   global dark
   upvar #0 $varName var
@@ -128,6 +174,19 @@ proc makePieceMenu {w varName} {
   return $w.menu
 }
 
+################################################################################
+# updatePatternImages
+#   Refreshes the pattern-row images in the Material Search window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `.sm` exists, updates `.sm.mp.patt.grid.*` widget images based on
+#     `pattBool(*)` and `pattPiece(*)`.
+################################################################################
 proc updatePatternImages {} {
   global pattPiece nPatterns pattBool
   if {! [winfo exists .sm]} { return }
@@ -145,24 +204,60 @@ proc updatePatternImages {} {
   }
 }
 
+################################################################################
 # ::search::material::zero
-#
-#   Called to clear all material minimum/maximum values to zero.
-#
+#   Clears all material minimum/maximum piece-count constraints.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Overwrites `pMin(*)` and `pMax(*)` for all tracked pieces.
+################################################################################
 proc ::search::material::zero {} {
   global pMin pMax
   array set pMin {wq 0 bq 0 wr 0 br 0 wb 0 bb 0 wn 0 bn 0 wm 0 bm 0 wp 0 bp 0}
   array set pMax {wq 0 bq 0 wr 0 br 0 wb 0 bb 0 wn 0 bn 0 wm 0 bm 0 wp 0 bp 0}
 }
 
+################################################################################
+# ::search::material::any
+#   Restores default material constraints ("any") and diff bounds.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Overwrites `pMin(*)` and `pMax(*)` for all tracked pieces.
+#   - Resets `::minMatDiff` and `::maxMatDiff`.
+################################################################################
 proc ::search::material::any {} {
   global pMin pMax
   array set pMin {wq 0 bq 0 wr 0 br 0 wb 0 bb 0 wn 0 bn 0 wm 0 bm 0 wp 0 bp 0}
   array set pMax {wq 2 bq 2 wr 2 br 2 wb 2 bb 2 wn 2 bn 2 wm 4 bm 4 wp 8 bp 8}
   set ::minMatDiff -40
-  set maxMatDiff +40
+  set ::maxMatDiff +40
 }
 
+################################################################################
+# clearPatterns
+#   Resets the pattern grid to its default, minimal state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets `pattPiece(*)`, `pattFyle(*)`, `pattRank(*)`, and `pattBool(*)`.
+#   - Resets `nPatterns` to 3.
+#   - Requires that `.sm` exists; it updates the `.sm` pattern grid widgets
+#     unconditionally (hides extra rows and re-enables add).
+################################################################################
 proc clearPatterns {} {
   global pattPiece pattFyle pattRank pattBool nPatterns nMaxPatterns
 
@@ -180,6 +275,19 @@ proc clearPatterns {} {
   updatePatternImages
 }
 
+################################################################################
+# showPattern
+#   Makes a specific pattern row visible in the pattern grid.
+# Visibility:
+#   Private.
+# Inputs:
+#   - count: 1-based pattern row index.
+# Returns:
+#   - None.
+# Side effects:
+#   - Requires that `.sm` exists; it grids `.sm.mp.patt.grid.{b,p,f,r}<count>`
+#     into the UI unconditionally.
+################################################################################
 proc showPattern { count } {
   global pattPiece pattFyle pattRank pattBool nPatterns nMaxPatterns
 	set column [expr {7 * (($count - 1) / 7)} ]
@@ -193,6 +301,20 @@ proc showPattern { count } {
 	grid $f.grid.r$count -row $row -column $column -padx "0 10" -pady 0; incr column
 }
 
+################################################################################
+# setPatterns
+#   Sets the pattern grid state from a list of pattern specifications.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pattlist: List of 4-item patterns: {piece fyle rank bool}.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `clearPatterns` and may call `showPattern` to reveal additional rows.
+#   - Updates `pattPiece(*)`, `pattFyle(*)`, `pattRank(*)`, and `pattBool(*)`.
+#   - Updates the `.sm` pattern images.
+################################################################################
 proc setPatterns {pattlist} {
   global pattPiece pattFyle pattRank pattBool nPatterns nMaxPatterns
 
@@ -215,6 +337,19 @@ proc setPatterns {pattlist} {
 }
 
 
+################################################################################
+# set1Bishops
+#   Applies the bishop-colour constraint by forcing exactly one bishop per side.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `sameBishops` or `oppBishops` is set, overwrites `pMin(wb)`, `pMax(wb)`,
+#     `pMin(bb)`, and `pMax(bb)` to 1.
+################################################################################
 proc set1Bishops { } {
   global pMin pMax oppBishops sameBishops
     if { $sameBishops || $oppBishops } {
@@ -224,10 +359,22 @@ proc set1Bishops { } {
 	set pMax(bb) 1
     }
 }
+################################################################################
 # ::search::material
-#
-#   Opens the window for searching by material or patterns.
-#
+#   Opens the Material Search window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - ref_base: Initial database selection value for `CreateSelectDBWidget`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures the `.sm` toplevel window (or raises it if it exists).
+#   - Binds UI widgets to existing global state variables (initialised at file
+#     scope), e.g. `pMin(*)`, `pMax(*)`, patterns, move range, and filter
+#     operation.
+#   - Executes the search via `sc_search material` when the user clicks Search.
+################################################################################
 proc ::search::material {{ref_base ""}} {
   global dark pMin pMax ignoreColors minMoveNum maxMoveNum
   global pattPiece pattFyle pattRank pattBool oppBishops sameBishops nPatterns nMaxPatterns
@@ -642,6 +789,25 @@ proc ::search::material {{ref_base ""}} {
   focus $f.search
 }
 
+################################################################################
+# ::search::material::save
+#   Saves the current material/pattern search settings to a `.sso` file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts for a file path via `tk_getSaveFile`.
+#   - Writes a subset of the current settings to disk:
+#       - `pMin/pMax` for {wq bq wr br wb bb wn bn wp bp} (not `wm/bm`).
+#       - `ignoreColors`, move/length ranges, bishop-colour flags, `nPatterns`,
+#         and `::search::filter::operation`.
+#       - Pattern rows up to `nPatterns`.
+#     It does not currently serialise `minMatDiff` / `maxMatDiff`.
+#   - Shows a `tk_messageBox` on success or failure.
+################################################################################
 proc ::search::material::save {} {
   global pMin pMax ignoreColors minMoveNum maxMoveNum minHalfMoves
   global pattPiece pattFyle pattRank pattBool sameBishops oppBishops nPatterns

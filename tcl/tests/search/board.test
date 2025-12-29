@@ -1,0 +1,478 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::search {}
+namespace eval ::notify {}
+namespace eval ::windows {}
+namespace eval ::windows::gamelist {}
+namespace eval ::ERROR {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] search board.tcl]
+
+namespace eval ::board_search_test {
+    variable stubbedCommands {}
+
+    variable scFilterCalls {}
+    variable nextFilterId 0
+    variable filterSizes {0 0}
+
+    variable doSearchCalls {}
+    variable progressbarCalls {}
+
+    variable notifyCalls {}
+    variable gamelistCalls {}
+
+    variable destroyCalls {}
+
+    variable formatFilterTextReturn ""
+}
+
+proc ::board_search_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::board_search_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::board_search_test::setup {} {
+    ::board_search_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::board_search_test::scFilterCalls {}
+    set ::board_search_test::nextFilterId 0
+    set ::board_search_test::filterSizes {0 0}
+
+    set ::board_search_test::doSearchCalls {}
+    set ::board_search_test::progressbarCalls {}
+
+    set ::board_search_test::notifyCalls {}
+    set ::board_search_test::gamelistCalls {}
+
+    set ::board_search_test::destroyCalls {}
+
+    set ::board_search_test::formatFilterTextReturn "FILTER"
+
+    unset -nocomplain ::search::boardOptType_
+    unset -nocomplain ::search::boardOptInVars_
+    unset -nocomplain ::search::boardOptIgnoreCol_
+
+    unset -nocomplain ::search::dbase_(.w)
+    unset -nocomplain ::search::filter_(.w)
+    unset -nocomplain ::search::filterOp_(.w)
+
+    set ::errorCode ""
+    set ::ERROR::UserCancel "USERCANCEL"
+
+    ::board_search_test::stubCommand ::tr {key} { return $key }
+
+    ::board_search_test::stubCommand destroy {w} {
+        lappend ::board_search_test::destroyCalls $w
+        return
+    }
+
+    ::board_search_test::stubCommand sc_filter {subcmd args} {
+        lappend ::board_search_test::scFilterCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            new {
+                incr ::board_search_test::nextFilterId
+                return "f$::board_search_test::nextFilterId"
+            }
+            compose {
+                # `sc_filter compose <dbase> <src_filter> ""`
+                set dbase [lindex $args 0]
+                set src [lindex $args 1]
+                return "compose_${dbase}_${src}"
+            }
+            copy -
+            reset -
+            search -
+            negate -
+            or -
+            release {
+                return
+            }
+            sizes {
+                return $::board_search_test::filterSizes
+            }
+            default {
+                error "sc_filter $subcmd not stubbed in board_search tests"
+            }
+        }
+    }
+
+    ::board_search_test::stubCommand ::search::progressbar_ {w show_hide} {
+        lappend ::board_search_test::progressbarCalls [list $w $show_hide]
+        return
+    }
+
+    ::board_search_test::stubCommand ::notify::filter {dbase filter} {
+        lappend ::board_search_test::notifyCalls [list filter $dbase $filter]
+        return
+    }
+
+    ::board_search_test::stubCommand ::windows::gamelist::Open {dbase filter} {
+        lappend ::board_search_test::gamelistCalls [list Open $dbase $filter]
+        return
+    }
+
+    ::board_search_test::stubCommand ::windows::gamelist::formatFilterText {filterSz gameSz} {
+        return $::board_search_test::formatFilterTextReturn
+    }
+
+    ::board_search_test::stubCommand ::ERROR::MessageBox {args} {
+        error "ERROR::MessageBox must not be called in these tests"
+    }
+}
+
+proc ::board_search_test::cleanup {} {
+    ::board_search_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {rename ::board_search_test::optionsCmd ""}
+
+    catch {array unset ::search::dbase_}
+    catch {array unset ::search::filter_}
+    catch {array unset ::search::filterOp_}
+
+    unset -nocomplain ::search::boardOptType_
+    unset -nocomplain ::search::boardOptInVars_
+    unset -nocomplain ::search::boardOptIgnoreCol_
+
+    unset -nocomplain ::errorCode
+    unset -nocomplain ::ERROR::UserCancel
+}
+
+# ---- Tests ----
+
+test boardOptions-dotcmd-1.0 {boardOptions returns a disabled state for menu configuration calls} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::search::boardOptions .menu
+} -cleanup {
+    ::board_search_test::cleanup
+} -result {-state disabled}
+
+
+test boardOptions-reset-1.0 {boardOptions reset initialises default option variables} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+    set ::search::boardOptType_ Material
+    set ::search::boardOptInVars_ 1
+    set ::search::boardOptIgnoreCol_ 1
+
+    # Act
+    ::search::boardOptions reset
+
+    # Assert
+    list $::search::boardOptType_ $::search::boardOptInVars_ $::search::boardOptIgnoreCol_
+} -cleanup {
+    ::board_search_test::cleanup
+} -result {Exact 0 0}
+
+
+test boardOptions-default-1.0 {boardOptions returns a list containing board options} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+    set ::search::boardOptType_ Pawns
+    set ::search::boardOptInVars_ 1
+    set ::search::boardOptIgnoreCol_ 0
+
+    # Act
+    set out [::search::boardOptions]
+
+    # Assert
+    return $out
+} -cleanup {
+    ::board_search_test::cleanup
+} -result {{board Pawns 1 0}}
+
+
+test do_search_-reset-1.0 {do_search_ with reset resets the filter and runs a search} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::search::do_search_ 1 f1 reset [list [list -eco B12]] [list ::search::progressbar_ .w show]
+
+    # Assert
+    list \
+        $::board_search_test::progressbarCalls \
+        $::board_search_test::scFilterCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result [list \
+    [list [list .w show]] \
+    [list \
+        [list reset 1 f1 full] \
+        [list search 1 f1 {-eco B12} -filter AND] \
+    ] \
+]
+
+
+test do_search_-tag-pairs-1.0 {do_search_ performs additional tag searches for -tag_pair entries} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+    set opts [list \
+        [list -eco B12] \
+        [list -tag_pair Site London] \
+        [list -tag_pair White Carlsen] \
+    ]
+
+    # Act
+    ::search::do_search_ 1 f1 and $opts [list ::search::progressbar_ .w show]
+
+    # Assert
+    list $::board_search_test::progressbarCalls $::board_search_test::scFilterCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result [list \
+    [list [list .w show] [list .w show] [list .w show]] \
+    [list \
+        [list search 1 f1 {-eco B12} -filter AND] \
+        [list search 1 f1 tags Site London] \
+        [list search 1 f1 tags White Carlsen] \
+    ] \
+]
+
+
+test do_search_-or-1.0 {do_search_ with or negates, searches, then ORs and releases} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::search::do_search_ 1 filter or [list [list -eco B12]] [list ::search::progressbar_ .w show]
+
+    # Assert
+    return $::board_search_test::scFilterCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result [list \
+    [list new 1] \
+    [list copy 1 f1 filter] \
+    [list negate 1 filter] \
+    [list search 1 filter {-eco B12} -filter AND] \
+    [list or 1 filter f1] \
+    [list release 1 f1] \
+]
+
+
+test start_-new-filter-1.0 {start_ creates a new filter, runs the search, notifies, and opens a new gamelist} -setup {
+    ::board_search_test::setup
+
+    ::board_search_test::stubCommand ::search::do_search_ {dbase filter filter_op options reset_progressbar} {
+        lappend ::board_search_test::doSearchCalls [list $dbase $filter $filter_op $options $reset_progressbar]
+        return
+    }
+} -body {
+    # Arrange
+    set w .w
+    set ::search::dbase_($w) 1
+    set ::search::filter_($w) dbfilter
+    set ::search::filterOp_($w) reset
+
+    proc ::board_search_test::optionsCmd {} {
+        return [list [list [list board Exact 0 0]] ""]
+    }
+
+    # Act
+    ::search::start_ 1 $w ::board_search_test::optionsCmd
+
+    # Assert
+    list \
+        $::board_search_test::scFilterCalls \
+        $::board_search_test::doSearchCalls \
+        $::board_search_test::notifyCalls \
+        $::board_search_test::gamelistCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result [list \
+    [list \
+        [list new 1] \
+    ] \
+    [list \
+        [list 1 f1 reset {{board Exact 0 0}} "::search::progressbar_ .w show"] \
+    ] \
+    [list \
+        [list filter 1 f1] \
+    ] \
+    [list \
+        [list Open 1 f1] \
+    ] \
+]
+
+
+test start_-compose-copy-prior-filter-1.0 {start_ compose path copies prior filter when op is not reset} -setup {
+    ::board_search_test::setup
+
+    ::board_search_test::stubCommand ::search::do_search_ {dbase filter filter_op options reset_progressbar} {
+        lappend ::board_search_test::doSearchCalls [list $dbase $filter $filter_op $options $reset_progressbar]
+        return
+    }
+} -body {
+    # Arrange
+    set w .w
+    set ::search::dbase_($w) 1
+    set ::search::filter_($w) dbfilter
+    set ::search::filterOp_($w) and
+
+    proc ::board_search_test::optionsCmd {} {
+        return [list [list [list board Exact 0 0]] ""]
+    }
+
+    # Act
+    ::search::start_ 0 $w ::board_search_test::optionsCmd
+
+    # Assert
+    list \
+        $::board_search_test::scFilterCalls \
+        $::board_search_test::doSearchCalls \
+        $::board_search_test::notifyCalls \
+        $::board_search_test::gamelistCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result [list \
+    [list \
+        [list compose 1 dbfilter ""] \
+        [list copy 1 compose_1_dbfilter dbfilter] \
+    ] \
+    [list \
+        [list 1 compose_1_dbfilter and {{board Exact 0 0}} "::search::progressbar_ .w show"] \
+    ] \
+    [list \
+        [list filter 1 compose_1_dbfilter] \
+    ] \
+    {} \
+]
+
+
+test start_-ignore-color-hack-1.0 {start_ runs a second search and merges results when ignore_color_hack is set} -setup {
+    ::board_search_test::setup
+
+    ::board_search_test::stubCommand ::search::do_search_ {dbase filter filter_op options reset_progressbar} {
+        lappend ::board_search_test::doSearchCalls [list $dbase $filter $filter_op $options $reset_progressbar]
+        return
+    }
+} -body {
+    # Arrange
+    set w .w
+    set ::search::dbase_($w) 1
+    set ::search::filter_($w) dbfilter
+    set ::search::filterOp_($w) reset
+
+    proc ::board_search_test::optionsCmd {} {
+        return [list \
+            [list [list board Exact 0 0]] \
+            [list [list board Exact 0 1]] \
+        ]
+    }
+
+    # Act
+    ::search::start_ 0 $w ::board_search_test::optionsCmd
+
+    # Assert
+    list \
+        $::board_search_test::scFilterCalls \
+        $::board_search_test::doSearchCalls \
+        $::board_search_test::notifyCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result [list \
+    [list \
+        [list compose 1 dbfilter ""] \
+        [list new 1] \
+        [list copy 1 f1 compose_1_dbfilter] \
+        [list or 1 compose_1_dbfilter f1] \
+        [list release 1 f1] \
+    ] \
+    [list \
+        [list 1 compose_1_dbfilter reset {{board Exact 0 0}} "::search::progressbar_ .w show"] \
+        [list 1 f1 reset {{board Exact 0 1}} "::search::progressbar_ .w show"] \
+    ] \
+    [list \
+        [list filter 1 compose_1_dbfilter] \
+    ] \
+]
+
+
+test refresh_-destroy-on-sizes-error-1.0 {refresh_ destroys the window when sc_filter sizes fails} -setup {
+    ::board_search_test::setup
+
+    ::board_search_test::stubCommand sc_filter {subcmd args} {
+        if {$subcmd ne "sizes"} {
+            error "Unexpected sc_filter call in refresh_ failure test: $subcmd"
+        }
+        return -code error "sizes failed"
+    }
+} -body {
+    # Arrange
+    set w .w
+    set ::search::dbase_($w) 1
+    set ::search::filter_($w) dbfilter
+
+    # Act
+    ::search::refresh_ $w
+
+    # Assert
+    return $::board_search_test::destroyCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result {.w}
+
+
+test refresh_-updates-label-1.0 {refresh_ updates the filter operation label text} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+    set w .w
+    set ::search::dbase_($w) 1
+    set ::search::filter_($w) dbfilter
+
+    set ::board_search_test::filterSizes {12 34}
+    set ::board_search_test::formatFilterTextReturn "12/34"
+
+    ::scid_test::widgets::defineWidget $w.filterOp
+
+    # Act
+    ::search::refresh_ $w
+
+    # Assert
+    ::scid_test::widgets::getState $w.filterOp -text
+} -cleanup {
+    ::board_search_test::cleanup
+} -result {FilterOperation (12/34)}
+
+
+test CloseAll-destroys-windows-1.0 {CloseAll destroys all windows referenced in search::dbase_} -setup {
+    ::board_search_test::setup
+} -body {
+    # Arrange
+    set ::search::dbase_(.w1) 1
+    set ::search::dbase_(.w2) 2
+
+    # Act
+    ::search::CloseAll
+
+    # Assert
+    lsort -dict $::board_search_test::destroyCalls
+} -cleanup {
+    ::board_search_test::cleanup
+} -result {.w1 .w2}
+
+
+cleanupTests

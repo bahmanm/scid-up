@@ -1,0 +1,219 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::search {}
+namespace eval ::search::material {}
+namespace eval ::utils {}
+namespace eval ::utils::validate {}
+
+# `tcl/search/material.tcl` creates Tk photo images at load time.
+# Provide a minimal stub so the module can be sourced under plain `tclsh`.
+if {![llength [info commands image]]} {
+    namespace eval ::scid_test::images {}
+
+    proc ::scid_test::images::dispatch {name subcmd args} {
+        switch -- $subcmd {
+            copy { return }
+            default { return }
+        }
+    }
+
+    proc image {subcmd args} {
+        switch -- $subcmd {
+            create {
+                set type [lindex $args 0]
+                if {$type ne "photo"} {
+                    return ""
+                }
+                set name [lindex $args 1]
+                if {$name eq ""} {
+                    error "image create photo missing name"
+                }
+                if {![llength [info commands $name]]} {
+                    interp alias {} $name {} ::scid_test::images::dispatch $name
+                }
+                return $name
+            }
+            default {
+                return ""
+            }
+        }
+    }
+}
+
+# Material search registers validation traces at load time.
+# Provide a minimal validator stub to keep sourcing deterministic.
+if {![llength [info commands ::utils::validate::Integer]]} {
+    proc ::utils::validate::Integer {max min args} { return 1 }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] search material.tcl]
+
+namespace eval ::material_search_test {
+    variable stubbedCommands {}
+}
+
+proc ::material_search_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::material_search_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::material_search_test::setup {} {
+    ::material_search_test::restoreStubs
+
+    # Arrange
+    # Avoid trace side effects during tests; we call the logic directly.
+    catch {trace vdelete pMin w checkPieceCounts}
+    catch {trace vdelete pMax w checkPieceCounts}
+
+    # Reset globals to their standard "any" state.
+    ::search::material::any
+
+    set ::sameBishops 0
+    set ::oppBishops 0
+}
+
+proc ::material_search_test::cleanup {} {
+    ::material_search_test::restoreStubs
+}
+
+# ---- Tests ----
+
+test material-zero-1.0 {material::zero clears all piece min/max values} -setup {
+    ::material_search_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::search::material::zero
+
+    # Assert
+    set mins {}
+    set maxs {}
+    foreach p {wq bq wr br wb bb wn bn wm bm wp bp} {
+        lappend mins $::pMin($p)
+        lappend maxs $::pMax($p)
+    }
+
+    list $mins $maxs
+} -cleanup {
+    ::material_search_test::cleanup
+} -result [list \
+    {0 0 0 0 0 0 0 0 0 0 0 0} \
+    {0 0 0 0 0 0 0 0 0 0 0 0} \
+]
+
+
+test material-any-1.0 {material::any restores defaults and resets material-diff bounds} -setup {
+    ::material_search_test::setup
+} -body {
+    # Arrange
+    set ::pMin(wq) 1
+    set ::pMax(wq) 1
+    set ::minMatDiff 0
+    set ::maxMatDiff 0
+
+    # Act
+    ::search::material::any
+
+    # Assert
+    list \
+        $::pMin(wq) $::pMax(wq) \
+        $::pMin(wm) $::pMax(wm) \
+        $::pMin(wp) $::pMax(wp) \
+        $::minMatDiff $::maxMatDiff
+} -cleanup {
+    ::material_search_test::cleanup
+} -result {0 2 0 4 0 8 -40 +40}
+
+
+test checkPieceCounts-clamps-minors-and-maxless-than-min-1.0 {checkPieceCounts enforces minor-piece and max>=min constraints} -setup {
+    ::material_search_test::setup
+} -body {
+    # Arrange
+    set ::pMin(wn) 2
+    set ::pMin(wb) 1
+    set ::pMin(wm) 0
+
+    set ::pMax(wn) 1
+    set ::pMax(wb) 1
+    set ::pMax(wm) 4
+
+    set ::pMin(bn) 2
+    set ::pMin(bb) 0
+    set ::pMin(bm) 0
+
+    set ::pMax(bn) 0
+    set ::pMax(bb) 0
+    set ::pMax(bm) 4
+
+    set ::pMin(wq) 2
+    set ::pMax(wq) 1
+
+    # Act
+    checkPieceCounts pMin {} {}
+
+    # Assert
+    list \
+        $::pMin(wm) $::pMax(wm) \
+        $::pMin(bm) $::pMax(bm) \
+        $::pMax(wq)
+} -cleanup {
+    ::material_search_test::cleanup
+} -result {3 3 2 2 2}
+
+
+test set1Bishops-noop-1.0 {set1Bishops does nothing when no bishop-colour constraint is selected} -setup {
+    ::material_search_test::setup
+} -body {
+    # Arrange
+    set ::sameBishops 0
+    set ::oppBishops 0
+
+    set ::pMin(wb) 0
+    set ::pMax(wb) 2
+    set ::pMin(bb) 0
+    set ::pMax(bb) 2
+
+    # Act
+    set1Bishops
+
+    # Assert
+    list $::pMin(wb) $::pMax(wb) $::pMin(bb) $::pMax(bb)
+} -cleanup {
+    ::material_search_test::cleanup
+} -result {0 2 0 2}
+
+
+test set1Bishops-forces-one-1.0 {set1Bishops forces exactly one bishop per side when a bishop-colour constraint is selected} -setup {
+    ::material_search_test::setup
+} -body {
+    # Arrange
+    set ::sameBishops 1
+    set ::oppBishops 0
+
+    set ::pMin(wb) 0
+    set ::pMax(wb) 2
+    set ::pMin(bb) 0
+    set ::pMax(bb) 2
+
+    # Act
+    set1Bishops
+
+    # Assert
+    list $::pMin(wb) $::pMax(wb) $::pMin(bb) $::pMax(bb)
+} -cleanup {
+    ::material_search_test::cleanup
+} -result {1 1 1 1}
+
+
+cleanupTests
