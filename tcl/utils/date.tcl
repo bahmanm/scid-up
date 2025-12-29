@@ -1,11 +1,18 @@
 
 namespace eval ::utils::date {}
 
-# ::utils::date::today:
-#   Returns todays date, in "yyyy.mm.dd" format.
-#   The optional parameter "year", "month" or "day" can be used to
-#   limit the returned value to just the year, month or day.
-#
+################################################################################
+# ::utils::date::today
+#   Returns today’s date in a requested format.
+# Visibility:
+#   Public.
+# Inputs:
+#   - type (string, optional): One of `all` (default), `year`, `month`, `day`.
+# Returns:
+#   - (string): Today’s date. Raises an error for an unrecognised `type`.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::date::today {{type all}} {
   set timeNow [clock seconds]
   set year [clock format $timeNow -format "%Y"]
@@ -20,12 +27,25 @@ proc ::utils::date::today {{type all}} {
   }
 }
 
+################################################################################
 # ::utils::date::chooser
-#
-#   Produce a date-selection dialog box.
-#   Originally based on code from Effective Tcl/Tk Programming by
-#   Mark Harrison, but with lots of changes and improvements.
-#
+#   Shows a modal date-selection dialog.
+# Visibility:
+#   Public.
+# Inputs:
+#   - date (string, optional): Either `now` (default) or a date/time string
+#     accepted by `clock scan` (invalid inputs fall back to "now").
+# Returns:
+#   - (list): `{yyyy mm dd}` when the user confirms the selection.
+#   - (list): `{}` when the user cancels via the Cancel button.
+# Side effects:
+#   - Creates and destroys the `.dateChooser` toplevel.
+#   - Acquires a Tk grab on `.dateChooser` until the window is closed.
+#   - Updates `::utils::date::_time` and `::utils::date::_selected`.
+#   - Note: Closing the window via the window manager currently behaves like a
+#     confirmation (it does not clear `_selected`).
+#   - TODO: Treat window-manager close as cancel for least surprise.
+################################################################################
 proc ::utils::date::chooser {{date "now"}} {
   set time [clock seconds]
   if {$date != "now"} {
@@ -77,6 +97,20 @@ proc ::utils::date::chooser {{date "now"}} {
          ]
 }
 
+################################################################################
+# ::utils::date::_day
+#   Adjusts the selected date by a day delta.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Date chooser toplevel path.
+#   - delta (int): Day delta (positive or negative).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::utils::date::_select`, updating `::utils::date::_time` and
+#     `::utils::date::_selected` and refreshing the UI.
+################################################################################
 proc ::utils::date::_day {win delta} {
   set unit "day"
   if {$delta < 0} {set unit "day ago"}
@@ -87,6 +121,23 @@ proc ::utils::date::_day {win delta} {
   ::utils::date::_select $win "$year-$month-$day"
 }
 
+################################################################################
+# ::utils::date::_month
+#   Adjusts the selected date by a month delta.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Date chooser toplevel path.
+#   - delta (int): Month delta (positive or negative).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::utils::date::_select` for the target month.
+#   - Note: Tcl may normalise out-of-range dates (e.g. interpreting `2025-2-31`
+#     as a March date), so the current implementation’s "fallback to day 28" is
+#     not reliable under all Tcl versions.
+#   - TODO: Clamp to the last valid day of the target month for least surprise.
+################################################################################
 proc ::utils::date::_month {win delta} {
   set dir [expr {($delta > 0) ? 1 : -1} ]
   set day [string trimleft [clock format $::utils::date::_time -format "%d"] 0]
@@ -108,6 +159,20 @@ proc ::utils::date::_month {win delta} {
   }
 }
 
+################################################################################
+# ::utils::date::_redraw
+#   Redraws the calendar canvas for the current month.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Date chooser toplevel path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Rebuilds all items on `$win.cal`.
+#   - Creates sensor tags that invoke `::utils::date::_select` on click.
+#   - May call `::utils::date::_select` to initialise the selection.
+################################################################################
 proc ::utils::date::_redraw {win} {
   $win.cal delete all
   set time $::utils::date::_time
@@ -170,6 +235,19 @@ proc ::utils::date::_redraw {win} {
   }
 }
 
+################################################################################
+# ::utils::date::_layout
+#   Computes the calendar day grid for the month containing `time`.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - time (int): Epoch seconds within the month to render.
+# Returns:
+#   - (list): A flat list of 4-tuples `{day date daycol weekrow}` for each day
+#     of the month, where `date` is formatted as `yyyy-mm-dd`.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::date::_layout {time} {
   set month [string trimleft [clock format $time -format "%m"] 0]
   set year  [clock format $time -format "%Y"]
@@ -203,6 +281,21 @@ proc ::utils::date::_layout {time} {
   return $rlist
 }
 
+################################################################################
+# ::utils::date::_select
+#   Selects a date and updates the calendar display.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Date chooser toplevel path.
+#   - date (string): Date string accepted by `clock scan`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::date::_time` and `::utils::date::_selected`.
+#   - Updates highlight state on `$win.cal` when the month is unchanged.
+#   - Calls `::utils::date::_redraw` when selecting a date in a different month.
+################################################################################
 proc ::utils::date::_select {win date} {
   set time [clock scan $date]
   set date [clock format $time -format "%Y-%m-%d"]
