@@ -1,0 +1,396 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+namespace eval ::tooltip_test {
+    variable stubbedCommands {}
+
+    variable windowingSystem "x11"
+
+    variable existingWidgets
+    array set existingWidgets {}
+
+    variable widgetClass
+    array set widgetClass {}
+
+    variable binds
+    array set binds {}
+
+    variable bindtags
+    array set bindtags {}
+
+    variable afterCalls {}
+    variable afterNextId 0
+
+    variable wmCalls {}
+
+    variable pointerXY {0 0}
+    variable pointerContaining ""
+}
+
+proc ::tooltip_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::tooltip_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::tooltip_test::reset {} {
+    variable existingWidgets
+    variable widgetClass
+    variable binds
+    variable bindtags
+    variable afterCalls
+    variable afterNextId
+    variable wmCalls
+    variable pointerXY
+    variable pointerContaining
+
+    array unset existingWidgets
+    array set existingWidgets {}
+
+    array unset widgetClass
+    array set widgetClass {}
+
+    array unset binds
+    array set binds {}
+
+    array unset bindtags
+    array set bindtags {}
+
+    set afterCalls {}
+    set afterNextId 0
+
+    set wmCalls {}
+
+    set pointerXY {0 0}
+    set pointerContaining ""
+}
+
+# ---- Headless Tk stubs (only what we need for tooltip) ----
+
+# Satisfy `package require Tk 8.5-` when running under plain `tclsh`.
+if {[catch {package present Tk}]} {
+    package provide Tk 8.6
+}
+
+if {![llength [info commands tk]]} {
+    proc tk {subcmd args} {
+        switch -- $subcmd {
+            windowingsystem { return $::tooltip_test::windowingSystem }
+            default { error "tk $subcmd not stubbed in tooltip tests" }
+        }
+    }
+}
+
+if {![llength [info commands option]]} {
+    proc option {subcmd args} {
+        switch -- $subcmd {
+            add { return }
+            default { error "option $subcmd not stubbed in tooltip tests" }
+        }
+    }
+}
+
+if {![llength [info commands bind]]} {
+    proc bind {tagOrWin sequence args} {
+        set key [list $tagOrWin $sequence]
+
+        if {[llength $args] == 0} {
+            if {[info exists ::tooltip_test::binds($key)]} {
+                return $::tooltip_test::binds($key)
+            }
+            return ""
+        }
+
+        if {[llength $args] != 1} {
+            error "bind called with unsupported args"
+        }
+
+        set script [lindex $args 0]
+        if {[string match "+*" $script]} {
+            set script [string range $script 1 end]
+            set existing ""
+            if {[info exists ::tooltip_test::binds($key)]} {
+                set existing $::tooltip_test::binds($key)
+            }
+            if {$existing eq ""} {
+                set ::tooltip_test::binds($key) $script
+            } else {
+                set ::tooltip_test::binds($key) "$existing\n$script"
+            }
+        } else {
+            set ::tooltip_test::binds($key) $script
+        }
+
+        return
+    }
+}
+
+if {![llength [info commands bindtags]]} {
+    proc bindtags {w args} {
+        if {[llength $args] == 0} {
+            if {[info exists ::tooltip_test::bindtags($w)]} {
+                return $::tooltip_test::bindtags($w)
+            }
+            return [list $w]
+        }
+        if {[llength $args] != 1} {
+            error "bindtags called with unsupported args"
+        }
+        set ::tooltip_test::bindtags($w) [lindex $args 0]
+        return
+    }
+}
+
+if {![llength [info commands wm]]} {
+    proc wm {subcmd args} {
+        switch -- $subcmd {
+            withdraw -
+            deiconify -
+            overrideredirect -
+            positionfrom -
+            geometry -
+            title {
+                lappend ::tooltip_test::wmCalls [list $subcmd {*}$args]
+                return
+            }
+            attributes {
+                # Allow `wm attributes $w -alpha` (query) and `... -alpha <val>`.
+                lappend ::tooltip_test::wmCalls [list $subcmd {*}$args]
+                if {[llength $args] >= 2 && [lindex $args 1] eq "-alpha" && [llength $args] == 2} {
+                    return 0.99
+                }
+                return
+            }
+            default { error "wm $subcmd not stubbed in tooltip tests" }
+        }
+    }
+}
+
+# Override the minimal winfo stub with a tooltip-aware one.
+proc winfo {subcmd args} {
+    switch -- $subcmd {
+        exists {
+            set w [lindex $args 0]
+            return [expr {[info exists ::tooltip_test::existingWidgets($w)] && $::tooltip_test::existingWidgets($w)}]
+        }
+        class {
+            set w [lindex $args 0]
+            if {[info exists ::tooltip_test::widgetClass($w)]} {
+                return $::tooltip_test::widgetClass($w)
+            }
+            return "Widget"
+        }
+        pointerxy {
+            return $::tooltip_test::pointerXY
+        }
+        pointerx {
+            return [lindex $::tooltip_test::pointerXY 0]
+        }
+        pointery {
+            return [lindex $::tooltip_test::pointerXY 1]
+        }
+        containing {
+            return $::tooltip_test::pointerContaining
+        }
+        name {
+            set w [lindex $args 0]
+            return [string trimleft $w "."]
+        }
+        default {
+            error "winfo $subcmd not stubbed in tooltip tests"
+        }
+    }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils tklib_tooltip.tcl]
+
+proc ::tooltip_test::setup {} {
+    ::tooltip_test::restoreStubs
+    ::tooltip_test::reset
+
+    # Arrange
+    array unset ::tooltip::tooltip
+
+    set ::tooltip::G(enabled) 1
+    set ::tooltip::G(fade) 1
+    set ::tooltip::G(DELAY) 500
+    set ::tooltip::G(AFTERID) {}
+    set ::tooltip::G(FADEID) {}
+    set ::tooltip::G(LAST) -1
+    set ::tooltip::G(TOPLEVEL) .__tooltip__
+
+    ::tooltip_test::stubCommand after {subcmd args} {
+        switch -- $subcmd {
+            cancel {
+                lappend ::tooltip_test::afterCalls [list cancel {*}$args]
+                return
+            }
+            idle {
+                lappend ::tooltip_test::afterCalls [list idle {*}$args]
+                incr ::tooltip_test::afterNextId
+                return "after#idle#$::tooltip_test::afterNextId"
+            }
+            default {
+                if {[string is integer -strict $subcmd]} {
+                    lappend ::tooltip_test::afterCalls [list $subcmd {*}$args]
+                    incr ::tooltip_test::afterNextId
+                    return "after#$subcmd#$::tooltip_test::afterNextId"
+                }
+                error "after $subcmd not stubbed in tooltip tests"
+            }
+        }
+    }
+}
+
+proc ::tooltip_test::cleanup {} {
+    ::tooltip_test::restoreStubs
+    ::tooltip_test::reset
+}
+
+# ---- Tests ----
+
+test tklib-tooltip-delay-default-1.0 {delay returns the configured delay} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set delay [::tooltip::tooltip delay]
+
+    # Assert
+    return $delay
+} -cleanup {
+    ::tooltip_test::cleanup
+} -result 500
+
+
+test tklib-tooltip-delay-set-valid-1.0 {delay updates and returns the configured delay} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set delay [::tooltip::tooltip delay 250]
+
+    # Assert
+    return $delay
+} -cleanup {
+    ::tooltip_test::cleanup
+} -result 250
+
+
+test tklib-tooltip-delay-set-invalid-1.0 {delay rejects values below 50} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::tooltip::tooltip delay 49
+} -cleanup {
+    ::tooltip_test::cleanup
+} -returnCodes error -match glob -result "tooltip delay must be an integer*"
+
+
+test tklib-tooltip-fade-set-get-1.0 {fade toggles and returns the configured behaviour} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set a [::tooltip::tooltip fade 0]
+    set b [::tooltip::tooltip fade 1]
+
+    # Assert
+    list $a $b
+} -cleanup {
+    ::tooltip_test::cleanup
+} -result {0 1}
+
+
+test tklib-tooltip-fade-non-true-string-1.0 {fade treats non-true strings as false in strict mode} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set v [::tooltip::tooltip fade maybe]
+
+    # Assert
+    return $v
+} -cleanup {
+    ::tooltip_test::cleanup
+} -result 0
+
+
+
+test tklib-tooltip-disable-hides-1.0 {disable turns off tooltips and hides any displayed tooltip} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+    set ::tooltip::G(AFTERID) "after#123"
+
+    # Act
+    ::tooltip::tooltip disable
+
+    # Assert
+    list $::tooltip::G(enabled) [lindex $::tooltip_test::afterCalls 0]
+} -cleanup {
+    ::tooltip_test::cleanup
+} -result {0 {cancel after#123}}
+
+
+test tklib-tooltip-register-and-clear-widget-1.0 {registering a widget tooltip adds the Tooltip bindtag and clear removes it} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+    set w ".b"
+    set ::tooltip_test::existingWidgets($w) 1
+    set ::tooltip_test::bindtags($w) [list $w]
+
+    # Act
+    set registered [::tooltip::tooltip $w "Hello"]
+    set queried [::tooltip::tooltip $w]
+    set hasBindtagBeforeClear [lsearch -exact $::tooltip_test::bindtags($w) "Tooltip"]
+
+    # Make clear withdraw the tooltip by pretending the pointer is currently in
+    # the widget being cleared.
+    set ::tooltip_test::pointerContaining $w
+    ::tooltip::tooltip clear $w
+
+    set cleared [::tooltip::tooltip $w]
+    set hasBindtagAfterClear [lsearch -exact $::tooltip_test::bindtags($w) "Tooltip"]
+
+    # Assert
+    list \
+        $registered \
+        $queried \
+        $hasBindtagBeforeClear \
+        $cleared \
+        $hasBindtagAfterClear
+} -cleanup {
+    ::tooltip_test::cleanup
+} -result {{Hello {} {}} {Hello {} {}} 1 {} -1}
+
+
+test tklib-tooltip-register-nonexistent-widget-1.0 {registering a tooltip for a non-existent widget errors} -setup {
+    ::tooltip_test::setup
+} -body {
+    # Arrange
+    set w ".doesNotExist"
+    set ::tooltip_test::existingWidgets($w) 0
+
+    # Act
+    ::tooltip::tooltip $w "Hello"
+} -cleanup {
+    ::tooltip_test::cleanup
+} -returnCodes error -match exact -result "bad window path name \".doesNotExist\""
+
+
+cleanupTests
