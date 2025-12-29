@@ -10,16 +10,24 @@ namespace eval ::validate {
     #     max : (Optional) If set, prevents typing values larger than this.
     # -------------------------------------------------------------------------
     proc integer {P {min ""} {max ""}} {
-        # Allow empty and signs (+/-)
+        # Allow empty and signs (+/-).
         if {$P eq ""} { return 1 }
         if {$P eq "+"} { return 1 }
-        if {$P eq "-" && $min < 0} { return 1 }
-        # Enforce min only if P is negative.
+        if {$P eq "-"} {
+            if {$min eq ""} { return 1 }
+            return [expr {$min < 0}]
+        }
+
+        # Reject non-integer intermediate input (e.g. "2a") without throwing.
+        if {![string is integer $P]} { return 0 }
+
+        # Enforce bounds only when the current value is a complete integer.
         #   If Min=10 and P=1, P is invalid but P is "on the way" to 10. We must allow it.
         #   If Min=-10 and P=-20, P is invalid and adding digits (e.g. -200) makes it worse. Block it.
-        if {$min ne "" && $P < $min && $P < 0} { return 0 }
         if {$max ne "" && $P > $max} { return 0 }
-        return [string is integer $P]
+        if {$min ne "" && $P < $min && $P < 0} { return 0 }
+
+        return 1
     }
 }
 
@@ -104,7 +112,7 @@ proc ::utils::validate::Date {name el op} {
 proc ::utils::validate::Result {name el op} {
   global $name ${name}_old
   set old ${name}_old
-  if {![regexp {^[1|0|=|\*]?$} [set $name]]} {
+  if {![regexp {^[10=*]?$} [set $name]]} {
     if {![info exist $old]} { set $old "" }
     set $name [set $old]
     bell
