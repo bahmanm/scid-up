@@ -160,7 +160,7 @@ proc ::search::material::any {} {
   array set pMin {wq 0 bq 0 wr 0 br 0 wb 0 bb 0 wn 0 bn 0 wm 0 bm 0 wp 0 bp 0}
   array set pMax {wq 2 bq 2 wr 2 br 2 wb 2 bb 2 wn 2 bn 2 wm 4 bm 4 wp 8 bp 8}
   set ::minMatDiff -40
-  set maxMatDiff +40
+  set ::maxMatDiff +40
 }
 
 proc clearPatterns {} {
