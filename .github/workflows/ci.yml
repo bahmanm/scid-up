@@ -14,18 +14,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-rolling ]
+        os: [ ubuntu-latest ]
         build_type: [ Release ]
         c_compiler: [ gcc, clang, cl ]
         include:
-          - os: ubuntu-rolling
+          - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-rolling
+          - os: ubuntu-latest
             c_compiler: clang
             cpp_compiler: clang++
         exclude:
-          - os: ubuntu-rolling
+          - os: ubuntu-latest
             c_compiler: cl
 
     steps:
@@ -40,8 +40,18 @@ jobs:
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       run: >
-        sudo apt-get update 
-        && sudo apt-get install -y tcl9.0-dev tk9.0-dev
+        wget
+          http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz
+          http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz
+        && tar -xzf tcl9.0.3-src.tar.gz 
+        && pushd tcl9.0.3/unix
+        && ./configure --prefix=/usr
+        && sudo make install
+        && tar -xzf tk9.0.3-src.tar.gz
+        && popd
+        && pushd tk9.0.3/unix
+        && ./configure --with-tcl=/usr/lib --prefix=/usr
+        && sudo make install
 
     - name: Configure CMake
       run: >
