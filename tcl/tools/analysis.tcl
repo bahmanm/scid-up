@@ -278,61 +278,7 @@ proc ::enginelist::write {} {
 #
 catch { ::enginelist::read }
 if {[llength $engines(list)] == 0} {
-    # No engines, so set up a default engine list:
-    set phalanx "phalanx-scid"
-    set togaII "togaII"
-    if { $::windowsOS } {
-        set phalanx "phalanx-scid.exe"
-        set togaII "TogaII.exe"
-    }
-    set scidEngPaths [list $::scidExeDir [file join $::scidExeDir "engines" ] [file join $::scidShareDir "engines" ] \
-            [ file join $::scidUserDir "engines" ]  [ file join /usr local share scid engines ] \
-            [ file join /usr local bin ] [ file join  /usr bin ] [ file join /usr local games ] [ file join /usr games ] \
-            [file join $::scidExeDir "engines" "phalanx-scid" ] [file join $::scidExeDir "engines" "togaII1.2.1a" "src" ] ]
-    
-    # The next four lists should have the same length!
-    set scidEngCmds [list $phalanx $togaII ]
-    set scidEngNames [list "Phalanx-Scid" "Toga II" ]
-    array set parentDirs "
-    $phalanx { phalanx-scid Phalanx-XXII }
-    $togaII  { togaII1.2.1a toga togaII [ file join togaII1.2.1a src ] }
-    "
-    
-    set isUCI [list 0 1]
-    
-    # Let's search the engines:
-    foreach cmd $scidEngCmds name $scidEngNames uci $isUCI {
-        set leave 0
-        foreach path $scidEngPaths {
-            set c [ file join $path $cmd]
-            if { [file executable $c ] && ! [ file isdirectory $c ] } {
-                engine [list \
-                        Name $name \
-                        Cmd  $c \
-                        Dir  . \
-                        UCI  $uci \
-                        UCIoptions {} \
-                        ]
-                set leave 1
-            } else {
-                foreach parent $parentDirs($cmd) {
-                    set c [ file join $path $parent $cmd ]
-                    if { [file executable $c] && ! [ file isdirectory $c ] } {
-                        engine [list \
-                                Name $name \
-                                Cmd  $c \
-                                Dir  . \
-                                UCI  $uci \
-                                UCIoptions {} \
-                                ]
-                        set leave 1
-                        break
-                    }
-                }
-            }
-            if { $leave } { break }
-        }
-    }
+    # No engines configured yet; Scid no longer bundles engines.
 }
 
 ################################################################################

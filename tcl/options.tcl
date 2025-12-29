@@ -234,24 +234,6 @@ set windowsDock 1
 
 set ::tactics::analysisTime 3
 
-set ::tacgame::threshold 0.9
-set ::tacgame::blunderwarning false
-set ::tacgame::blunderwarningvalue 0.0
-set ::tacgame::levelMin 1200
-set ::tacgame::levelMax 2200
-set ::tacgame::levelFixed 1500
-set ::tacgame::randomLevel 0
-set ::tacgame::isLimitedAnalysisTime 1
-set ::tacgame::showblunder 1
-set ::tacgame::showblundervalue 1
-set ::tacgame::showblunderfound 1
-set ::tacgame::showmovevalue 1
-set ::tacgame::showevaluation 1
-set ::tacgame::isLimitedAnalysisTime 1
-set ::tacgame::analysisTime 10
-set ::tacgame::openingType new
-set ::tacgame::chosenOpening 0
-
 # Analysis command: to start chess analysis engine.
 set analysisCommand ""
 if {$windowsOS} {
@@ -326,24 +308,6 @@ set ::pinfo::dnburl        "http://d-nb.info/gnd"
 
 # Defaults for Novag Citrine
 set ::novag::referee "OFF"
-
-# Defaults for serious game training
-set ::sergame::isOpening 0
-set ::sergame::chosenOpening 0
-set ::sergame::chosenEngine 0
-set ::sergame::useBook 1
-set ::sergame::bookToUse ""
-set ::sergame::startFromCurrent 0
-set ::sergame::coachIsWatching 0
-set ::sergame::timeMode "timebonus"
-set ::sergame::depth 3
-set ::sergame::movetime 0
-set ::sergame::nodes 10000
-set ::sergame::ponder 0
-set ::uci::uciInfo(wtime3) [expr 5 * 60 * 1000 ]
-set ::uci::uciInfo(winc3) [expr 10 * 1000 ]
-set ::uci::uciInfo(btime3) [expr 5 * 60 * 1000 ]
-set ::uci::uciInfo(binc3) [expr 10 * 1000 ]
 
 # Defaults for initial directories:
 set initialDir(base) "."
@@ -548,8 +512,6 @@ set ::book::lastBook "" ; # book name without extension (.bin)
 # Engines data:
 set engines(list) {}
 set engines(sort) Time
-set engineCoach1 {}
-set engineCoach2 {}
 
 
 
@@ -647,18 +609,9 @@ proc options.write {} {
           gameInfo(photos) gameInfo(hideNextMove) gameInfo(wrap) \
           gameInfo(fullComment) gameInfo(showMarks) \
           gameInfo(showMaterial) gameInfo(showFEN) \
-          engineCoach1 engineCoach2 scidBooksDir scidBasesDir ::book::lastBook \
+          scidBooksDir scidBasesDir ::book::lastBook \
           ::utils::sound::soundFolder ::utils::sound::announceNew \
           ::utils::sound::announceForward ::utils::sound::announceBack \
-          ::tacgame::threshold ::tacgame::blunderwarning ::tacgame::blunderwarningvalue \
-          ::tacgame::levelMin  ::tacgame::levelMax  ::tacgame::levelFixed ::tacgame::randomLevel \
-          ::tacgame::isLimitedAnalysisTime ::tacgame::showblunder ::tacgame::showblundervalue \
-          ::tacgame::showblunderfound ::tacgame::showmovevalue ::tacgame::showevaluation \
-          ::tacgame::isLimitedAnalysisTime ::tacgame::analysisTime ::tacgame::openingType ::tacgame::chosenOpening \
-          ::sergame::chosenOpening ::sergame::chosenEngine ::sergame::useBook ::sergame::bookToUse \
-          ::sergame::startFromCurrent ::sergame::coachIsWatching ::sergame::timeMode \
-          ::sergame::depth ::sergame::movetime ::sergame::nodes ::sergame::ponder ::sergame::isOpening \
-          ::uci::uciInfo(wtime3) ::uci::uciInfo(winc3) ::uci::uciInfo(btime3) ::uci::uciInfo(binc3) \
           boardfile_lite boardfile_dark \
           FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo \
           FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO lookTheme ThemePackageFile autoResizeBoard \
