@@ -81,9 +81,9 @@ for { set i 1 } { $i <= $nMaxPatterns } { incr i } {
 # Visibility:
 #   Private.
 # Inputs:
-#   - name: Variable name passed by `trace variable`.
-#   - el: Element name passed by `trace variable`.
-#   - op: Operation name passed by `trace variable`.
+#   - name: Variable name passed by `trace add variable`.
+#   - el: Element name passed by `trace add variable`.
+#   - op: Operation name passed by `trace add variable`.
 # Returns:
 #   - None.
 # Side effects:

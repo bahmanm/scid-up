@@ -319,15 +319,7 @@ proc ::tooltip::createToplevel {} {
     if {[winfo exists $b]} { return }
 
     toplevel $b -class Tooltip -borderwidth 0
-    if {[tk windowingsystem] eq "aqua"} {
-        if {[llength [info commands ::tk::unsupported::MacWindowStyle]]} {
-            ::tk::unsupported::MacWindowStyle style $b help none
-        } else {
-            wm overrideredirect $b 1
-        }
-    } else {
-        wm overrideredirect $b 1
-    }
+    wm overrideredirect $b 1
     catch {wm attributes $b -topmost 1}
     # avoid the blink issue with 1 to <1 alpha on Windows
     catch {wm attributes $b -alpha 0.99}
