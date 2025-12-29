@@ -266,36 +266,6 @@ set pgnColor(Nag) {#cf6403}
 set pgnColor(Comment) {#008b00}
 set pgnColor(Current) steelBlue
 
-# Defaults for FICS
-set ::fics::use_timeseal 0
-set ::fics::timeseal_exec "timeseal"
-set ::fics::port_fics 5000
-set ::fics::port_timeseal 5001
-set ::fics::login ""
-set ::fics::password ""
-set ::fics::usedefaultvars 1
-set ::fics::findopponent(initTime) 15
-set ::fics::findopponent(incTime) 20
-set ::fics::findopponent(rated) "rated"
-set ::fics::findopponent(color) ""
-set ::fics::findopponent(limitrating) 1
-set ::fics::findopponent(rating1) 1500
-set ::fics::findopponent(rating2) 3000
-set ::fics::findopponent(manual) "auto"
-set ::fics::findopponent(formula) ""
-set ::fics::consolebg     black
-set ::fics::consolefg     LimeGreen
-set ::fics::consoleheight 10
-set ::fics::consolewidth  40
-set ::fics::colseeking     coral
-set ::fics::colgame        grey70
-set ::fics::colgameresult  SlateBlue1
-set ::fics::colficspercent khaki1
-set ::fics::colficshelpnext blue
-set ::fics::server_ip "0.0.0.0"
-set ::fics::premoveEnabled 1
-set ::fics::playing 0
-
 # default resolvers for player info
 set ::pinfo::wikipAPI      "http://de.wikipedia.org/w/api.php?action=query&format=xml"
 # Appers PND resolver
@@ -677,15 +647,6 @@ proc options.write {} {
       puts $optionF "set informant($i) [list $informant($i)]"
     }
     puts $optionF ""
-
-    # save FICS config
-    foreach i { use_timeseal timeseal_exec port_fics port_timeseal login password usedefaultvars premoveEnabled \
-          consolebg consolefg consoleheight consolewidth colseeking colgame colgameresult colficspercent server_ip } {
-      puts $optionF "set ::fics::$i [list [set ::fics::$i]]"
-    }
-    foreach i [lsort [array names ::fics::profileVars]] {
-      puts $optionF "set ::fics::profileVars($i) [list $::fics::profileVars($i)]"
-    }
 
     # save pinfo config
     foreach i { wikipurl dnburl SeeAlsoPND2WP wikipAPI} {

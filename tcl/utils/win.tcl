@@ -639,9 +639,8 @@ proc ::docking::manage_rightclick_ {noteb x y localX localY} {
 ################################################################################
 
 ################################################################################
-# saves layout (bail out if some windows cannot be restored like FICS)
+# saves layout (bail out if some windows cannot be restored)
 proc ::docking::layout_save { slot } {
-  #TODo: Save FICS window
 
   # on Windows the geometry is false if the window was maximized (x and y offsets are the ones before the maximization)
   set geometry [wm geometry .]
