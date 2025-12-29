@@ -11,6 +11,10 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
 
+    defaults:
+      run:
+        shell: bash -euo pipefail {0}
+
     strategy:
       fail-fast: false
       matrix:
@@ -39,37 +43,40 @@ jobs:
 
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
-      run: >-
-        wget
-          http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz
-          http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz
-        && tar -xzf tcl9.0.3-src.tar.gz 
-        && pushd tcl9.0.3/unix
-        && ./configure --prefix=/usr
-        && sudo make install
-        && tar -xzf tk9.0.3-src.tar.gz
-        && popd
-        && pushd tk9.0.3/unix
-        && ./configure --with-tcl=/usr/lib --prefix=/usr
-        && sudo make install
+      run: |
+        wget \
+          http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz \
+          http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz 
+        
+        tar -xzf tcl9.0.3-src.tar.gz 
+        pushd tcl9.0.3/unix
+        ./configure --prefix=/usr
+        sudo make install
+        popd
+        
+        tar -xzf tk9.0.3-src.tar.gz
+        pushd tk9.0.3/unix
+        ./configure --with-tcl=/usr/lib --prefix=/usr
+        sudo make install
+        popd
 
     - name: Configure CMake
-      run: >-
+      run: >
         cmake 
-          -B ${{ steps.strings.outputs.build-output-dir }}
-          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          -S ${{ github.workspace }}
+        -B ${{ steps.strings.outputs.build-output-dir }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -S ${{ github.workspace }}
 
     - name: Build
-      run: >-
+      run: >
         cmake 
-          --build ${{ steps.strings.outputs.build-output-dir }} 
-          --config ${{ matrix.build_type }}
+        --build ${{ steps.strings.outputs.build-output-dir }} 
+        --config ${{ matrix.build_type }}
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      run: >-
+      run: >
         ctest 
-          --build-config ${{ matrix.build_type }}
+        --build-config ${{ matrix.build_type }}
