@@ -44,17 +44,16 @@ jobs:
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       run: |
-        wget \
-          http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz \
-          http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz 
-        
-        tar -xzf tcl9.0.3-src.tar.gz 
+        wget http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
         pushd tcl9.0.3/unix
         ./configure --prefix=/usr
         sudo make install
         popd
+
+        sudo apt-get update
+        sudo apt-get install -y libx11-dev
         
-        tar -xzf tk9.0.3-src.tar.gz
+        curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
         pushd tk9.0.3/unix
         ./configure --with-tcl=/usr/lib --prefix=/usr
         sudo make install
