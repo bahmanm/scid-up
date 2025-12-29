@@ -243,7 +243,7 @@ foreach ns {
   ::tools::graphs::filter ::tools::graphs::absfilter ::tools::graphs::rating ::tools::graphs::score
   ::tb ::optable
   ::board ::move
-  ::tacgame ::sergame ::opening ::tactics ::calvar ::uci ::fics ::reviewgame ::novag
+  ::opening ::tactics ::calvar ::uci ::fics ::reviewgame ::novag
   ::config ::docking
   ::pinfo
   ::unsafe
@@ -756,8 +756,6 @@ move.tcl
 main.tcl
 tools/uci.tcl
 end.tcl
-tools/tacgame.tcl
-tools/sergame.tcl
 tools/calvar.tcl
 tools/fics.tcl
 tools/opening.tcl

@@ -343,7 +343,7 @@ proc ::engine::handshake_ {id protocols} {
     } else {
         unset -nocomplain ::engconn(nextHandshake_$id)
         if {$::engconn(protocol_$id) eq "xboard"} {
-            # TODO: this hack is necessary for old engines like phalanx
+            # Some XBoard engines do not respond to "protover" promptly.
             after 2000 "::engine::done_ $id"
         }
     }

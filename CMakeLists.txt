@@ -75,14 +75,6 @@ install(DIRECTORY scripts DESTINATION scid)
 install(DIRECTORY sounds DESTINATION scid)
 install(DIRECTORY tcl DESTINATION scid)
 
-
-# engine phalanx
-#file(GLOB PHALANX_SRC engines/phalanx-scid/*.c)
-#add_executable(phalanx-scid ${PHALANX_SRC})
-#set_target_properties(phalanx-scid PROPERTIES COMPILE_FLAGS "-w")
-#install(TARGETS phalanx-scid DESTINATION bin)
-
-
 option(GTEST "Build unit tests" OFF)
 if(GTEST)
   add_subdirectory(gtest)

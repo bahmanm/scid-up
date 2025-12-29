@@ -57,7 +57,6 @@ Source: "COPYING"; DestDir: "{app}"
 Source: "winpackage\bases\*"; DestDir: "{app}\bin\bases"; Flags: recursesubdirs
 Source: "winpackage\Example.*"; DestDir: "{app}"
 Source: "winpackage\scidsnd.exe"; DestDir: "{app}\bin"
-Source: "winpackage\phalanx-scid.exe"; DestDir: "{app}\bin\engines";
 Source: "winpackage\stockfish.exe"; DestDir: "{app}\bin\engines"; Tasks: install_stockfish
 Source: "winpackage\spelling.ssp"; DestDir: "{app}\bin";  Tasks: copy_photos
 Source: "winpackage\photos\*"; DestDir: "{app}\bin\photos"; Flags: recursesubdirs; Tasks: copy_photos
@@ -100,7 +99,6 @@ end;
 procedure CreateEngineDat();
 var
   fileName : string;
-  phalanx : TArrayOfString;
   lines : TArrayOfString;
   Index: Integer;
 begin
@@ -150,21 +148,5 @@ begin
       SaveStringsToFile(filename,lines,true);
   end
 
-  SetArrayLength(phalanx, 14);
-  phalanx[0]  := '# Analysis engines list file for Scid'
-  phalanx[1]  := ''
-  phalanx[2]  := 'engine {'
-  phalanx[3]  := '  Name {Phalanx (easy)}'
-  phalanx[4]  := '  Cmd  ../engines/phalanx-scid.exe'
-  phalanx[5]  := '  Args {}'
-  phalanx[6]  := '  Dir  .'
-  phalanx[7]  := '  Elo  0'
-  phalanx[8]  := '  Time 0'
-  phalanx[9]  := '  URL  {}'
-  phalanx[10] := '  UCI 0'
-  phalanx[11] := '  UCIoptions {}'
-  phalanx[12] := '}'
-  phalanx[13] := ''
-  SaveStringsToFile(filename,phalanx,true);
 end;
 

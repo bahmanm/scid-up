@@ -243,17 +243,6 @@ proc detectWBEngine { {n 1} engineOutput } {
   }
   
   
-  # Check for a line containing "Phalanx" to detect use of the
-  # Phalanx Winboard engine, which supports "analyze"
-  # but not "setboard" or "protover".
-  if {[string match "*Phalanx*" $engineOutput] } {
-    logEngineNote $n {Seen "Phalanx"; assuming analyze command.}
-    set analysis(has_analyze$n) 1
-    set analysis(wbEngineDetected$n) 1
-    set analysis(has_setboard$n) 1
-    return
-  }
-  
   # Check for a line containing "Scorpio" , which supports "analyze"
   # and "setboard".
   if {[string match -nocase "*Scorpio*" $engineOutput] } {
