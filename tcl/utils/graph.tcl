@@ -64,10 +64,22 @@ set ::utils::graph::_graphs {}
 array set ::utils::graph::_data {}
 
 
-# create:
-#    Create a new graph. Sets up the graph configuration and creates a
-#    new proc (in the global namespace) with the same name as the graph.
-#
+################################################################################
+# ::utils::graph::create
+#   Creates a new graph configuration and registers it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - args (list): The first element is the graph name. Remaining elements are
+#     option/value pairs for graph configuration.
+# Returns:
+#   - (string): The graph name.
+# Side effects:
+#   - Updates `::utils::graph::_graphs` and `::utils::graph::_data`.
+#   - Errors on an odd-length options list.
+#   - Note: Unknown `-option` names are currently ignored by `::_configure`.
+#   - Errors if unrecognised positional arguments are provided.
+################################################################################
 proc ::utils::graph::create args {
   set graph [lindex $args 0]
   lappend ::utils::graph::_graphs $graph
@@ -87,9 +99,21 @@ proc ::utils::graph::create args {
 }
 
 
-# delete:
-#    Removes all privately stored information about a graph.
-#
+################################################################################
+# ::utils::graph::delete
+#   Removes all stored information about a graph.
+# Visibility:
+#   Public.
+# Inputs:
+#   - graph (string): Graph name.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `graph` is registered in `::utils::graph::_graphs`, removes it and
+#     unsets all `::utils::graph::_data($graph,*)` entries.
+#   - If `graph` is not registered, returns without removing any stray
+#     `::_data($graph,*)` entries.
+################################################################################
 proc ::utils::graph::delete {graph} {
   # Remove from the list of available graphs:
   set index [lsearch -exact $::utils::graph::_graphs $graph]
@@ -104,18 +128,41 @@ proc ::utils::graph::delete {graph} {
 }
 
 
-# isgraph:
-#    Returns true if the named graph exists.
-#
+################################################################################
+# ::utils::graph::isgraph
+# Visibility:
+#   Public.
+# Inputs:
+#   - graph (string): Graph name (or a glob pattern).
+# Returns:
+#   - (bool/int): 1 if `graph` matches an element in `::utils::graph::_graphs`,
+#     otherwise 0.
+# Side effects:
+#   - None.
+# Notes:
+#   - Uses `lsearch` default (glob) matching; for strict membership checks, the
+#     implementation would need to use `lsearch -exact`.
+################################################################################
 proc ::utils::graph::isgraph {graph} {
   if {[lsearch $::utils::graph::_graphs $graph] >= 0} { return 1 }
   return 0
 }
 
 
-# data:
-#    Adds a new data set to the graph, or modifies an existing one.
-#
+################################################################################
+# ::utils::graph::data
+#   Adds or updates a data set within a graph.
+# Visibility:
+#   Public.
+# Inputs:
+#   - args (list): `{graph dataset ?options...?}` where options are dataset
+#     option/value pairs (e.g. `-coords`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::graph::_data($graph,sets)` and `::utils::graph::_data`.
+#   - Errors if `-coords` has an odd length.
+################################################################################
 proc ::utils::graph::data args {
   variable _data
   variable _defaults
@@ -146,9 +193,21 @@ proc ::utils::graph::data args {
 }
 
 
-# cget:
-#    Return a stored attribute of a graph.
-#
+################################################################################
+# ::utils::graph::cget
+#   Returns a stored attribute of a graph.
+# Visibility:
+#   Public.
+# Inputs:
+#   - graph (string): Graph name.
+#   - opt (string): Option name (with or without a leading `-`).
+# Returns:
+#   - (string): The stored value.
+# Side effects:
+#   - Calls `::utils::graph::set_range` when requesting computed bounds
+#     (`axmin`, `axmax`, `aymin`, `aymax`).
+#   - Errors if the option is unknown.
+################################################################################
 proc ::utils::graph::cget {graph opt} {
   variable _data
   # Remove initial "-" if necessary:
@@ -163,21 +222,39 @@ proc ::utils::graph::cget {graph opt} {
   return $_data($graph,$opt)
 }
 
-# configure:
-#    Modify stored attributes for a graph.
-#
+################################################################################
+# ::utils::graph::configure
+#   Updates stored attributes for a graph.
+# Visibility:
+#   Public.
+# Inputs:
+#   - args (list): `{graph ?-opt value ...?}`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::graph::_data($graph,*)`.
+################################################################################
 proc ::utils::graph::configure args {
   set newargs [concat "graph" [lindex $args 0] [lrange $args 1 end]]
   eval "::utils::graph::_configure $newargs"
 }
 
 
-# _configure:
-#    Handle configuration of both the graph, and individual data sets.
-#    The first arg (type) should be "graph" or "data". The second should
-#    be a graph name for graph configuration, or a "graph,set" pair
-#    for dataset configuration.
-#
+################################################################################
+# ::utils::graph::_configure
+#   Parses and applies option/value pairs to a graph or a data set.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - args (list): `{type dataset ?-opt value ...?}` where type is `graph` or
+#     `data` and dataset is either a graph name or `graph,set`.
+# Returns:
+#   - (list): Any remaining unparsed arguments (when a non-option is
+#     encountered), otherwise `{}`.
+# Side effects:
+#   - Updates `::utils::graph::_data($dataset,*)`.
+#   - Errors on an odd-length options list.
+################################################################################
 proc ::utils::graph::_configure args {
   variable _data
   set type [lindex $args 0]
@@ -199,9 +276,21 @@ proc ::utils::graph::_configure args {
   }
 }
 
-# redraw:
-#    Redraw the entire graph, axes and data.
-#
+################################################################################
+# ::utils::graph::redraw
+#   Redraws the entire graph (axes and data sets).
+# Visibility:
+#   Public.
+# Inputs:
+#   - graph (string): Graph name.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `graph` is not registered, errors.
+#   - If `::_data($graph,canvas)` is unset, returns without drawing.
+#   - Otherwise clears existing canvas items tagged `g$graph` and calls
+#     `::utils::graph::plot_axes` and `::utils::graph::plot_data`.
+################################################################################
 proc ::utils::graph::redraw {graph} {
   if {! [::utils::graph::isgraph $graph]} { error "$graph: no such graph" }
   if {! [info exists ::utils::graph::_data($graph,canvas)]} { return }
@@ -210,9 +299,19 @@ proc ::utils::graph::redraw {graph} {
   ::utils::graph::plot_data $graph
 }
 
-# plot_axes:
-#    Replot the graph axes.
-#
+################################################################################
+# ::utils::graph::plot_axes
+#   Plots the graph axes, ticks, and guide decorations.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates computed range and scaling values in `::utils::graph::_data`.
+#   - Creates canvas items tagged `g$graph` on `::_data($graph,canvas)`.
+################################################################################
 proc ::utils::graph::plot_axes {graph} {
   variable _data
   # Set ranges and scaling factors:
@@ -375,9 +474,19 @@ proc ::utils::graph::plot_axes {graph} {
   }
 }
 
-# plot_data:
-#    Plot the lines/points/bars for each data set in the graph.
-#
+################################################################################
+# ::utils::graph::plot_data
+#   Plots each configured data set for the graph.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates canvas items (lines, points, bars, and optional keys) tagged
+#     `g$graph` on `::_data($graph,canvas)`.
+################################################################################
 proc ::utils::graph::plot_data {graph} {
   variable _data
   set canvas $_data($graph,canvas)
@@ -464,12 +573,19 @@ proc ::utils::graph::plot_data {graph} {
 }
 
 
-# round
-#
-#    Returns a value n rounded to the nearest integer if it is
-#    within 0.1 of n, or to one decimal place otherwise.
-#    Used to print axis values to a sensible precision.
-#
+################################################################################
+# ::utils::graph::round
+#   Formats a numeric axis label with a sensible precision.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - n (double): Value to format.
+# Returns:
+#   - (double|int): Returns an integer when `n` is within 0.1 of an integer,
+#     otherwise returns a value rounded to one decimal place.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::graph::round {n} {
   set intn [expr {int($n)}]
   if {[expr {$n - $intn}] < 0.1  &&  [expr {$intn - $n}] < 0.1} {
@@ -479,11 +595,20 @@ proc ::utils::graph::round {n} {
 }
 
 
-# point_visible
-#
-#    Returns true if a point (in graph coordinates) is visible given
-#    the current display boundaries.
-#
+################################################################################
+# ::utils::graph::point_visible
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+#   - x (int): X coordinate in canvas units.
+#   - y (int): Y coordinate in canvas units.
+# Returns:
+#   - (bool/int): 1 if the point falls within the graph’s canvas rectangle,
+#     otherwise 0.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::graph::point_visible {graph x y} {
   variable _data
   set xmin $_data($graph,xtop)
@@ -496,9 +621,18 @@ proc ::utils::graph::point_visible {graph x y} {
 }
 
 
-# rescale:
-#    Sets the scaling factors used for mapping graph to canvas coordinates.
-#
+################################################################################
+# ::utils::graph::rescale
+#   Computes scale factors for mapping graph coordinates into canvas units.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::graph::_data($graph,xfac)` and `_data($graph,yfac)`.
+################################################################################
 proc ::utils::graph::rescale {graph} {
   variable _data
   set width $_data($graph,width)
@@ -514,18 +648,36 @@ proc ::utils::graph::rescale {graph} {
 }
 
 
-# xmap:
-#    Map a graph X coordinate to its canvas unit equivalent.
-#
+################################################################################
+# ::utils::graph::xmap
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+#   - x (double): X coordinate in graph units.
+# Returns:
+#   - (int): X coordinate in canvas units.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::graph::xmap {graph x} {
   variable _data
   return [expr {int(($x - $_data($graph,axmin)) * \
             $_data($graph,xfac) + $_data($graph,xtop))}]
 }
 
-# ymap:
-#    Map a graph Y coordinate to its canvas unit equivalent.
-#
+################################################################################
+# ::utils::graph::ymap
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+#   - y (double): Y coordinate in graph units.
+# Returns:
+#   - (int): Y coordinate in canvas units.
+# Side effects:
+#   - Errors if `y` is empty.
+################################################################################
 proc ::utils::graph::ymap {graph y} {
   variable _data
 if {$y == ""} { error "y is empty" }
@@ -533,9 +685,18 @@ if {$y == ""} { error "y is empty" }
             $_data($graph,yfac) + $_data($graph,ytop))}]
 }
 
-# Xunmap:
-#    Transform a canvas unit to its graph X coordinate equivalent.
-#
+################################################################################
+# ::utils::graph::xunmap
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+#   - cx (int): X coordinate in canvas units.
+# Returns:
+#   - (double): X coordinate in graph units.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::graph::xunmap {graph cx} {
   variable _data
   return [expr {$_data($graph,axmin) + \
@@ -543,9 +704,18 @@ proc ::utils::graph::xunmap {graph cx} {
             double($_data($graph,xfac))}]
 }
 
-# Yunmap:
-#    Transform a canvas unit to its graph Y coordinate equivalent.
-#
+################################################################################
+# ::utils::graph::yunmap
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+#   - cy (int): Y coordinate in canvas units.
+# Returns:
+#   - (double): Y coordinate in graph units.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::graph::yunmap {graph cy} {
   variable _data
   return [expr {$_data($graph,aymax) - \
@@ -553,9 +723,18 @@ proc ::utils::graph::yunmap {graph cy} {
             double($_data($graph,yfac))}]
 }
 
-# scale_data:
-#    Transforms an even-sized list of graph coordinates to canvas units.
-#
+################################################################################
+# ::utils::graph::scale_data
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+#   - coords (list): Flat list of `{x y ...}` pairs in graph units.
+# Returns:
+#   - (list): Flat list of `{cx cy ...}` pairs in canvas units.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::graph::scale_data {graph coords} {
   set result {}
   for {set i 0} {$i < [llength $coords] - 1} {incr i 2} {
@@ -565,9 +744,20 @@ proc ::utils::graph::scale_data {graph coords} {
   return $result
 }
 
-# set_range:
-#    Sets any range boundaries that are not already set for a graph.
-#
+################################################################################
+# ::utils::graph::set_range
+#   Computes the effective axis ranges for a graph.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - graph (string): Graph name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates computed range keys `axmin/axmax/aymin/aymax` in
+#     `::utils::graph::_data`.
+#   - Applies any explicit `xmin/xmax/ymin/ymax` overrides.
+################################################################################
 proc ::utils::graph::set_range {graph} {
   variable _data
 
