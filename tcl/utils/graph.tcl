@@ -92,7 +92,7 @@ proc ::utils::graph::create args {
 #
 proc ::utils::graph::delete {graph} {
   # Remove from the list of available graphs:
-  set index [lindex $::utils::graph::_graphs $graph]
+  set index [lsearch -exact $::utils::graph::_graphs $graph]
   if {$index < 0} { return }
   set ::utils::graph::_graphs [lreplace $::utils::graph::_graphs $index $index]
   # Remove all configuration data for the graph:
@@ -485,7 +485,7 @@ proc ::utils::graph::round {n} {
 #    the current display boundaries.
 #
 proc ::utils::graph::point_visible {graph x y} {
-  variable data
+  variable _data
   set xmin $_data($graph,xtop)
   set ymin $_data($graph,ytop)
   set xmax [expr {$xmin + $_data($graph,width)}]
