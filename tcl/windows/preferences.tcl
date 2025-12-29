@@ -224,12 +224,32 @@ proc ::preferences::internationalization { w } {
     }
     ttk::frame $w.n
     ttk::label $w.n.nlb -text [tr OptionsNumbers]
-    ttk::combobox $w.n.number -width 9 -textvar ::newNumbers -values $numList -state readonly -font font_Fixed
-    set popdown [ttk::combobox::PopdownWindow $w.n.number]
-    $popdown.f.l configure -font font_Fixed
+    ttk::combobox $w.n.number -width 9 -textvar ::newNumbers -values $numList -state readonly -font font_Fixed \
+        -postcommand [list ::preferences::configureComboboxListboxFont $w.n.number font_Fixed]
     bind $w.n.number <<ComboboxSelected>> "::preferences::numbers $w.n.number"
     pack $w.n.nlb $w.n.number -side left -padx "0 5"
     pack $w.n $w.tp  -side top -anchor w
+}
+
+proc ::preferences::configureComboboxListboxFont {combo font} {
+    if {![winfo exists $combo]} { return }
+
+    set popdown [ttk::combobox::PopdownWindow $combo]
+    if {![winfo exists $popdown]} {
+        after idle [list ::preferences::configureComboboxListboxFont $combo $font]
+        return
+    }
+
+    set stack [list $popdown]
+    while {[llength $stack] > 0} {
+        set w [lindex $stack 0]
+        set stack [lrange $stack 1 end]
+        if {[winfo class $w] eq "Listbox"} {
+            catch { $w configure -font $font }
+            return
+        }
+        set stack [concat [winfo children $w] $stack]
+    }
 }
 
 # preferences dialog for fonts

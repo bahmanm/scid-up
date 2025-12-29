@@ -20,7 +20,7 @@ set(
   CPACK_PACKAGE_DESCRIPTION_SUMMARY
   "chess database application with play and training functionality"
 )
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "tk8.6 (>= 8.6.0)")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "tk9 (>= 9)")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 include(CPack)
 
@@ -77,10 +77,10 @@ install(DIRECTORY tcl DESTINATION scid)
 
 
 # engine phalanx
-file(GLOB PHALANX_SRC engines/phalanx-scid/*.c)
-add_executable(phalanx-scid ${PHALANX_SRC})
-set_target_properties(phalanx-scid PROPERTIES COMPILE_FLAGS "-w")
-install(TARGETS phalanx-scid DESTINATION bin)
+#file(GLOB PHALANX_SRC engines/phalanx-scid/*.c)
+#add_executable(phalanx-scid ${PHALANX_SRC})
+#set_target_properties(phalanx-scid PROPERTIES COMPILE_FLAGS "-w")
+#install(TARGETS phalanx-scid DESTINATION bin)
 
 
 option(GTEST "Build unit tests" OFF)
@@ -92,20 +92,65 @@ option(TCL_TESTS "Add Tcl test targets" ON)
 if(TCL_TESTS)
   set(SCID_TCL_TEST_RUNNER "${CMAKE_SOURCE_DIR}/tcl/tests/run_all_tests.tcl")
 
-  set(SCID_TCLSH "")
-  if(DEFINED TCL_TCLSH AND TCL_TCLSH)
-    set(SCID_TCLSH "${TCL_TCLSH}")
-  endif()
-  if(NOT SCID_TCLSH)
-    find_program(SCID_TCLSH NAMES tclsh tclsh8.6)
+  set(
+    SCID_TCLSH
+    ""
+    CACHE FILEPATH
+          "Path to the tclsh executable used to run Scid's Tcl test-suite (empty = auto)"
+  )
+
+  set(_scid_tclsh "")
+  if(SCID_TCLSH)
+    set(_scid_tclsh "${SCID_TCLSH}")
   endif()
 
-  if(SCID_TCLSH)
+  # Prefer a tclsh that matches the selected Tcl library (avoids running tests under the wrong Tcl
+  # major version when multiple tclsh installations are present on PATH).
+  if(NOT _scid_tclsh AND DEFINED TCL_LIBRARY AND IS_ABSOLUTE "${TCL_LIBRARY}")
+    get_filename_component(_scid_tcl_libdir "${TCL_LIBRARY}" DIRECTORY)
+    get_filename_component(_scid_tcl_prefix "${_scid_tcl_libdir}" DIRECTORY)
+
+    set(_scid_tclsh_candidates "")
+    if(TCL_LIBRARY MATCHES "tcl9([./]|$)" OR TCL_LIBRARY MATCHES "tcl90([./]|$)")
+      list(
+        APPEND
+        _scid_tclsh_candidates
+        "${_scid_tcl_prefix}/bin/tclsh9.0"
+        "${_scid_tcl_prefix}/bin/tclsh90"
+        "${_scid_tcl_prefix}/bin/tclsh9"
+      )
+    elseif(TCL_LIBRARY MATCHES "tcl8\\.6([./]|$)" OR TCL_LIBRARY MATCHES "tcl86([./]|$)")
+      list(
+        APPEND
+        _scid_tclsh_candidates
+        "${_scid_tcl_prefix}/bin/tclsh8.6"
+        "${_scid_tcl_prefix}/bin/tclsh86"
+      )
+    endif()
+    list(APPEND _scid_tclsh_candidates "${_scid_tcl_prefix}/bin/tclsh")
+
+    foreach(_cand IN LISTS _scid_tclsh_candidates)
+      if(EXISTS "${_cand}")
+        set(_scid_tclsh "${_cand}")
+        break()
+      endif()
+    endforeach()
+  endif()
+
+  if(NOT _scid_tclsh AND DEFINED TCL_TCLSH AND TCL_TCLSH)
+    set(_scid_tclsh "${TCL_TCLSH}")
+  endif()
+
+  if(NOT _scid_tclsh)
+    find_program(_scid_tclsh NAMES tclsh tclsh9.0 tclsh90 tclsh9 tclsh8.6 tclsh86)
+  endif()
+
+  if(_scid_tclsh)
     add_custom_target(
       tcl_tests
       COMMAND
         "${CMAKE_COMMAND}" -E chdir "${CMAKE_SOURCE_DIR}"
-        "${SCID_TCLSH}" "${SCID_TCL_TEST_RUNNER}"
+        "${_scid_tclsh}" "${SCID_TCL_TEST_RUNNER}"
       COMMENT "Running Tcl tests"
       VERBATIM
     )
@@ -115,7 +160,7 @@ if(TCL_TESTS)
       NAME tcl_tests
       COMMAND
         "${CMAKE_COMMAND}" -E chdir "${CMAKE_SOURCE_DIR}"
-        "${SCID_TCLSH}" "${SCID_TCL_TEST_RUNNER}"
+        "${_scid_tclsh}" "${SCID_TCL_TEST_RUNNER}"
     )
   else()
     message(WARNING "tclsh not found; Tcl tests are disabled")

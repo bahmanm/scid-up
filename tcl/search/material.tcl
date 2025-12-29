@@ -60,11 +60,11 @@ set sameBishops 0
 set minMatDiff -40
 set maxMatDiff +40
 
-trace variable minMoveNum w {::utils::validate::Integer 999 0}
-trace variable maxMoveNum w {::utils::validate::Integer 999 0}
-trace variable minHalfMoves w {::utils::validate::Integer 99 0}
-trace variable minMatDiff w {::utils::validate::Integer -99 0}
-trace variable maxMatDiff w {::utils::validate::Integer -99 0}
+trace add variable minMoveNum write {::utils::validate::Integer 999 0}
+trace add variable maxMoveNum write {::utils::validate::Integer 999 0}
+trace add variable minHalfMoves write {::utils::validate::Integer 99 0}
+trace add variable minMatDiff write {::utils::validate::Integer -99 0}
+trace add variable maxMatDiff write {::utils::validate::Integer -99 0}
 
 set nPatterns 3
 set nMaxPatterns 10
@@ -110,8 +110,8 @@ proc checkPieceCounts {name el op} {
   }
 }
 
-trace variable pMin w checkPieceCounts
-trace variable pMax w checkPieceCounts
+trace add variable pMin write checkPieceCounts
+trace add variable pMax write checkPieceCounts
 
 
 ################################################################################
@@ -850,4 +850,3 @@ proc ::search::material::save {} {
       -message "Material/pattern search options saved to: $fName"
   close $searchF
 }
-
