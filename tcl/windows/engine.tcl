@@ -457,10 +457,9 @@ proc ::enginewin::connectEngine {id enginename} {
     update idletasks
 
     switch $uci {
-      0 { set protocol "xboard" }
       1 { set protocol "uci" }
       2 { set protocol "network" }
-      default { set protocol [list uci xboard] }
+      default { error "Unsupported engine protocol flag: $uci" }
     }
     if {[catch {
         if {$wdir != "" && $wdir != "."} {

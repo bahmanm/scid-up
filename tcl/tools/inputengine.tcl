@@ -780,21 +780,13 @@ namespace eval inputengine {
             return
           } \
           "string Chessboard found and initialised*" {
-            # switch to xboard mode and disable move
-            # announcements by the driver engine
-            ::inputengine::sendToEngine "xboard"
             ::inputengine::sendToEngine "announce"
-          } \
-          "Engine mode    : xboard*" {
-            ::inputengine::sendToEngine "getposition"
-            ::ExtHardware::HWbuttonImg $inputengine::connectimg
           } \
           "string FEN *" {
             set InputEngine(init) 0
             # The first FEN string is always sent as
             # info string FEN ...
-            # as this is compatible with both UCI and xboard.
-            # At this stage the engine is not set to xboard mode
+            # At this stage the engine is not set to any specific mode
             # yet, so this signals a new program startup
             # accordingly.
           } \

@@ -86,7 +86,6 @@ proc resetEngine {n} {
     set analysis(after$n) ""
     set analysis(log$n) ""              ;# Log file channel
     set analysis(logCount$n) 0          ;# Number of lines sent to log file
-    set analysis(wbEngineDetected$n) 0  ;# Is this a special Winboard engine?
     set analysis(multiPV$n) {}          ;# multiPV list sorted : depth score moves
     set analysis(multiPVraw$n) {}       ;# same thing but with raw UCI moves
     set analysis(uci$n) 0               ;# UCI engine
@@ -195,10 +194,13 @@ proc engine {arglist} {
     if {! [info exists newEngine(Elo)]} { set newEngine(Elo) 0 }
     if {! [info exists newEngine(Time)]} { set newEngine(Time) 0 }
     if {! [info exists newEngine(URL)]} { set newEngine(URL) "" }
-    # puts this option here for compatibility with previous file format (?!)
-    if {! [info exists newEngine(UCI)]} { set newEngine(UCI) 0 }
+    # Scid only supports UCI engines. The `UCI` field is a protocol flag:
+    # - 1: local UCI engine
+    # - 2: remote UCI engine (network)
+    if {! [info exists newEngine(UCI)]} { set newEngine(UCI) 1 }
+    if {$newEngine(UCI) ni {1 2}} { error "Unsupported engine protocol flag: $newEngine(UCI)" }
     if {! [info exists newEngine(UCIoptions)]} { set newEngine(UCIoptions) "" }
-    
+
     lappend engines(list) [list $newEngine(Name) $newEngine(Cmd) \
             $newEngine(Args) $newEngine(Dir) \
             $newEngine(Elo) $newEngine(Time) \
@@ -218,7 +220,7 @@ proc engine {arglist} {
 #   - Sources the engines configuration file (may call `engine` repeatedly).
 ################################################################################
 proc ::enginelist::read {} {
-    catch {source [scidConfigFile engines]}
+    return [catch {source [scidConfigFile engines]}]
 }
 
 ################################################################################
@@ -513,7 +515,7 @@ proc ::enginelist::edit {index} {
     if {$index >= 0  ||  $index >= [llength $engines(list)]} {
         set e [lindex $engines(list) $index]
     } else {
-        set e [list "" "" "" . 0 0 "" 1]
+        set e [list "" "" "" . 0 0 "" 1 {}]
     }
     
     set engines(newIndex) $index
@@ -524,7 +526,7 @@ proc ::enginelist::edit {index} {
     set engines(newElo) [lindex $e 4]
     set engines(newTime) [lindex $e 5]
     set engines(newURL) [lindex $e 6]
-    set engines(newUCI) [lindex $e 7]
+    set engines(newProtocol) [lindex $e 7]
     set ::uci::newOptions [lindex $e 8]
     
     set engines(newDate) $::tr(None)
@@ -598,7 +600,6 @@ proc ::enginelist::edit {index} {
     
     grid columnconfigure $f 1 -weight 1
     
-    ttk::checkbutton $f.cbUci -text UCI -variable engines(newUCI) -style Bold.TCheckbutton
     ttk::button $f.bConfigUCI -text $::tr(ConfigureUCIengine) -command {
         ::uci::uciConfig 2 [ toAbsPath $engines(newCmd) ] $engines(newArgs) \
                 [ toAbsPath $engines(newDir) ] $::uci::newOptions
@@ -607,14 +608,12 @@ proc ::enginelist::edit {index} {
     $f.lName configure -font font_Bold
     $f.lCmd configure -font font_Bold
     $f.lDir configure -font font_Bold
-    # $f.cbUci configure -font font_Bold
     
     ttk::label $f.lElo -text $::tr(EngineElo)
     ttk::entry $f.eElo -textvariable engines(newElo) -justify right -width 5
     grid $f.lElo -row $row -column 0 -sticky w
     grid $f.eElo -row $row -column 1 -sticky w
     incr row
-    grid $f.cbUci -row $row -column 0 -sticky w
     grid $f.bConfigUCI -row $row -column 1 -sticky w
     incr row
     
@@ -641,15 +640,15 @@ proc ::enginelist::edit {index} {
             [string trim $engines(newDir)] == ""} {
             tk_messageBox -title Scid -icon info \
                     -message "The Name, Command and Directory fields must not be empty."
-        } else {
-            set newEntry [list $engines(newName) $engines(newCmd) \
-                    $engines(newArgs) $engines(newDir) \
-                    $engines(newElo) $engines(newTime) \
-                    $engines(newURL) $engines(newUCI) $::uci::newOptions ]
-            if {$engines(newIndex) < 0} {
-                lappend engines(list) $newEntry
-            } else {
-                set engines(list) [lreplace $engines(list) \
+	        } else {
+	            set newEntry [list $engines(newName) $engines(newCmd) \
+	                    $engines(newArgs) $engines(newDir) \
+	                    $engines(newElo) $engines(newTime) \
+	                    $engines(newURL) $engines(newProtocol) $::uci::newOptions ]
+	            if {$engines(newIndex) < 0} {
+	                lappend engines(list) $newEntry
+	            } else {
+	                set engines(list) [lreplace $engines(list) \
                         $engines(newIndex) $engines(newIndex) $newEntry]
             }
             destroy .engineEdit
@@ -963,10 +962,6 @@ proc configAnnotation {} {
     # Checkmark to enable all-move-scoring
     ttk::checkbutton  $f.comment.scoreAll -text $::tr(ScoreAllMoves) -variable scoreAllMoves
     ttk::checkbutton  $f.comment.cbMarkTactics -text $::tr(MarkTacticalExercises) -variable ::markTacticalExercises
-    if {! $::analysis(uci1)} {
-        set ::markTacticalExercises 0
-        $f.comment.cbMarkTactics configure -state disabled
-    }
     
     pack $f.comment.scoreAll $f.comment.cbAnnotateVar $f.comment.cbShortAnnotation $f.comment.cbAddScore \
 	$f.comment.cbAddAnnotatorTag $f.comment.cbMarkTactics -fill x -anchor w
@@ -1107,8 +1102,6 @@ proc markExercise { prevscore score nag} {
     if {!$::markTacticalExercises} { return 0 }
     
     # check at which depth the tactical shot is found
-    # this assumes analysis by an UCI engine
-    if {! $::analysis(uci1)} { return 0 }
     
     set deltamove [expr {$score - $prevscore}]
     # filter tactics so only those with high gains are kept
@@ -1662,12 +1655,8 @@ proc addAnalysisVariation {{n 1}} {
     set addAtEnd [sc_pos isAt vend]
 
     set moves $analysis(moves$n)
-    if {$analysis(uci$n)} {
-        set tmp_moves [ lindex [ lindex $analysis(multiPV$n) 0 ] 2 ]
-        set text [format "\[%s\] %d:%s" $analysis(name$n) $analysis(depth$n) [scoreToMate $analysis(score$n) $tmp_moves $n]]
-    } else  {
-        set text [format "\[%s\] %d:%+.2f" $analysis(name$n) $analysis(depth$n) $analysis(score$n)]
-    }
+    set tmp_moves [lindex [lindex $analysis(multiPV$n) 0] 2]
+    set text [format "\[%s\] %d:%s" $analysis(name$n) $analysis(depth$n) [scoreToMate $analysis(score$n) $tmp_moves $n]]
     
     if {$addAtEnd} {
         # get the last move of the game
@@ -1772,11 +1761,7 @@ proc makeAnalysisMove {{n 1} {comment ""}} {
     regexp {[^[:alpha:]]*(.*?)( .*|$)} $::analysis(moves$n) -> move
     if {![info exists move]} { return 0 }
 
-    if { $::analysis(uci$n) } {
-        ::addMoveUCI $move
-    } else  {
-        ::addSanMove $move
-    }
+    ::addMoveUCI $move
 
     if {$comment != ""} {
         set tmp [sc_pos getComment]
@@ -1828,13 +1813,8 @@ proc destroyAnalysisWin {{n 1}} {
     
     # Some engines in analyze mode may not react as expected to "quit"
     # so ensure the engine exits analyze mode first:
-    if {$analysis(uci$n)} {
-        sendToEngine $n "stop"
-        sendToEngine $n "quit"
-    } else  {
-        sendToEngine $n "exit"
-        sendToEngine $n "quit"
-    }
+    sendToEngine $n "stop"
+    sendToEngine $n "quit"
     catch { flush $analysis(pipe$n) }
     
     # Uncomment the following line to turn on blocking mode before
@@ -1882,23 +1862,13 @@ proc sendToEngine {n text} {
 # Returns:
 #   - None.
 # Side effects:
-#   - Sends the move to the engine (UCI or WinBoard protocol).
+#   - Sends the move to the engine (UCI).
 #   - Reads state from `analysis(...)` and the current position (`sc_pos fen`).
 ################################################################################
 proc sendMoveToEngine {n move} {
-    # Convert "e7e8Q" into "e7e8q" since that is the XBoard/WinBoard
-    # standard for sending moves in coordinate notation:
+    # Convert "e7e8Q" into "e7e8q" since UCI requires lowercase promotion pieces.
     set move [string tolower $move]
-    if {$::analysis(uci$n)} {
-        # should be position fen [sc_pos fen] moves ?
-        sendToEngine $n "position fen [sc_pos fen] moves $move"
-    } else  {
-        if {$::analysis(wants_usermove$n)} {
-            sendToEngine $n "usermove $move"
-        } else {
-            sendToEngine $n $move
-        }
-    }
+    sendToEngine $n "position fen [sc_pos fen] moves $move"
 }
 
 ################################################################################
@@ -2112,34 +2082,20 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     ttk::button $w.b1.priority -image tb_cpu_hi -command "setAnalysisPriority $w $n"
     ::utils::tooltip::Set $w.b1.priority $::tr(LowPriority)
     
-    ttk::button $w.b1.update -image tb_update -command "if {$analysis(uci$n)} {sendToEngine $n .}" ;# UCI does not support . command
-    ::utils::tooltip::Set $w.b1.update $::tr(Update)
-    
     ttk::button $w.b1.help -image tb_help -command { helpWindow Analysis }
     ::utils::tooltip::Set $w.b1.help $::tr(Help)
     
-    pack $w.b1.bStartStop $w.b1.lockengine $w.b1.move $w.b1.line -side left
-    if {$analysis(uci$n)} {
-	pack $w.b1.alllines -side left
-    }
+    pack $w.b1.bStartStop $w.b1.lockengine $w.b1.move $w.b1.line $w.b1.alllines -side left
     if {$n ==1} {
         pack $w.b1.multipv $w.b1.annotate $w.b1.automove $w.b1.bFinishGame -side left
     } else  {
         pack $w.b1.multipv $w.b1.automove -side left
     }
     pack $w.b1.help $w.b1.priority $w.b1.showboard -side right
-    if {! $analysis(uci$n)} {
-	pack $w.b1.update -side right
-    } else {
-	pack $w.b1.showinfo -side right
-    }
+    pack $w.b1.showinfo -side right
     text $w.text
     applyThemeStyle Treeview $w.text
-    if {$analysis(uci$n)} {
-        $w.text configure -width 60 -height 1 -font font_Bold -wrap word -setgrid 1 ;# -spacing3 2
-    } else {
-        $w.text configure -width 60 -height 4 -font font_Fixed -wrap word -setgrid 1
-    }
+    $w.text configure -width 60 -height 1 -font font_Bold -wrap word -setgrid 1 ;# -spacing3 2
     autoscrollText y $w.hist $w.hist.text Treeview
     $w.hist.text configure -wrap word -state normal -width 60 -height 8 -font font_Fixed -setgrid 1
     $w.hist.text tag configure indent -lmargin2 [font measure font_Fixed "xxxxxxxxxxxx"]
@@ -2165,18 +2121,8 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     ::createToplevelFinalize $w
 
     set analysis(onUciOk$n) "onUciOk $n $w.b1.multipv $autostart [list [ lindex $engineData 8 ]]"
-    if {$analysis(uci$n)} {
-        fileevent $analysis(pipe$n) readable "::uci::processAnalysisInput $n"
-    } else  {
-        fileevent $analysis(pipe$n) readable "processAnalysisInput $n"
-    }
+    fileevent $analysis(pipe$n) readable "::uci::processAnalysisInput $n"
     after 1000 "checkAnalysisStarted $n"
-
-    # We hope the engine is correctly started at that point, so we can send the first analyze command
-    # this problem only happens with winboard engine, as we don't know when they are ready
-    if { !$analysis(uci$n) && $autostart != 0 } {
-        initialAnalysisStart $n
-    }
 
     catch {
         ::enginelist::sort
@@ -2267,7 +2213,6 @@ proc changePVSize { n } {
         $h configure -state disabled
         set analysis(lastHistory$n) {}
     }
-    if { ! $analysis(uci$n) } { return }
 
     array set ::uciOptions$n [list "MultiPv" "$analysis(multiPVCount$n)"]
     ::uci::sendUCIoptions $n
@@ -2327,203 +2272,10 @@ proc setAnalysisPriority {w n} {
 proc checkAnalysisStarted {n} {
     global analysis
     if {$analysis(seen$n)} { return }
-    # Some Winboard engines do not issue any output when
-    # they start up, so the fileevent above is never triggered.
-    # Most, but not all, of these engines will respond in some
-    # way once they have received input of some type.  This
-    # proc will issue the same initialization commands as
-    # those in processAnalysisInput below, but without the need
-    # for a triggering fileevent to occur.
-    
+
     logEngineNote $n {Quiet engine (still no output); sending it initial commands.}
-    
-    if {$analysis(uci$n)} {
-        # in order to get options
-        sendToEngine $n "uci"
-        # egine should respond uciok
-        set analysis(seen$n) 1
-    } else  {
-        sendToEngine $n "xboard"
-        sendToEngine $n "protover 2"
-        sendToEngine $n "ponder off"
-        sendToEngine $n "post"
-        # Prevent some engines from making an immediate "book"
-        # reply move as black when position is sent later:
-        sendToEngine $n "force"
-    }
-}
-################################################################################
-# initialAnalysisStart
-# Visibility:
-#   Internal.
-# Inputs:
-#   - n (int): Analysis engine slot.
-# Returns:
-#   - None.
-# Side effects:
-#   - Polls for a quiet period in WinBoard engine output and then schedules
-#     `startEngineAnalysis`.
-#   - Uses `after` and reads `analysis(processInput$n)`.
-################################################################################
-proc initialAnalysisStart {n} {
-    global analysis
-    
-    update
-    
-    if { $analysis(processInput$n) == 0 } {
-        after 500 initialAnalysisStart $n
-        return
-    }
-    set cl [clock clicks -milliseconds]
-    if {[expr $cl - $analysis(processInput$n)] < 1000} {
-        after 200 initialAnalysisStart $n
-        return
-    }
-    after 200 startEngineAnalysis $n 1
-}
-################################################################################
-# processAnalysisInput
-# Visibility:
-#   Public.
-# Inputs:
-#   - n (int, optional): Analysis engine slot (default 1).
-# Returns:
-#   - None.
-# Side effects:
-#   - Reads a line from the engine pipe and updates `analysis(...)` state.
-#   - Sends protocol initialisation commands when appropriate.
-#   - Updates analysis UI via `updateAnalysisText` and may call WinBoard detection.
-# Notes:
-#   - This handler is for WinBoard/XBoard engines; UCI engines use a separate
-#     input processor.
-################################################################################
-proc processAnalysisInput {{n 1}} {
-    global analysis
-    
-    # Get one line from the engine:
-    set line [gets $analysis(pipe$n)]
-    
-    # this is only useful at startup but costs less than 10 microseconds
-    set analysis(processInput$n) [clock clicks -milliseconds]
-    
-    logEngine $n "Engine: $line"
-    
-    if { ! [ checkEngineIsAlive $n ] } { return }
-    
-    if {! $analysis(seen$n)} {
-        set analysis(seen$n) 1
-        # First line of output from the program, so send initial commands:
-        logEngineNote $n {First line from engine seen; sending it initial commands now.}
-        sendToEngine $n "xboard"
-        sendToEngine $n "protover 2"
-        sendToEngine $n "ponder off"
-        sendToEngine $n "post"
-    }
-    
-    # Check for "feature" commands so we can determine if the engine
-    # has the setboard and analyze commands:
-    #
-    if {! [string compare [string range $line 0 6] "feature"]} {
-        if {[string match "*analyze=1*" $line]} { set analysis(has_analyze$n) 1 }
-        if {[string match "*setboard=1*" $line]} { set analysis(has_setboard$n) 1 }
-        if {[string match "*usermove=1*" $line]} { set analysis(wants_usermove$n) 1 }
-        if {[string match "*sigint=1*" $line]} { set analysis(send_sigint$n) 1 }
-        if {[string match "*myname=*" $line] } {
-            if { !$analysis(wbEngineDetected$n) } { detectWBEngine $n $line  }
-            if { [regexp "myname=\"(\[^\"\]*)\"" $line dummy name]} {
-                if {$n == 1} {
-                    catch {::setTitle .analysisWin$n "Analysis: $name"}
-                } else {
-                    catch {::setTitle .analysisWin$n "Analysis $n: $name"}
-                }
-            }
-        }
-        return
-    }
-    
-    # Check for a line starting with "Crafty", so Scid can work well
-    # with older Crafty versions that do not recognize "protover":
-    #
-    if {! [string compare [string range $line 0 5] "Crafty"]} {
-        logEngineNote $n {Seen "Crafty"; assuming analyze and setboard commands.}
-        set major 0
-        if {[scan $line "Crafty v%d.%d" major minor] == 2  &&  $major >= 18} {
-            logEngineNote $n {Crafty version is >= 18.0; assuming scores are from White perspective.}
-            set analysis(invertScore$n) 0
-        }
-        # Turn off crafty logging, to reduce number of junk files:
-        sendToEngine $n "log off"
-        # Set a fairly low noise value so Crafty is responsive to board changes,
-        # but not so low that we get lots of short-ply search data:
-        sendToEngine $n "noise 1000"
-        set analysis(isCrafty$n) 1
-        set analysis(has_setboard$n) 1
-        set analysis(has_analyze$n) 1
-        return
-    }
-    
-    # Scan the line from the engine for the analysis data:
-    #
-    set res [scan $line "%d%c %d %d %s %\[^\n\]\n" \
-            temp_depth dummy temp_score \
-            temp_time temp_nodes temp_moves]
-    if {$res == 6} {
-        if {$analysis(invertScore$n)  && (![string compare [sc_pos side] "black"])} {
-            set temp_score [expr { 0.0 - $temp_score } ]
-        }
-        set analysis(depth$n) $temp_depth
-        set analysis(score$n) $temp_score
-        # Convert score to pawns from centipawns:
-        set analysis(score$n) [expr {double($analysis(score$n)) / 100.0} ]
-        set analysis(moves$n) [formatAnalysisMoves $temp_moves]
-        set analysis(time$n) $temp_time
-        set analysis(nodes$n) [calculateNodes $temp_nodes]
-        
-        # Convert time to seconds from centiseconds:
-        if {! $analysis(wholeSeconds$n)} {
-            set analysis(time$n) [expr {double($analysis(time$n)) / 100.0} ]
-        }
-        
-        updateAnalysisText $n
-        
-        if {! $analysis(seenEval$n)} {
-            # This is the first evaluation line seen, so send the current
-            # position details to the engine:
-            set analysis(seenEval$n) 1
-        }
-        
-        return
-    }
-    
-    # Check for a "stat01:" line, the reply to the "." command:
-    #
-    if {! [string compare [string range $line 0 6] "stat01:"]} {
-        if {[scan $line "%s %d %s %d" \
-                    dummy temp_time temp_nodes temp_depth] == 4} {
-            set analysis(depth$n) $temp_depth
-            set analysis(time$n) $temp_time
-            set analysis(nodes$n) [calculateNodes $temp_nodes]
-            # Convert time to seconds from centiseconds:
-            if {! $analysis(wholeSeconds$n)} {
-                set analysis(time$n) [expr {double($analysis(time$n)) / 100.0} ]
-            }
-            updateAnalysisText $n
-        }
-        return
-    }
-    
-    # Check for other engine-specific lines:
-    # The following checks are intended to make Scid work with
-    # various WinBoard engines that are not properly configured
-    # by the "feature" line checking code above.
-    #
-    # Many thanks to Allen Lake for testing Scid with many
-    # WinBoard engines and providing this code and the detection
-    # code in wbdetect.tcl
-    if { !$analysis(wbEngineDetected$n) } {
-        detectWBEngine $n $line
-    }
-    
+    sendToEngine $n "uci"
+    set analysis(seen$n) 1
 }
 ################################################################################
 # checkEngineIsAlive
@@ -2612,27 +2364,13 @@ set finishGameMode 0
 #   - Creates and shows the configuration dialog for UCI engines.
 ################################################################################
 proc toggleFinishGame { { n 1 } } {
-	global analysis
-	set b ".analysisWin$n.b1.bFinishGame"
-	if { $::autoplayMode } { return }
-	if { ! $analysis(uci$n) } {
-		if { !$analysis(analyzeMode$n) || ! [sc_pos isAt vend] } { return }
+		global analysis
+		set b ".analysisWin$n.b1.bFinishGame"
+		if { $::autoplayMode } { return }
 
-		if {!$::finishGameMode} {
-			set ::finishGameMode 1
-			$b configure -image tb_finish_on
-			after $::autoplayDelay autoplayFinishGame
-		} else {
-			set ::finishGameMode 0
-			$b configure -image tb_finish_off
-			after cancel autoplayFinishGame
-		}
-		return
-	}
-
-	# UCI engines
-	# Default values
-	if {! [info exists ::finishGameEng1] } { set ::finishGameEng1 1 }
+		# UCI engines
+		# Default values
+		if {! [info exists ::finishGameEng1] } { set ::finishGameEng1 1 }
 	if {! [info exists ::finishGameEng2] } { set ::finishGameEng2 1 }
 	if {! [info exists ::finishGameCmd1] } { set ::finishGameCmd1 "movetime" }
 	if {! [info exists ::finishGameCmdVal1] } { set ::finishGameCmdVal1 5 }
@@ -2682,12 +2420,12 @@ proc toggleFinishGame { { n 1 } } {
 	ttk::label $w.wh_f.p -image wk$psize
 	grid $w.wh_f.p -column 0 -row 0 -rowspan 3
 	ttk::radiobutton $w.wh_f.e1 -text $analysis(name1) -variable ::finishGameEng1 -value 1
-	if {[winfo exists .analysisWin2] && $analysis(uci2) } {
-		ttk::radiobutton $w.wh_f.e2 -text $analysis(name2) -variable ::finishGameEng1 -value 2
-	} else {
-		set ::finishGameEng1 1
-		ttk::radiobutton $w.wh_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng1 -value 2 -state disabled
-	}
+		if {[winfo exists .analysisWin2]} {
+			ttk::radiobutton $w.wh_f.e2 -text $analysis(name2) -variable ::finishGameEng1 -value 2
+		} else {
+			set ::finishGameEng1 1
+			ttk::radiobutton $w.wh_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng1 -value 2 -state disabled
+		}
 	grid $w.wh_f.e1 -column 1 -row 0 -columnspan 3 -sticky w
 	grid $w.wh_f.e2 -column 1 -row 1 -columnspan 3 -sticky w
 	ttk::spinbox $w.wh_f.cv -width 3 -textvariable ::finishGameCmdVal1 -from 1 -to 999 -justify right
@@ -2702,11 +2440,11 @@ proc toggleFinishGame { { n 1 } } {
 	ttk::label $w.bk_f.p -image bk$psize
 	grid $w.bk_f.p -column 0 -row 0 -rowspan 3
 	ttk::radiobutton $w.bk_f.e1 -text $analysis(name1) -variable ::finishGameEng2 -value 1
-	if {[winfo exists .analysisWin2] && $analysis(uci2) } {
-		ttk::radiobutton $w.bk_f.e2 -text $analysis(name2) -variable ::finishGameEng2 -value 2
-	} else {
-		set ::finishGameEng2 1
-		ttk::radiobutton $w.bk_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng2 -value 2 -state disabled
+		if {[winfo exists .analysisWin2]} {
+			ttk::radiobutton $w.bk_f.e2 -text $analysis(name2) -variable ::finishGameEng2 -value 2
+		} else {
+			set ::finishGameEng2 1
+			ttk::radiobutton $w.bk_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng2 -value 2 -state disabled
 	}
 	grid $w.bk_f.e1 -column 1 -row 0 -columnspan 3 -sticky w
 	grid $w.bk_f.e2 -column 1 -row 1 -columnspan 3 -sticky w
@@ -2940,18 +2678,7 @@ proc startAnalyzeMode {{n 1} {force 0}} {
     # Check that the engine has not already had analyze mode started:
     if {$analysis(analyzeMode$n) && ! $force } { return }
     set analysis(analyzeMode$n) 1
-    if { $analysis(uci$n) } {
-        updateAnalysis $n
-    } else  {
-        if {$analysis(has_setboard$n)} {
-            sendToEngine $n "setboard [sc_pos fen]"
-        }
-        if { $analysis(has_analyze$n) } {
-            sendToEngine $n "analyze"
-        } else  {
-            updateAnalysis $n ;# in order to handle special cases (engines without setboard and analyse commands)
-        }
-    }
+    updateAnalysis $n
 }
 ################################################################################
 # stopAnalyzeMode
@@ -2969,11 +2696,7 @@ proc stopAnalyzeMode { {n 1} } {
     global analysis
     if {! $analysis(analyzeMode$n)} { return }
     set analysis(analyzeMode$n) 0
-    if { $analysis(uci$n) } {
-        ::uci::sendStop $n
-    } else  {
-        sendToEngine $n "exit"
-    }
+    ::uci::sendStop $n
     set analysis(fen$n) {}
 }
 ################################################################################
@@ -3008,9 +2731,7 @@ proc toggleLockEngine {n} {
     set w ".analysisWin$n"
     $w.b1.move configure -state $state
     $w.b1.line configure -state $state
-    if {$analysis(uci$n)} {
-        $w.b1.multipv configure -state $state
-    }
+    $w.b1.multipv configure -state $state
     $w.b1.alllines configure -state $state
     $w.b1.automove configure -state $state
     if { $n == 1 } {
@@ -3052,64 +2773,55 @@ proc updateAnalysisText {{n 1}} {
     $t configure -state normal
     $t delete 0.0 end
     
-    if { $analysis(uci$n) } {
-        if { [expr abs($score)] >= 327.0 } {
-            if { [catch { set tmp [format "M%d " $analysis(scoremate$n)]} ] } {
-                set tmp [format "%+.1f " $score]
-            }
-        } else {
+    if { [expr abs($score)] >= 327.0 } {
+        if { [catch { set tmp [format "M%d " $analysis(scoremate$n)]} ] } {
             set tmp [format "%+.1f " $score]
         }
-        $t insert end $tmp
-        
-        $t insert end "[tr Depth]: "
-        if {$analysis(showEngineInfo$n) && $analysis(seldepth$n) != 0} {
-            $t insert end [ format "%2u/%u " $analysis(depth$n) $analysis(seldepth$n)] small
-        } else {
-            $t insert end [ format "%2u " $analysis(depth$n) ] small
-        }
-        $t insert end "[tr Nodes]: "
-        $t insert end [ format "%6uK (%u kn/s) " $analysis(nodes$n) $nps ] small
-        $t insert end "[tr Time]: "
-        $t insert end [ format "%6.2f s" $analysis(time$n) ] small
-        if {$analysis(showEngineInfo$n)} {
-            $t insert end "\n" small
-            $t insert end "[tr Current]: "
-            $t insert end [ format "%s (%s/%s) " [::trans $analysis(currmove$n)] $analysis(currmovenumber$n) $analysis(maxmovenumber$n)] small
-            $t insert end "TB Hits: "
-            $t insert end [ format "%u " $analysis(tbhits$n)] small
-            $t insert end "Nps: "
-            $t insert end [ format "%u n/s " $analysis(nps$n)] small
-            $t insert end "Hash Full: "
-            set hashfull [expr {round($analysis(hashfull$n) / 10)}]
-            $t insert end [ format "%u%% " $hashfull ] small
-            $t insert end "CPU Load: "
-            set cpuload [expr {round($analysis(cpuload$n) / 10)}]
-            $t insert end [ format "%u%% " $cpuload ] small
-            
-            #$t insert end [ format "\nCurrent: %s (%s) - Hashfull: %u - nps: %u - TBhits: %u - CPUload: %u" $analysis(currmove$n) $analysis(currmovenumber$n) $analysis(hashfull$n) $analysis(nps$n) $analysis(tbhits$n) $analysis(cpuload$n) ]
-        }
     } else {
-        set newStr [format "Depth:   %6u      Nodes: %6uK (%u kn/s)\n" $analysis(depth$n) $analysis(nodes$n) $nps]
-        append newStr [format "Score: %+8.2f      Time: %9.2f seconds\n" $score $analysis(time$n)]
-        $t insert 1.0 $newStr small
+        set tmp [format "%+.1f " $score]
     }
+    $t insert end $tmp
     
-    
-    if {$analysis(automove$n)} {
-        if {$analysis(automoveThinking$n)} {
-            set moves "   Thinking..... "
-        } else {
-            set moves "   Your move..... "
-        }
+    $t insert end "[tr Depth]: "
+    if {$analysis(showEngineInfo$n) && $analysis(seldepth$n) != 0} {
+        $t insert end [ format "%2u/%u " $analysis(depth$n) $analysis(seldepth$n)] small
+    } else {
+        $t insert end [ format "%2u " $analysis(depth$n) ] small
+    }
+    $t insert end "[tr Nodes]: "
+    $t insert end [ format "%6uK (%u kn/s) " $analysis(nodes$n) $nps ] small
+    $t insert end "[tr Time]: "
+    $t insert end [ format "%6.2f s" $analysis(time$n) ] small
+    if {$analysis(showEngineInfo$n)} {
+        $t insert end "\n" small
+        $t insert end "[tr Current]: "
+        $t insert end [ format "%s (%s/%s) " [::trans $analysis(currmove$n)] $analysis(currmovenumber$n) $analysis(maxmovenumber$n)] small
+        $t insert end "TB Hits: "
+        $t insert end [ format "%u " $analysis(tbhits$n)] small
+        $t insert end "Nps: "
+        $t insert end [ format "%u n/s " $analysis(nps$n)] small
+        $t insert end "Hash Full: "
+        set hashfull [expr {round($analysis(hashfull$n) / 10)}]
+        $t insert end [ format "%u%% " $hashfull ] small
+        $t insert end "CPU Load: "
+        set cpuload [expr {round($analysis(cpuload$n) / 10)}]
+        $t insert end [ format "%u%% " $cpuload ] small
         
-        if { ! $analysis(uci$n) } {
-            $t insert end $moves blue
-        }
-        $t configure -state disabled
-        updateAnalysisBoard $n ""
-        return
+        #$t insert end [ format "\nCurrent: %s (%s) - Hashfull: %u - nps: %u - TBhits: %u - CPUload: %u" $analysis(currmove$n) $analysis(currmovenumber$n) $analysis(hashfull$n) $analysis(nps$n) $analysis(tbhits$n) $analysis(cpuload$n) ]
     }
+    
+    
+	    if {$analysis(automove$n)} {
+	        if {$analysis(automoveThinking$n)} {
+	            set moves "   Thinking..... "
+	        } else {
+	            set moves "   Your move..... "
+	        }
+	        $t insert end $moves blue
+	        $t configure -state disabled
+	        updateAnalysisBoard $n ""
+	        return
+	    }
     
     if {! $::analysis(movesDisplay$n)}  {
         $h configure -state normal
@@ -3120,11 +2832,7 @@ proc updateAnalysisText {{n 1}} {
         return
     }
     
-    if { $analysis(uci$n) } {
-        set moves [ lindex [ lindex $analysis(multiPV$n) 0 ] 2 ]
-    } else  {
-        set moves $analysis(moves$n)
-    }
+	    set moves [lindex [lindex $analysis(multiPV$n) 0] 2]
     
     $h configure -state normal
     set cleared 0
@@ -3134,50 +2842,40 @@ proc updateAnalysisText {{n 1}} {
     }
     
     ################################################################################
-    if { $analysis(uci$n) } {
-        if {$cleared} { set analysis(multiPV$n) {} ; set analysis(multiPVraw$n) {} }
-        if {$analysis(multiPVCount$n) == 1} {
-            set newhst [format "%2d %s %s" $analysis(depth$n) [scoreToMate $score $moves $n] [addMoveNumbers $n [::trans $moves]]]
-            if {$newhst != $analysis(lastHistory$n) && $moves != ""} {
-                $h insert end [format "%s (%.2f)\n" $newhst $analysis(time$n)] indent
-                $h see end-1c
-                set analysis(lastHistory$n) $newhst
-            }
-        } else {
-            $h delete 1.0 end
-            # First line
-            set pv [lindex $analysis(multiPV$n) 0]
-            if { $pv != "" } {
-                catch { set newStr [format "%2d %s " [lindex $pv 0] [scoreToMate $score [lindex $pv 2] $n] ] }
-            
-                $h insert end "1 " gray
-                append newStr "[addMoveNumbers $n [::trans [lindex $pv 2]]] [format (%.2f)\n [lindex $pv 4]]"
-                $h insert end $newStr blue
-            
-                set lineNumber 1
-                foreach pv $analysis(multiPV$n) {
-                    if {$lineNumber == 1} { incr lineNumber ; continue }
-                    $h insert end "$lineNumber " gray
-                    set score [scoreToMate [lindex $pv 1] [lindex $pv 2] $n]
-                    $h insert end [format "%2d %s %s (%.2f)\n" [lindex $pv 0] $score [addMoveNumbers $n [::trans [lindex $pv 2]]] [lindex $pv 4]] indent
-                    incr lineNumber
-                }
-            }
-        }
-        ################################################################################
-    } else  {
-        # original Scid analysis display
-        $h insert end [format "%2d %+5.2f %s (%.2f)\n" $analysis(depth$n) $score [::trans $moves] $analysis(time$n)] indent
-        $h see end-1c
-    }
+	    if {$cleared} { set analysis(multiPV$n) {} ; set analysis(multiPVraw$n) {} }
+	    if {$analysis(multiPVCount$n) == 1} {
+	        set newhst [format "%2d %s %s" $analysis(depth$n) [scoreToMate $score $moves $n] [addMoveNumbers $n [::trans $moves]]]
+	        if {$newhst != $analysis(lastHistory$n) && $moves != ""} {
+	            $h insert end [format "%s (%.2f)\n" $newhst $analysis(time$n)] indent
+	            $h see end-1c
+	            set analysis(lastHistory$n) $newhst
+	        }
+	    } else {
+	        $h delete 1.0 end
+	        # First line
+	        set pv [lindex $analysis(multiPV$n) 0]
+	        if { $pv != "" } {
+	            catch { set newStr [format "%2d %s " [lindex $pv 0] [scoreToMate $score [lindex $pv 2] $n] ] }
+	        
+	            $h insert end "1 " gray
+	            append newStr "[addMoveNumbers $n [::trans [lindex $pv 2]]] [format (%.2f)\n [lindex $pv 4]]"
+	            $h insert end $newStr blue
+	        
+	            set lineNumber 1
+	            foreach pv $analysis(multiPV$n) {
+	                if {$lineNumber == 1} { incr lineNumber ; continue }
+	                $h insert end "$lineNumber " gray
+	                set score [scoreToMate [lindex $pv 1] [lindex $pv 2] $n]
+	                $h insert end [format "%2d %s %s (%.2f)\n" [lindex $pv 0] $score [addMoveNumbers $n [::trans [lindex $pv 2]]] [lindex $pv 4]] indent
+	                incr lineNumber
+	            }
+	        }
+	    }
     
-    $h configure -state disabled
-    set analysis(prev_depth$n) $analysis(depth$n)
-    if { ! $analysis(uci$n) } {
-        $t insert end [::trans $moves] blue
-    }
-    # $t tag add score 2.0 2.13
-    $t configure -state disabled
+	    $h configure -state disabled
+	    set analysis(prev_depth$n) $analysis(depth$n)
+	    # $t tag add score 2.0 2.13
+	    $t configure -state disabled
     
     updateAnalysisBoard $n $analysis(moves$n)
 }
@@ -3394,151 +3092,14 @@ proc updateAnalysis {{n 1}} {
     # No need to send current board if engine is locked
     if { $analysis(lockEngine$n) } { return }
 
-    if { $analysis(uci$n) } {
-        set analysis(depth$n) 0
-        set analysis(multiPV$n) {}
-        set analysis(multiPVraw$n) {}
-        set analysis(fen$n) [sc_pos fen]
-        set analysis(maxmovenumber$n) 0
-        set analysis(movelist$n) [sc_game UCI_currentPos]
-        set analysis(nonStdStart$n) [sc_game startBoard]
-        ::uci::sendPositionGo $n "infinite"
-    } else {
-        #TODO: remove 0.3s delay even for other engines
-
-        global analysisWin windowsOS
-
-        # If too close to the previous update, and no other future update is
-        # pending, reschedule this update to occur in another 0.3 seconds:
-        #
-        if {[catch {set clicks [clock clicks -milliseconds]}]} {
-            set clicks [clock clicks]
-        }
-        set diff [expr {$clicks - $analysis(lastClicks$n)} ]
-        if {$diff < 300  &&  $diff >= 0} {
-            if {$analysis(after$n) == ""} {
-                set analysis(after$n) [after 300 updateAnalysis $n]
-            }
-            return
-        }
-        set analysis(lastClicks$n) $clicks
-        set analysis(after$n) ""
-        after cancel updateAnalysis $n
-
-        set old_movelist $analysis(movelist$n)
-        set movelist [sc_game moves coord list]
-        set analysis(movelist$n) $movelist
-        set nonStdStart [sc_game startBoard]
-        set old_nonStdStart $analysis(nonStdStart$n)
-        set analysis(nonStdStart$n) $nonStdStart
-
-        # This section is for engines that support "analyze":
-        if {$analysis(has_analyze$n)} {
-            sendToEngine $n "exit"   ;# Get out of analyze mode, to send moves.
-            
-            # On Crafty, "force" command has different meaning when not in
-            # XBoard mode, and some users have noticed Crafty not being in
-            # that mode at this point -- although I cannot reproduce this.
-            # So just re-send "xboard" to Crafty to make sure:
-            if {$analysis(isCrafty$n)} { sendToEngine $n "xboard" }
-            
-            sendToEngine $n "force"  ;# Stop engine replying to moves.
-            # Check if the setboard command must be used -- that is, if the
-            # previous or current position arose from a non-standard start.
-            
-            #if {$analysis(has_setboard$n)  &&  ($old_nonStdStart  || $nonStdStart)}
-            # We skip all code below if the engine has setboard capability : this is provides less error prone behavior
-            if {$analysis(has_setboard$n)} {
-                sendToEngine $n "setboard [sc_pos fen]"
-                # Most engines with setboard do not recognize the crafty "mn"
-                # command (it is not in the XBoard/WinBoard protocol), so only send it to crafty:
-                if {$analysis(isCrafty$n)} { sendToEngine $n "mn [sc_pos moveNumber]" }
-                sendToEngine $n "analyze"
-                return
-            }
-            
-            # If we need a non-standard start and the engine does not have
-            # setboard, the user is out of luck:
-            if {$nonStdStart} {
-                set analysis(moves$n) "  Sorry, this game has a non-standard start position."
-                updateAnalysisText $n
-                return
-            }
-            
-            # Here, the engine has the analyze command (and no setboard) but this game does
-            # not have a non-standard start position.
-            
-            set oldlen [llength $old_movelist]
-            set newlen [llength $movelist]
-            
-            # Check for optimization to minimize the commands to be sent:
-            # Scid sends "undo" to backup wherever possible, and avoid "new" as
-            # on many engines this would clear hash tables, causing poor
-            # hash table performance.
-            
-            # Send just the new move if possible (if the new move list is exactly
-            # the same as the previous move list, with one extra move):
-            if {($newlen == $oldlen + 1) && ($old_movelist == [lrange $movelist 0 [expr {$oldlen - 1} ]])} {
-                sendMoveToEngine $n [lindex $movelist $oldlen]
-                
-            } elseif {($newlen + 1 == $oldlen) && ($movelist == [lrange $old_movelist 0 [expr {$newlen - 1} ]])} {
-                # Here the new move list is the same as the old list but with one
-                # less move, just send one "undo":
-                sendToEngine $n "undo"
-                
-            } elseif {$newlen == $oldlen  &&  $old_movelist == $movelist} {
-                
-                # Here the board has not changed, so send nothing
-                
-            } else {
-                
-                # Otherwise, undo and re-send all moves:
-                for {set i 0} {$i < $oldlen} {incr i} {
-                    sendToEngine $n "undo"
-                }
-                foreach m $movelist {
-                    sendMoveToEngine $n $m
-                }
-                
-            }
-            
-            sendToEngine $n "analyze"
-            
-        } else {
-            
-            # This section is for engines without the analyze command:
-            # In this case, Scid just sends "new", "force" and a bunch
-            # of moves, then sets a very long search time/depth and
-            # sends "go". This is not ideal but it works OK for engines
-            # without "analyze" that I have tried.
-            
-            # If Unix OS and engine wants it, send an INT signal:
-            if {(!$windowsOS)  &&  $analysis(send_sigint$n)} {
-                catch {exec -- kill -s INT [pid $analysis(pipe$n)]}
-            }
-            sendToEngine $n "new"
-            sendToEngine $n "force"
-            if { $nonStdStart && ! $analysis(has_setboard$n) } {
-                set analysis(moves$n) "  Sorry, this game has a non-standard start position."
-                updateAnalysisText $n
-                return
-            }
-            if {$analysis(has_setboard$n)} {
-                sendToEngine $n "setboard [sc_pos fen]"
-            } else  {
-                foreach m $movelist {
-                    sendMoveToEngine $n $m
-                }
-            }
-            # Set engine to be white or black:
-            sendToEngine $n [sc_pos side]
-            # Set search time and depth to something very large and start search:
-            sendToEngine $n "st 120000"
-            sendToEngine $n "sd 50"
-            sendToEngine $n "post"
-            sendToEngine $n "go"
-        }
-    }
+    set analysis(depth$n) 0
+    set analysis(multiPV$n) {}
+    set analysis(multiPVraw$n) {}
+    set analysis(fen$n) [sc_pos fen]
+    set analysis(maxmovenumber$n) 0
+    set analysis(movelist$n) [sc_game UCI_currentPos]
+    set analysis(nonStdStart$n) [sc_game startBoard]
+    ::uci::sendPositionGo $n "infinite"
 }
 
 ################################################################################
@@ -3714,11 +3275,7 @@ proc automove_go {{n 1}} {
 #   - Adds moves to the current game via `sc_move addSan` (non-UCI) or UCI helper.
 ################################################################################
 proc sc_move_add { moves n } {
-    if { $::analysis(uci$n) } {
-        return [::uci::sc_move_add $moves]
-    } else  {
-        return [ catch { sc_move addSan $moves } ]
-    }
+    return [::uci::sc_move_add $moves]
 }
 ################################################################################
 # toAbsPath

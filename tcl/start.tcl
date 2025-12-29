@@ -744,7 +744,6 @@ tools/optable.tcl
 tools/preport.tcl
 tools/pinfo.tcl
 tools/analysis.tcl
-tools/wbdetect.tcl
 tools/graphs.tcl
 tools/ptracker.tcl
 help/help.tcl

@@ -139,7 +139,7 @@ proc ::enginecfg::dlgNewLocal {} {
     set fName [tk_getOpenFile -initialdir $::scidEnginesDir -filetypes $ftype]
     if {$fName eq ""} { return "" }
     set ::scidEnginesDir [file dirname $fName]
-    return [::enginecfg::add [list $fName $fName {} {} {} 0 {} {} {}]]
+    return [::enginecfg::add [list $fName $fName {} {} {} 0 {} 1 {}]]
 }
 
 # Pop up a dialog box for the user to enter the url of a remote engine
@@ -160,7 +160,7 @@ proc ::enginecfg::dlgNewRemote {} {
     grab $w
     tkwait window $w
     if {$::enginecfg_dlgresult eq ""} { return "" }
-    return [::enginecfg::add [list $::enginecfg_dlgresult $::enginecfg_dlgresult {} {} {} 0 {} 2]]
+    return [::enginecfg::add [list $::enginecfg_dlgresult $::enginecfg_dlgresult {} {} {} 0 {} 2 {}]]
 }
 
 # TODO: no references to ::enginewin should exists in this file
@@ -348,7 +348,7 @@ proc ::enginecfg::setOptionFromWidget {id idx widget} {
 }
 
 # Creates the widgets for engine configuration, like the engine path, command
-# line parameters, uci/xboard protocol, etc...
+    # line parameters, UCI protocol, etc...
 proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     lassign $engCfg name cmd args wdir elo time url uci
     lassign $url scoreside notation pvwrap debugframe priority netport
@@ -407,13 +407,8 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
         -command "::enginecfg::onSubmitParam $id wdir {} 2"
     $w window create end -window $w.wdirbtn -pady 2 -padx 2
 
-    if {$uci == 0 || $uci == 1} {
-        $w insert end "\n[tr EngineProtocol]:\t"
-        ttk::combobox $w.protocol -state readonly -width 12 -values {xboard uci}
-        bind $w.protocol <<ComboboxSelected>> "::enginecfg::onSubmitParam $id protocol \[ %W current \]"
-        $w window create end -window $w.protocol -pady 2
-        $w.protocol set [expr { $uci == 0 ? "xboard" : "uci" }]
-    }
+    $w insert end "\n[tr EngineProtocol]:\t"
+    $w insert end [expr {$uci == 2 ? "network" : "uci"}]
 
     $w insert end "\n[tr EngineNotation]:\t"
     ttk::combobox $w.notation -state readonly -width 12 -values [list engine SAN "English SAN" figurine]
@@ -620,7 +615,6 @@ proc ::enginecfg::onSubmitParam {id connectParam newValue {opendlg 0}} {
         "cmd"      { set configIdx 1 }
         "args"     { set configIdx 2 }
         "wdir"     { set configIdx 3 }
-        "protocol" { set configIdx 7 }
         default { error "wrong option" }
     }
     upvar ::enginecfg::engConfig_$id engConfig_
@@ -736,13 +730,6 @@ proc ::enginecfg::onChangeLayout {id param value} {
             set idx 1
             if {$value < 0} {
                 set value [expr { 0 - $value }]
-            }
-            # If it is an xboard engine with san=1 store it as a negative value
-            foreach elem [lsearch -all -inline -index 0 [lindex $engConfig_ 8] "san"] {
-                if {[lindex $elem 7]} {
-                    set value [expr { 0 - $value }]
-                    break
-                }
             }
         }
         "wrap" {
