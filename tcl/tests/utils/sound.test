@@ -1,0 +1,482 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+namespace eval ::utils::sound {}
+namespace eval ::snack {}
+
+# Prevent load-time initialisation from depending on an external configuration.
+if {![info exists ::utils::sound::soundFolder]} {
+    set ::utils::sound::soundFolder ""
+}
+
+# AnnounceMove depends on ::untrans.
+if {![llength [info commands ::untrans]]} {
+    proc ::untrans {s} { return $s }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils sound.tcl]
+
+namespace eval ::sound_test {
+    variable stubbedCommands {}
+
+    variable afterCalls {}
+    variable snackAudioCalls {}
+    variable messageBoxCalls {}
+
+    variable playCalls {}
+    variable cancelCalls {}
+
+    variable announceMoveCalls {}
+    variable checkQueueCalls {}
+}
+
+proc ::sound_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::sound_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::sound_test::setup {} {
+    ::sound_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::sound_test::afterCalls {}
+    set ::sound_test::snackAudioCalls {}
+    set ::sound_test::messageBoxCalls {}
+    set ::sound_test::playCalls {}
+    set ::sound_test::cancelCalls {}
+    set ::sound_test::announceMoveCalls {}
+    set ::sound_test::checkQueueCalls {}
+
+    set ::utils::sound::hasSound 1
+    set ::utils::sound::pipe ""
+    set ::utils::sound::isPlayingSound 0
+    set ::utils::sound::soundQueue {}
+    set ::utils::sound::soundFolder [::scid_test::tempDir]
+
+    set ::utils::sound::announceNew 0
+    set ::utils::sound::announceForward 0
+    set ::utils::sound::announceBack 0
+
+    ::sound_test::stubCommand after {subcmd args} {
+        switch -- $subcmd {
+            cancel {
+                lappend ::sound_test::afterCalls [list cancel {*}$args]
+                return
+            }
+            idle {
+                lappend ::sound_test::afterCalls [list idle {*}$args]
+                return "after#idle"
+            }
+            default {
+                if {[string is integer -strict $subcmd]} {
+                    lappend ::sound_test::afterCalls [list $subcmd {*}$args]
+                    return "after#$subcmd"
+                }
+                error "after $subcmd not stubbed in sound tests"
+            }
+        }
+    }
+
+    ::sound_test::stubCommand snack::audio {subcmd args} {
+        lappend ::sound_test::snackAudioCalls [list $subcmd {*}$args]
+        if {$subcmd ne "stop"} {
+            error "snack::audio $subcmd not stubbed in sound tests"
+        }
+        return
+    }
+
+    ::sound_test::stubCommand tk_messageBox {args} {
+        lappend ::sound_test::messageBoxCalls $args
+        return "ok"
+    }
+}
+
+proc ::sound_test::cleanup {} {
+    ::sound_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    foreach cmd [info commands sound_test_sound_*] {
+        catch {rename $cmd ""}
+    }
+}
+
+# ---- Tests ----
+
+test sound-announceMove-no-sound-1.0 {AnnounceMove returns immediately when hasSound is false} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    set ::utils::sound::hasSound 0
+
+    # Fail closed if these get called.
+    ::sound_test::stubCommand ::utils::sound::CancelSounds {} { error "CancelSounds should not be called" }
+    ::sound_test::stubCommand ::utils::sound::PlaySound {s} { error "PlaySound should not be called" }
+
+    # Act
+    ::utils::sound::AnnounceMove "Nxf3+"
+
+    # Assert
+    list $::utils::sound::soundQueue $::utils::sound::isPlayingSound
+} -cleanup {
+    ::sound_test::cleanup
+} -result {{} 0}
+
+
+test sound-announceMove-castle-kingside-1.0 {AnnounceMove maps O-O to CastleK} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    ::sound_test::stubCommand ::utils::sound::CancelSounds {} {
+        lappend ::sound_test::cancelCalls CancelSounds
+        return
+    }
+    ::sound_test::stubCommand ::utils::sound::PlaySound {s} {
+        lappend ::sound_test::playCalls $s
+        return
+    }
+
+    # Act
+    ::utils::sound::AnnounceMove "O-O"
+
+    # Assert
+    list $::sound_test::cancelCalls $::sound_test::playCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result {CancelSounds sound_CastleK}
+
+
+test sound-announceMove-castle-queenside-1.0 {AnnounceMove maps O-O-O to CastleQ} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    ::sound_test::stubCommand ::utils::sound::CancelSounds {} {
+        lappend ::sound_test::cancelCalls CancelSounds
+        return
+    }
+    ::sound_test::stubCommand ::utils::sound::PlaySound {s} {
+        lappend ::sound_test::playCalls $s
+        return
+    }
+
+    # Act
+    ::utils::sound::AnnounceMove "O-O-O"
+
+    # Assert
+    list $::sound_test::cancelCalls $::sound_test::playCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result {CancelSounds sound_CastleQ}
+
+
+test sound-announceMove-maps-chars-1.0 {AnnounceMove maps characters (N x f 3 +) and ignores unknowns} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    ::sound_test::stubCommand ::utils::sound::CancelSounds {} {
+        lappend ::sound_test::cancelCalls CancelSounds
+        return
+    }
+    ::sound_test::stubCommand ::utils::sound::PlaySound {s} {
+        lappend ::sound_test::playCalls $s
+        return
+    }
+
+    # Act
+    ::utils::sound::AnnounceMove "Nxf3+?!"
+
+    # Assert
+    list $::sound_test::cancelCalls $::sound_test::playCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result {CancelSounds {sound_Knight sound_x sound_f sound_3 sound_Check}}
+
+
+test sound-announceNewMove-gated-1.0 {AnnounceNewMove calls AnnounceMove only when enabled} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    ::sound_test::stubCommand ::utils::sound::AnnounceMove {move} {
+        lappend ::sound_test::announceMoveCalls $move
+        return
+    }
+
+    # Act
+    set ::utils::sound::announceNew 0
+    ::utils::sound::AnnounceNewMove e4
+    set ::utils::sound::announceNew 1
+    ::utils::sound::AnnounceNewMove e4
+
+    # Assert
+    return $::sound_test::announceMoveCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result e4
+
+
+test sound-announceForward-gated-1.0 {AnnounceForward calls AnnounceMove only when enabled} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    ::sound_test::stubCommand ::utils::sound::AnnounceMove {move} {
+        lappend ::sound_test::announceMoveCalls $move
+        return
+    }
+
+    # Act
+    set ::utils::sound::announceForward 0
+    ::utils::sound::AnnounceForward e4
+    set ::utils::sound::announceForward 1
+    ::utils::sound::AnnounceForward e4
+
+    # Assert
+    return $::sound_test::announceMoveCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result e4
+
+
+test sound-announceBack-gated-1.0 {AnnounceBack calls AnnounceMove U only when enabled} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    ::sound_test::stubCommand ::utils::sound::AnnounceMove {move} {
+        lappend ::sound_test::announceMoveCalls $move
+        return
+    }
+
+    # Act
+    set ::utils::sound::announceBack 0
+    ::utils::sound::AnnounceBack
+    set ::utils::sound::announceBack 1
+    ::utils::sound::AnnounceBack
+
+    # Assert
+    return $::sound_test::announceMoveCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result U
+
+
+test sound-soundFinished-cancels-and-continues-1.0 {SoundFinished cancels pending reset and continues the queue} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    set ::utils::sound::isPlayingSound 1
+    set ::utils::sound::soundQueue {sound_Test}
+
+    ::sound_test::stubCommand ::utils::sound::CheckSoundQueue {} {
+        lappend ::sound_test::checkQueueCalls CheckSoundQueue
+        return
+    }
+
+    # Act
+    ::utils::sound::SoundFinished
+
+    # Assert
+    list \
+        $::sound_test::afterCalls \
+        $::utils::sound::isPlayingSound \
+        $::utils::sound::soundQueue \
+        $::sound_test::checkQueueCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result {{{cancel ::utils::sound::CancelSounds}} 0 sound_Test CheckSoundQueue}
+
+
+test sound-playSound-enqueues-and-schedules-1.0 {PlaySound enqueues and schedules CheckSoundQueue via after idle} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::sound::PlaySound sound_Test
+
+    # Assert
+    list $::utils::sound::soundQueue $::sound_test::afterCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result {sound_Test {{idle ::utils::sound::CheckSoundQueue}}}
+
+
+test sound-checkQueue-already-playing-1.0 {CheckSoundQueue is a no-op while a sound is already playing} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    set ::utils::sound::isPlayingSound 1
+    set ::utils::sound::soundQueue {sound_Test}
+
+    # Act
+    ::utils::sound::CheckSoundQueue
+
+    # Assert
+    list $::utils::sound::soundQueue $::utils::sound::isPlayingSound
+} -cleanup {
+    ::sound_test::cleanup
+} -result {sound_Test 1}
+
+
+test sound-checkQueue-snack-plays-and-schedules-cancel-1.0 {CheckSoundQueue calls <sound> play and schedules CancelSounds (pipe empty)} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    proc sound_test_sound_Test {subcmd args} {
+        if {$subcmd ne "play"} {
+            error "unexpected subcmd: $subcmd"
+        }
+        set ::sound_test::playCalls $args
+        return
+    }
+
+    set ::utils::sound::pipe ""
+    set ::utils::sound::soundQueue {sound_test_sound_Test}
+
+    # Act
+    ::utils::sound::CheckSoundQueue
+
+    # Assert
+    list \
+        $::utils::sound::soundQueue \
+        $::utils::sound::isPlayingSound \
+        $::sound_test::playCalls \
+        $::sound_test::afterCalls
+} -cleanup {
+    ::sound_test::cleanup
+} -result {{} 1 {-blocking 0 -command ::utils::sound::SoundFinished} {{5000 ::utils::sound::CancelSounds}}}
+
+
+test sound-checkQueue-pipe-writes-file-1.0 {CheckSoundQueue writes the sound filename to the pipe (pipe non-empty)} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    set folder [file join [::scid_test::tempDir] soundpipe]
+    file mkdir $folder
+    set ::utils::sound::soundFolder $folder
+
+    set outFile [file join [::scid_test::tempDir] pipe_out.txt]
+    set ch [open $outFile w+]
+    set ::utils::sound::pipe $ch
+    set ::utils::sound::soundQueue {sound_King}
+
+    # Act
+    ::utils::sound::CheckSoundQueue
+
+    # Assert
+    flush $ch
+    seek $ch 0 start
+    set content [string trim [read $ch]]
+    close $ch
+
+    list \
+        $::utils::sound::soundQueue \
+        $::utils::sound::isPlayingSound \
+        [string match "*[file join $folder King.wav]" $content]
+} -cleanup {
+    ::sound_test::cleanup
+} -result {{} 1 1}
+
+
+test sound-cancelSounds-snack-stop-1.0 {CancelSounds stops Snack audio and clears the queue (pipe empty)} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    set ::utils::sound::pipe ""
+    set ::utils::sound::soundQueue {a b}
+    set ::utils::sound::isPlayingSound 1
+
+    # Act
+    ::utils::sound::CancelSounds
+
+    # Assert
+    list [llength $::sound_test::snackAudioCalls] [lindex $::sound_test::snackAudioCalls 0] $::utils::sound::soundQueue $::utils::sound::isPlayingSound
+} -cleanup {
+    ::sound_test::cleanup
+} -result {1 stop {} 0}
+
+
+test sound-cancelSounds-pipe-stop-1.0 {CancelSounds writes stop to the pipe and clears the queue (pipe non-empty)} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    set outFile [file join [::scid_test::tempDir] pipe_stop.txt]
+    set ch [open $outFile w+]
+    set ::utils::sound::pipe $ch
+    set ::utils::sound::soundQueue {a b}
+    set ::utils::sound::isPlayingSound 1
+
+    # Act
+    ::utils::sound::CancelSounds
+
+    # Assert
+    flush $ch
+    seek $ch 0 start
+    set content [string trim [read $ch]]
+    close $ch
+
+    list $content $::utils::sound::soundQueue $::utils::sound::isPlayingSound
+} -cleanup {
+    ::sound_test::cleanup
+} -result {stop {} 0}
+
+
+test sound-readFolder-count-and-configure-1.0 {ReadFolder counts readable WAVs and configures snack sound objects when pipe is empty} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    set folder [file join [::scid_test::tempDir] sounds]
+    file mkdir $folder
+    set ::utils::sound::soundFolder $folder
+
+    set f [file join $folder King.wav]
+    set ch [open $f w]
+    close $ch
+
+    ::scid_test::widgets::defineWidget sound_King
+
+    # Act
+    set count [::utils::sound::ReadFolder]
+
+    # Assert
+    set configuredFile [::scid_test::widgets::getState sound_King -file]
+    list $count [expr {$configuredFile eq $f}]
+} -cleanup {
+    ::sound_test::cleanup
+} -result {1 1}
+
+
+test sound-optionsDialogChooseFolder-1.0 {OptionsDialogChooseFolder sets folder, calls ReadFolder, and shows a message} -setup {
+    ::sound_test::setup
+} -body {
+    # Arrange
+    ::sound_test::stubCommand ::utils::sound::ReadFolder {{newFolder ""}} { return 3 }
+
+    set folder [file join [::scid_test::tempDir] soundfolder]
+    file mkdir $folder
+
+    # Act
+    set count [::utils::sound::OptionsDialogChooseFolder $folder]
+
+    # Assert
+    set msgIdx [lsearch -exact [lindex $::sound_test::messageBoxCalls 0] -message]
+    set msg ""
+    if {$msgIdx != -1} {
+        set msg [lindex [lindex $::sound_test::messageBoxCalls 0] [expr {$msgIdx + 1}]]
+    }
+
+    list $count [string match "Found 3 of * sound files in *" $msg]
+} -cleanup {
+    ::sound_test::cleanup
+} -result {3 1}
+
+
+cleanupTests
