@@ -44,7 +44,7 @@ jobs:
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       run: |
-        wget http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
+        curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
         pushd tcl9.0.3/unix
         ./configure --prefix=/usr
         sudo make install
