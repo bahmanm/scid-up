@@ -1,0 +1,373 @@
+package require tcltest 2.5
+package require tcltest 2.5
+namespace import ::tcltest::*
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::search {}
+namespace eval ::search::header {}
+namespace eval ::utils {}
+namespace eval ::utils::validate {}
+namespace eval ::utils::history {}
+
+# Traces in `tcl/search/header.tcl` reference these callbacks.
+if {![llength [info commands ::utils::validate::Date]]} {
+    proc ::utils::validate::Date {args} { return 1 }
+}
+if {![llength [info commands ::utils::validate::Regexp]]} {
+    proc ::utils::validate::Regexp {pattern args} { return 1 }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] search header.tcl]
+
+namespace eval ::header_search_test {
+    variable stubbedCommands {}
+
+    variable openCalls {}
+    variable historyCalls {}
+    variable menuCalls {}
+}
+
+proc ::header_search_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::header_search_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::header_search_test::setup {} {
+    ::header_search_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::header_search_test::openCalls {}
+    set ::header_search_test::historyCalls {}
+    set ::header_search_test::menuCalls {}
+
+    # Reset module state.
+    ::search::header::defaults
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+
+    ::header_search_test::stubCommand ::utils::history::AddEntry {key value} {
+        lappend ::header_search_test::historyCalls [list $key $value]
+        return
+    }
+
+    ::header_search_test::stubCommand ::search::Open {ref_base ref_filter title create_subwnd} {
+        lappend ::header_search_test::openCalls [list $ref_base $ref_filter $title $create_subwnd]
+        return
+    }
+
+    # Minimal `menu` stub for headless tests.
+    ::header_search_test::stubCommand menu {path args} {
+        lappend ::header_search_test::menuCalls [list $path {*}$args]
+        return $path
+    }
+}
+
+proc ::header_search_test::cleanup {} {
+    ::header_search_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+}
+
+# ---- Tests ----
+
+test header-delegates-to-framework-1.0 {header delegates to shared ::search::Open framework} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::search::header 1 dbfilter
+
+    # Assert
+    return $::header_search_test::openCalls
+} -cleanup {
+    ::header_search_test::cleanup
+} -result [list [list 1 dbfilter HeaderSearch ::search::headerCreateFrame]]
+
+
+test checkDates-expands-year-and-month-1.0 {checkDates expands year/month dates to full form} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sDateMin 2020
+    set ::sDateMax 2021
+    set ::sEventDateMin 1999.02
+    set ::sEventDateMax 2001.11
+
+    # Act
+    checkDates
+
+    # Assert
+    list $::sDateMin $::sDateMax $::sEventDateMin $::sEventDateMax
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {2020.??.?? 2021.12.31 1999.02.?? 2001.11.31}
+
+
+test getRange-none-1.0 {getRange returns empty when both bounds are empty} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::min ""
+    set ::max ""
+
+    # Act
+    ::search::getRange ::min ::max 0 9
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {}
+
+
+test getRange-both-1.0 {getRange returns explicit bounds when both are set} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::min 1
+    set ::max 3
+
+    # Act
+    ::search::getRange ::min ::max 0 9
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {1 3}
+
+
+test getRange-min-only-1.0 {getRange uses cmd_max when only min is set} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::min 10
+    set ::max ""
+
+    # Act
+    ::search::getRange ::min ::max 0 99
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {10 99}
+
+
+test getRange-max-only-1.0 {getRange uses cmd_min when only max is set} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::min ""
+    set ::max 42
+
+    # Act
+    ::search::getRange ::min ::max 0 99
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {0 42}
+
+
+test headerPlayerOptions-adds-name-and-elo-range-1.0 {headerPlayerOptions appends player and elo search options} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sWhite "Carlsen"
+    set ::sBlack ""
+    set ::sWhiteEloMin 2500
+    set ::sWhiteEloMax ""
+
+    set options {header}
+
+    # Act
+    ::search::headerPlayerOptions options -white -welo -black -belo
+
+    # Assert
+    return $options
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {header -white Carlsen -welo {2500 4000}}
+
+
+test getSearchOptions-tag-pair-wildcards-1.0 {getSearchOptions wraps unquoted tag value in wildcards} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sTagName Annotator
+    set ::sTagValue Joe
+
+    set search {}
+
+    # Act
+    ::search::getSearchOptions search
+
+    # Assert
+    return $search
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {{-tag_pair Annotator *Joe*}}
+
+
+test getSearchOptions-tag-pair-unquotes-1.0 {getSearchOptions removes quotes from a quoted wildcard tag value} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sTagName Annotator
+    set ::sTagValue {"*Joe*"}
+
+    set search {}
+
+    # Act
+    ::search::getSearchOptions search
+
+    # Assert
+    return $search
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {{-tag_pair Annotator *Joe*}}
+
+
+test getSearchOptions-delo-ignorecol-1.0 {getSearchOptions adds inverted -delo| range when ignore colours is enabled} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sEloDiffMin -50
+    set ::sEloDiffMax 100
+    set ::sIgnoreCol Yes
+
+    set search {}
+
+    # Act
+    ::search::getSearchOptions search
+
+    # Assert
+    return $search
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {-delo {-50 100} -delo| {-100 50}}
+
+
+test getSearchOptions-flags-results-pgn-1.0 {getSearchOptions emits -flag/-flag!/result!/pgn and flag-count constraints} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sResWin 1
+    set ::sResOther *
+
+    set ::sPgntext(1) "abc"
+    set ::sPgntext(2) ""
+    set ::sPgntext(3) ""
+
+    set ::sHeaderFlags(PawnFlag) yes
+    set ::sHeaderFlags(TacticsFlag) no
+    set ::sHeaderFlags(Comments) yes
+
+    set search {}
+
+    # Act
+    ::search::getSearchOptions search
+
+    # Assert
+    return $search
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {-result! 1* -flag P -flag! T -pgn abc -n_comments! 0}
+
+
+test headerGetOptions-reset-1.0 {headerGetOptions reset restores defaults} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sWhite "Carlsen"
+
+    # Act
+    ::search::headerGetOptions reset
+
+    # Assert
+    return $::sWhite
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {}
+
+
+test headerGetOptions-ignorecol-no-1.0 {headerGetOptions returns a single options list when ignore colours is disabled} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sIgnoreCol No
+    set ::sWhite "Carlsen"
+
+    # Act
+    ::search::headerGetOptions
+
+    # Assert
+    # It always returns a list whose first element is the options list.
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {{header -white Carlsen}}
+
+
+test headerGetOptions-ignorecol-yes-1.0 {headerGetOptions returns two options lists when ignore colours is enabled} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sIgnoreCol Yes
+    set ::sWhite "Carlsen"
+
+    # Act
+    ::search::headerGetOptions
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {{header -white Carlsen} {header -black Carlsen}}
+
+
+test headerGetOptions-dotcmd-1.0 {headerGetOptions returns a presets menu configuration list for widget-path calls} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set cfg [::search::headerGetOptions .menu]
+
+    # Assert
+    set callCount [llength $::header_search_test::menuCalls]
+    set call [lindex $::header_search_test::menuCalls 0]
+    set path [lindex $call 0]
+    set hasPostcommand [expr {[lsearch -exact $call -postcommand] != -1}]
+
+    list $cfg $callCount $path $hasPostcommand
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {{-menu .menu.sHeader_presets} 1 .menu.sHeader_presets 1}
+
+
+
+test presets-roundtrip-1.0 {savePreset and loadPreset round-trip restores selected state} -setup {
+    ::header_search_test::setup
+} -body {
+    # Arrange
+    set ::sWhite "Carlsen"
+    set ::sBlack "Nepo"
+    set ::sPgntext(1) "foo"
+    set ::sHeaderFlags(PawnFlag) yes
+    set ::sTitles(w:gm) 0
+
+    # Act
+    ::search::header::savePreset MyPreset
+    ::search::header::defaults
+    ::search::header::loadPreset MyPreset
+
+    # Assert
+    list \
+        $::sWhite \
+        $::sBlack \
+        $::sPgntext(1) \
+        $::sHeaderFlags(PawnFlag) \
+        $::sTitles(w:gm)
+} -cleanup {
+    ::header_search_test::cleanup
+} -result {Carlsen Nepo foo yes 0}
+
+
+cleanupTests

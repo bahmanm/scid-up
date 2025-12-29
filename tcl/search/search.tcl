@@ -10,29 +10,46 @@ set searchType 0
 set ::search::filter::operation 2
 
 
-# search::filter::reset
-# TODO: remove this function
+################################################################################
+# ::search::filter::reset
+#   Resets the current game list filter (deprecated helper).
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_base current` and delegates to `::windows::gamelist::FilterReset`.
+# Notes:
+#   - TODO: remove this function.
+################################################################################
 proc ::search::filter::reset {} {
   ::windows::gamelist::FilterReset "" [sc_base current]
 }
 
+################################################################################
 # ::search::addFilterOpFrame
-#
-#   Adds a search filter operation selection frame to the window.
-#   Adds a frame of radiobuttons allowing the filter operation
-#   (AND with current filter, OR with current filter, or RESET filter)
-#   to be chosen.
-#   The default value for the first search is RESET:
+#   Adds a filter-operation selection frame (AND/OR/IGNORE) to a search window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Parent widget path.
+#   - small: When true, uses small radiobutton styles.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates ttk widgets under `$w.filterop` and packs them.
+#   - Binds the radio buttons to `::search::filter::operation` (0=and, 1=or, 2=reset).
+################################################################################
 proc ::search::addFilterOpFrame {w {small 0}} {
   ttk::labelframe $w.filterop -text $::tr(FilterOperation)
   set f $w.filterop
   pack $f -side top -fill x
   
   set regular TRadiobutton
-  set bold Bold.TRadiobutton
   if {$small} {
     set regular Small.TRadiobutton
-    set bold SmallBold.TRadiobutton
   }
   
   ttk::frame $f.b
@@ -44,10 +61,20 @@ proc ::search::addFilterOpFrame {w {small 0}} {
 }
 
 
+################################################################################
 # ::search::Config
-#
-#   Sets state of Search button in Header, Board and Material windows
-#
+#   Sets the enabled/disabled state of Search buttons in search windows.
+# Visibility:
+#   Public.
+# Inputs:
+#   - state: Optional widget state (e.g. "normal" or "disabled"). When empty,
+#     the state is derived from `sc_base inUse`.
+# Returns:
+#   - None.
+# Side effects:
+#   - May call `sc_base inUse`.
+#   - Attempts to configure `.sh.b.search`, `.sb.b.search`, and `.sm.b3.search`.
+################################################################################
 proc ::search::Config {{state ""}} {
   if {$state == ""} {
     set state disabled
@@ -59,6 +86,23 @@ proc ::search::Config {{state ""}} {
 }
 
 
+################################################################################
+# ::search::usefile
+#   Opens and applies a saved SearchOptions (`.sso`) file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts for a file via `tk_getOpenFile`.
+#   - Sets `::fName` to the selected file path.
+#   - Sources the file into the global scope.
+#   - On success, dispatches to `::search::material` or `::search::header` based
+#     on `::searchType` as set by the sourced file.
+#   - On source failure, shows a `tk_messageBox` warning.
+################################################################################
 proc ::search::usefile {} {
   set ftype { { "Scid SearchOption files" {".sso"} } }
   set ::fName [tk_getOpenFile -initialdir $::initialDir(base) \
@@ -67,7 +111,7 @@ proc ::search::usefile {} {
   
   if {[catch {uplevel "#0" {source $::fName} } ]} {
     tk_messageBox -title "Scid: Error reading file" -type ok -icon warning \
-        -message "Unable to open or read SearchOptions file: $fName"
+        -message "Unable to open or read SearchOptions file: $::fName"
   } else {
     switch -- $::searchType {
       "Material" { ::search::material }
