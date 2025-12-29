@@ -29,9 +29,20 @@ set sPgntext(1) ""
 set sPgntext(2) ""
 set sPgntext(3) ""
 
-# checkDates:
-#    Checks minimum/maximum search dates in header search window and
-#    extends them if necessary.
+################################################################################
+# checkDates
+#   Normalises the header-search date bounds to a full `YYYY.MM.DD` form.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::sDateMin`, `::sDateMax`, `::sEventDateMin`, and
+#     `::sEventDateMax` in-place, appending placeholder components ("??") or
+#     default day/month values as required.
+################################################################################
 proc checkDates {} {
   global sDateMin sDateMax sEventDateMin sEventDateMax
   if {[string length $sDateMin] == 4} { append sDateMin ".??.??" }
@@ -44,6 +55,20 @@ proc checkDates {} {
   if {[string length $sEventDateMax] == 7} { append sEventDateMax ".31" }
 }
 
+################################################################################
+# ::search::header::defaults
+#   Resets header-search state to its default values.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Overwrites the header-search globals (e.g. `::sWhite`, `::sBlack`,
+#     date/rating bounds, result filters, and variant flags).
+#   - Resets `::sHeaderFlags(*)`, `::sPgntext(*)`, and `::sTitles(*)` arrays.
+################################################################################
 proc ::search::header::defaults {} {
   set ::sWhite "";  set ::sBlack ""
   set ::sEvent ""; set ::sSite "";  set ::sRound ""; set ::sAnnotated 0
@@ -82,14 +107,39 @@ foreach i {sEcoMin sEcoMax} {
 
 set sHeaderFlagFrame 0
 
+################################################################################
 # ::search::header
-#
-#   Opens the window for searching by header information.
-#
+#   Opens the window for searching by game header information.
+# Visibility:
+#   Public.
+# Inputs:
+#   - ref_base: Initial database selection value passed through to the shared
+#     search window framework.
+#   - ref_filter: Initial filter name for the search window.
+# Returns:
+#   - None.
+# Side effects:
+#   - Delegates to `::search::Open` to create the Header Search window.
+################################################################################
 proc ::search::header {{ref_base ""} {ref_filter "dbfilter"}} {
   ::search::Open $ref_base $ref_filter HeaderSearch ::search::headerCreateFrame
 }
 
+################################################################################
+# ::search::headerCreateFrame
+#   Creates the Header Search UI widgets and returns the options command.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Parent widget path for the header-search options area.
+# Returns:
+#   - options_cmd: Returns the string `::search::headerGetOptions`.
+# Side effects:
+#   - Creates and configures numerous ttk widgets under `w`.
+#   - Reads Scid metadata (e.g. `sc_info limit elo`, `sc_name read`).
+#   - Sets `::curr_db` to `sc_base current` and may populate custom flag labels
+#     from `sc_base extra`.
+################################################################################
 proc search::headerCreateFrame { w } {
   global sWhite sBlack sEvent sSite sRound sAnnotated sEventDateMin sEventDateMax sIgnoreCol
   global sWhiteEloMin sWhiteEloMax sBlackEloMin sBlackEloMax
@@ -378,6 +428,26 @@ proc search::headerCreateFrame { w } {
   return "::search::headerGetOptions"
 }
 
+################################################################################
+# ::search::headerGetOptions
+#   Implements the shared search framework `options_cmd` contract for header search.
+# Visibility:
+#   Private.
+# Inputs:
+#   - cmd: Optional control argument. Recognised values:
+#       - "reset": Resets the header-search option globals via `::search::header::defaults`.
+#       - <widgetPath>: When it begins with '.', returns a configuration list for
+#         the presets menubutton.
+# Returns:
+#   - When cmd is a widget path: Returns `{-menu <menuPath>}`.
+#   - When cmd is "reset": Returns None.
+#   - Otherwise: Returns a list whose first element is the header search options
+#     list, and whose optional second element is an "ignore colours" follow-up
+#     options list.
+# Side effects:
+#   - Adds combobox history entries via `::utils::history::AddEntry`.
+#   - Builds/updates a presets menu under `<widgetPath>.sHeader_presets`.
+################################################################################
 proc ::search::headerGetOptions {{cmd ""}} {
 	if {[string index $cmd 0] eq "."} {
 		set m $cmd.sHeader_presets
@@ -424,6 +494,23 @@ proc ::search::headerGetOptions {{cmd ""}} {
 	return [list $options $options2]
 }
 
+################################################################################
+# ::search::getRange
+#   Computes a {min max} range list from optional bounds.
+# Visibility:
+#   Private.
+# Inputs:
+#   - var_min: Variable name holding the minimum bound (may be empty).
+#   - var_max: Variable name holding the maximum bound (may be empty).
+#   - cmd_min: Fallback string passed to `subst` to produce the minimum bound
+#     when only the maximum is set.
+#   - cmd_max: Fallback string passed to `subst` to produce the maximum bound
+#     when only the minimum is set.
+# Returns:
+#   - A 2-item list `{min max}`, or `{}` when both bounds are empty.
+# Side effects:
+#   - None.
+################################################################################
 proc ::search::getRange {var_min var_max cmd_min cmd_max} {
 	if {[set $var_min] ne ""} {
 		if {[set $var_max] ne ""} {
@@ -436,6 +523,24 @@ proc ::search::getRange {var_min var_max cmd_min cmd_max} {
 	return {}
 }
 
+################################################################################
+# ::search::headerPlayerOptions
+#   Appends player name and rating constraints to a search options list.
+# Visibility:
+#   Private.
+# Inputs:
+#   - dest_list: Name of the list variable to append options to.
+#   - white: Option name for the White player (e.g. "-white").
+#   - welo: Option name for the White Elo range (e.g. "-welo").
+#   - black: Option name for the Black player (e.g. "-black").
+#   - belo: Option name for the Black Elo range (e.g. "-belo").
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates the list variable referenced by `dest_list`.
+#   - Reads `::sWhite`, `::sBlack`, and Elo bound globals.
+#   - Indirectly calls `sc_info limit elo` via `::search::getRange`.
+################################################################################
 proc ::search::headerPlayerOptions {dest_list white welo black belo} {
 	upvar $dest_list options
 
@@ -450,7 +555,23 @@ proc ::search::headerPlayerOptions {dest_list white welo black belo} {
 	if {$range ne ""} { lappend options $belo $range }
 }
 
-### Read values from header search dialog. Use empty string as "all"
+################################################################################
+# ::search::getSearchOptions
+#   Reads header-search UI state and appends the corresponding search options.
+# Visibility:
+#   Private.
+# Inputs:
+#   - dest_list: Name of the list variable to append options to.
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates the list variable referenced by `dest_list`.
+#   - Reads numerous header-search globals (names, ratings, dates, ECO, flags,
+#     results, variants, and text filters).
+#   - Normalises the tag-pair value to ensure it uses wildcard matching.
+#   - Indirectly calls `sc_info limit year` and `sc_info limit elo` via
+#     `::search::getRange`.
+################################################################################
 proc ::search::getSearchOptions {dest_list} {
 	upvar $dest_list search
 
@@ -571,6 +692,20 @@ proc ::search::getSearchOptions {dest_list} {
     }
 }
 
+################################################################################
+# ::search::header::loadPreset
+#   Loads a saved preset into the header-search globals.
+# Visibility:
+#   Public.
+# Inputs:
+#   - name: Preset name key in `::sHeader_PresetFilters`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Overwrites header-search scalar globals and resets/sets the arrays
+#     `::sPgntext`, `::sHeaderFlags`, and `::sTitles`.
+#   - Errors if `::sHeader_PresetFilters($name)` does not exist.
+################################################################################
 proc ::search::header::loadPreset {name} {
   set scalar_vars {
     sWhite sBlack sEvent sSite sRound sAnnotated
@@ -594,6 +729,19 @@ proc ::search::header::loadPreset {name} {
   }
 }
 
+################################################################################
+# ::search::header::savePreset
+#   Saves the current header-search state as a named preset.
+# Visibility:
+#   Public.
+# Inputs:
+#   - name: Preset name. When empty, prompts the user to enter a name.
+# Returns:
+#   - None.
+# Side effects:
+#   - May create a modal dialog `.searchHeaderNewPreset` to prompt for a name.
+#   - Writes `::sHeader_PresetFilters($name)` with the captured state.
+################################################################################
 proc ::search::header::savePreset {name} {
   if {$name eq ""} {
     set w .searchHeaderNewPreset
@@ -646,8 +794,23 @@ proc ::search::header::savePreset {name} {
 
 set scid_ecoRangeChosen ""
 set ecoCommonRanges {}
+
+################################################################################
+# chooseEcoRange
+#   Prompts the user to select a common ECO range.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - The selected ECO range string (or an empty string when cancelled).
+# Side effects:
+#   - Creates and runs a modal toplevel window `.ecoRangeWin`.
+#   - Updates `scid_ecoRangeChosen` and may set `::sEco` to "No".
+################################################################################
 proc chooseEcoRange {} {
   global ecoCommonRanges scid_ecoRangeChosen
+  set scid_ecoRangeChosen {}
   set ecoCommonRanges [ list \
       "A04-A09  [tr Reti]: [trans 1.Nf3]" \
       "A10-A39  [tr English]: 1.c4" \
@@ -732,6 +895,7 @@ proc chooseEcoRange {} {
   pack $w.list -side left -fill both -expand yes
 
   ttk::button $w.b.ok -text "OK" -command {
+    set scid_ecoRangeChosen {}
     set sel [.ecoRangeWin.list selection]
     if {[llength $sel] > 0} {
       set scid_ecoRangeChosen [lindex $ecoCommonRanges [lindex $sel 0]]
@@ -739,7 +903,13 @@ proc chooseEcoRange {} {
     }
     destroy .ecoRangeWin
   }
-  ttk::button $w.b.cancel -text $::tr(Cancel) -command "destroy $w"
+  ttk::button $w.b.cancel -text $::tr(Cancel) -command "
+    set scid_ecoRangeChosen {}
+    grab release $w
+    focus .
+    destroy $w
+  "
+  wm protocol $w WM_DELETE_WINDOW "$w.b.cancel invoke"
   pack $w.b.cancel $w.b.ok -side right -padx 5 -pady 2
   bind $w <Escape> "
   set scid_ecoRangeChosen {}
@@ -756,5 +926,5 @@ proc chooseEcoRange {} {
 }
 
 ###
-### End of file: search.tcl
+### End of file: search/header.tcl
 
