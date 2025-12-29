@@ -29,10 +29,8 @@ proc ::search::addFilterOpFrame {w {small 0}} {
   pack $f -side top -fill x
   
   set regular TRadiobutton
-  set bold Bold.TRadiobutton
   if {$small} {
     set regular Small.TRadiobutton
-    set bold SmallBold.TRadiobutton
   }
   
   ttk::frame $f.b
@@ -67,7 +65,7 @@ proc ::search::usefile {} {
   
   if {[catch {uplevel "#0" {source $::fName} } ]} {
     tk_messageBox -title "Scid: Error reading file" -type ok -icon warning \
-        -message "Unable to open or read SearchOptions file: $fName"
+        -message "Unable to open or read SearchOptions file: $::fName"
   } else {
     switch -- $::searchType {
       "Material" { ::search::material }

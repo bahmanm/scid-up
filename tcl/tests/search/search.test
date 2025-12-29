@@ -1,0 +1,402 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::search {}
+namespace eval ::search::filter {}
+namespace eval ::windows {}
+namespace eval ::windows::gamelist {}
+namespace eval ::ttk {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] search search.tcl]
+
+namespace eval ::search_test {
+    variable stubbedCommands {}
+
+    variable filterResetCalls {}
+    variable ttkCalls {}
+    variable packCalls {}
+
+    variable scBaseCalls {}
+    variable materialCalls {}
+    variable headerCalls {}
+
+    variable openFileReturn ""
+    variable messageBoxCalls {}
+}
+
+proc ::search_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::search_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::search_test::setup {} {
+    ::search_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::search_test::filterResetCalls {}
+    set ::search_test::ttkCalls {}
+    set ::search_test::packCalls {}
+
+    set ::search_test::scBaseCalls {}
+    set ::search_test::materialCalls {}
+    set ::search_test::headerCalls {}
+
+    set ::search_test::openFileReturn ""
+    set ::search_test::messageBoxCalls {}
+
+    set ::initialDir(base) [::scid_test::tempDir]
+    unset -nocomplain ::fName
+
+    set ::searchType 0
+    set ::search::filter::operation 2
+
+    # Minimal translations used by `addFilterOpFrame`.
+    set ::tr(FilterOperation) "FilterOperation"
+
+    ::search_test::stubCommand sc_base {subcmd args} {
+        lappend ::search_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            current { return 1 }
+            inUse { return 0 }
+            default { error "sc_base $subcmd not stubbed in search tests" }
+        }
+    }
+
+    ::search_test::stubCommand ::windows::gamelist::FilterReset {unused base} {
+        lappend ::search_test::filterResetCalls [list $unused $base]
+        return
+    }
+
+    ::search_test::stubCommand ttk::labelframe {path args} {
+        lappend ::search_test::ttkCalls [list labelframe $path {*}$args]
+        return $path
+    }
+
+    ::search_test::stubCommand ttk::frame {path args} {
+        lappend ::search_test::ttkCalls [list frame $path {*}$args]
+        return $path
+    }
+
+    ::search_test::stubCommand ttk::radiobutton {path args} {
+        lappend ::search_test::ttkCalls [list radiobutton $path {*}$args]
+        return $path
+    }
+
+    ::search_test::stubCommand pack {args} {
+        lappend ::search_test::packCalls $args
+        return
+    }
+
+    ::search_test::stubCommand tk_getOpenFile {args} {
+        return $::search_test::openFileReturn
+    }
+
+    ::search_test::stubCommand tk_messageBox {args} {
+        lappend ::search_test::messageBoxCalls $args
+        return ok
+    }
+
+    ::search_test::stubCommand ::search::material {args} {
+        lappend ::search_test::materialCalls $args
+        return
+    }
+
+    ::search_test::stubCommand ::search::header {args} {
+        lappend ::search_test::headerCalls $args
+        return
+    }
+}
+
+proc ::search_test::cleanup {} {
+    ::search_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::initialDir(base)
+    unset -nocomplain ::fName
+    unset -nocomplain ::searchType
+
+    unset -nocomplain ::tr(FilterOperation)
+}
+
+# ---- Tests ----
+
+test filter-reset-1.0 {filter::reset delegates to the gamelist filter reset for current base} -setup {
+    ::search_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::search::filter::reset
+
+    # Assert
+    return [list $::search_test::filterResetCalls $::search_test::scBaseCalls]
+} -cleanup {
+    ::search_test::cleanup
+} -result [list [list [list "" 1]] [list [list current]]]
+
+
+test addFilterOpFrame-normal-1.0 {addFilterOpFrame creates filter operation radio buttons using regular styles} -setup {
+    ::search_test::setup
+} -body {
+    # Arrange
+    set w .w
+    set ::tr(FilterAnd) FilterAnd
+    set ::tr(FilterOr) FilterOr
+    set ::tr(FilterIgnore) FilterIgnore
+
+    # Act
+    ::search::addFilterOpFrame $w 0
+
+    # Assert
+    # Extract only radiobutton calls.
+    set radios {}
+    foreach call $::search_test::ttkCalls {
+        if {[lindex $call 0] eq "radiobutton"} {
+            lappend radios $call
+        }
+    }
+
+    # Return the interesting portions for exact matching.
+    set simplified {}
+    foreach r $radios {
+        set path [lindex $r 1]
+        set args [lrange $r 2 end]
+        set valueIdx [lsearch -exact $args -value]
+        set varIdx [lsearch -exact $args -variable]
+        set styleIdx [lsearch -exact $args -style]
+        lappend simplified [list $path \
+            [lindex $args [expr {$varIdx + 1}]] \
+            [lindex $args [expr {$valueIdx + 1}]] \
+            [lindex $args [expr {$styleIdx + 1}]]]
+    }
+
+    return $simplified
+} -cleanup {
+    ::search_test::cleanup
+} -result [list \
+    [list .w.filterop.b.and ::search::filter::operation 0 TRadiobutton] \
+    [list .w.filterop.b.or ::search::filter::operation 1 TRadiobutton] \
+    [list .w.filterop.b.ignore ::search::filter::operation 2 TRadiobutton] \
+]
+
+
+test addFilterOpFrame-small-1.0 {addFilterOpFrame uses small styles when requested} -setup {
+    ::search_test::setup
+} -body {
+    # Arrange
+    set w .w
+    set ::tr(FilterAnd) FilterAnd
+    set ::tr(FilterOr) FilterOr
+    set ::tr(FilterIgnore) FilterIgnore
+
+    # Act
+    ::search::addFilterOpFrame $w 1
+
+    # Assert
+    set styles {}
+    foreach call $::search_test::ttkCalls {
+        if {[lindex $call 0] ne "radiobutton"} { continue }
+        set args [lrange $call 2 end]
+        set styleIdx [lsearch -exact $args -style]
+        lappend styles [lindex $args [expr {$styleIdx + 1}]]
+    }
+
+    return $styles
+} -cleanup {
+    ::search_test::cleanup
+} -result {Small.TRadiobutton Small.TRadiobutton Small.TRadiobutton}
+
+
+test Config-default-disabled-1.0 {Config defaults to disabled when no base is in use} -setup {
+    ::search_test::setup
+
+    ::scid_test::widgets::defineWidget .sh.b.search
+    ::scid_test::widgets::defineWidget .sb.b.search
+    ::scid_test::widgets::defineWidget .sm.b3.search
+} -body {
+    # Arrange
+
+    # Act
+    ::search::Config
+
+    # Assert
+    list \
+        [::scid_test::widgets::getState .sh.b.search -state] \
+        [::scid_test::widgets::getState .sb.b.search -state] \
+        [::scid_test::widgets::getState .sm.b3.search -state]
+} -cleanup {
+    ::search_test::cleanup
+} -result {disabled disabled disabled}
+
+
+test Config-default-normal-1.0 {Config defaults to normal when a base is in use} -setup {
+    ::search_test::setup
+
+    ::scid_test::widgets::defineWidget .sh.b.search
+    ::scid_test::widgets::defineWidget .sb.b.search
+    ::scid_test::widgets::defineWidget .sm.b3.search
+
+    ::search_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd eq "inUse"} { return 1 }
+        if {$subcmd eq "current"} { return 1 }
+        error "Unexpected sc_base call in Config-default-normal test: $subcmd"
+    }
+} -body {
+    # Arrange
+
+    # Act
+    ::search::Config
+
+    # Assert
+    list \
+        [::scid_test::widgets::getState .sh.b.search -state] \
+        [::scid_test::widgets::getState .sb.b.search -state] \
+        [::scid_test::widgets::getState .sm.b3.search -state]
+} -cleanup {
+    ::search_test::cleanup
+} -result {normal normal normal}
+
+
+test Config-explicit-state-1.0 {Config uses the provided state without checking sc_base} -setup {
+    ::search_test::setup
+
+    ::scid_test::widgets::defineWidget .sh.b.search
+
+    ::search_test::stubCommand sc_base {subcmd args} {
+        error "sc_base must not be called when Config is passed an explicit state"
+    }
+} -body {
+    # Arrange
+
+    # Act
+    ::search::Config normal
+
+    # Assert
+    return [::scid_test::widgets::getState .sh.b.search -state]
+} -cleanup {
+    ::search_test::cleanup
+} -result normal
+
+
+test usefile-cancel-1.0 {usefile returns early when file chooser is cancelled} -setup {
+    ::search_test::setup
+
+    set ::search_test::openFileReturn ""
+} -body {
+    # Arrange
+
+    # Act
+    ::search::usefile
+
+    # Assert
+    list \
+        [expr {[info exists ::fName]}] \
+        $::search_test::materialCalls \
+        $::search_test::headerCalls \
+        $::search_test::messageBoxCalls
+} -cleanup {
+    ::search_test::cleanup
+} -result {1 {} {} {}}
+
+
+test usefile-material-1.0 {usefile sources the file and opens the material search when searchType is Material} -setup {
+    ::search_test::setup
+} -body {
+    # Arrange
+    set f [file join [::scid_test::tempDir] search_material.sso]
+    set ch [open $f w]
+    puts $ch {set ::searchType Material}
+    close $ch
+
+    set ::search_test::openFileReturn $f
+
+    # Act
+    ::search::usefile
+
+    # Assert
+    list $::fName $::search_test::materialCalls $::search_test::headerCalls
+} -cleanup {
+    catch {file delete -force [file join [::scid_test::tempDir] search_material.sso]}
+    ::search_test::cleanup
+} -result [list [file join [::scid_test::tempDir] search_material.sso] {{}} {}]
+
+
+test usefile-header-1.0 {usefile sources the file and opens the header search when searchType is Header} -setup {
+    ::search_test::setup
+} -body {
+    # Arrange
+    set f [file join [::scid_test::tempDir] search_header.sso]
+    set ch [open $f w]
+    puts $ch {set ::searchType Header}
+    close $ch
+
+    set ::search_test::openFileReturn $f
+
+    # Act
+    ::search::usefile
+
+    # Assert
+    list $::search_test::materialCalls $::search_test::headerCalls
+} -cleanup {
+    catch {file delete -force [file join [::scid_test::tempDir] search_header.sso]}
+    ::search_test::cleanup
+} -result {{} {{}}}
+
+
+test usefile-unknown-type-1.0 {usefile does nothing when searchType is unknown} -setup {
+    ::search_test::setup
+} -body {
+    # Arrange
+    set f [file join [::scid_test::tempDir] search_unknown.sso]
+    set ch [open $f w]
+    puts $ch {set ::searchType SomethingElse}
+    close $ch
+
+    set ::search_test::openFileReturn $f
+
+    # Act
+    ::search::usefile
+
+    # Assert
+    list $::search_test::materialCalls $::search_test::headerCalls
+} -cleanup {
+    catch {file delete -force [file join [::scid_test::tempDir] search_unknown.sso]}
+    ::search_test::cleanup
+} -result {{} {}}
+
+
+test usefile-source-error-1.0 {usefile shows a warning dialog when the SearchOptions file cannot be sourced} -setup {
+    ::search_test::setup
+} -body {
+    # Arrange
+    set f [file join [::scid_test::tempDir] search_broken.sso]
+    set ch [open $f w]
+    puts $ch {this is not valid tcl}
+    close $ch
+
+    set ::search_test::openFileReturn $f
+
+    # Act
+    ::search::usefile
+
+    # Assert
+    list \
+        [llength $::search_test::messageBoxCalls] \
+        $::search_test::materialCalls \
+        $::search_test::headerCalls
+} -cleanup {
+    catch {file delete -force [file join [::scid_test::tempDir] search_broken.sso]}
+    ::search_test::cleanup
+} -result {1 {} {}}
+
+
+cleanupTests
