@@ -20,6 +20,18 @@ set crosstab(deleted) "-deleted"
 set crosstab(cnumbers) "-numcolumns"
 set crosstab(text) hypertext
 
+################################################################################
+# ::crosstab::OpenClose
+#   Toggles the crosstable window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or closes `$::crosstab::win`.
+################################################################################
 proc ::crosstab::OpenClose {} {
   if {[winfo exists $::crosstab::win]} {
     ::win::closeWindow $::crosstab::win
@@ -28,6 +40,20 @@ proc ::crosstab::OpenClose {} {
   }
 }
 
+################################################################################
+# ::crosstab::Open
+#   Opens the crosstable window and initialises its UI.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `$::crosstab::win` and its menus/widgets.
+#   - If the window already exists, focuses it and calls `::crosstab::Refresh`.
+#   - Registers menu commands that can write crosstable exports to disk.
+################################################################################
 proc ::crosstab::Open {} {
   global crosstab
   set w $::crosstab::win
@@ -237,6 +263,20 @@ proc ::crosstab::Open {} {
   ::crosstab::Refresh
 }
 
+################################################################################
+# ::crosstab::AddToFilter
+#   Adds the crosstable selection to the database filter.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Switches temporarily to `::crosstab::dbase_` to run `sc_game crosstable
+#     filter`, then switches back.
+#   - Calls `::notify::filter` for the target database filter.
+################################################################################
 proc ::crosstab::AddToFilter {} {
   set curr_base [sc_base current]
   sc_base switch $::crosstab::dbase_
@@ -245,6 +285,22 @@ proc ::crosstab::AddToFilter {} {
   ::notify::filter $::crosstab::dbase_ dbfilter
 }
 
+################################################################################
+# ::crosstab::Refresh
+#   Recomputes and displays the crosstable for the current database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the type selector label.
+#   - Disables controls while generating output; enables them again afterwards.
+#   - Updates `::crosstab::dbase_` to the current base.
+#   - Calls `sc_game crosstable ...` (and `::htext::display` for hypertext mode).
+#   - Uses `grab` on the Stop button while generating output.
+################################################################################
 proc ::crosstab::Refresh {} {
   global crosstab
   set w $::crosstab::win
