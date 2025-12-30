@@ -33,7 +33,7 @@ exec `dirname $0`/tkscid "$0" "$@"
 
 ############################################################
 
-package require Tk  8.6
+package require Tk  9
 set useLocalTooltip [catch {package require tooltip 2.0}]
 
 set scidVersion [sc_info version]
@@ -243,7 +243,7 @@ foreach ns {
   ::tools::graphs::filter ::tools::graphs::absfilter ::tools::graphs::rating ::tools::graphs::score
   ::tb ::optable
   ::board ::move
-  ::tacgame ::sergame ::opening ::tactics ::calvar ::uci ::fics ::reviewgame ::novag
+  ::opening ::tactics ::calvar ::uci ::reviewgame ::novag
   ::config ::docking
   ::pinfo
   ::unsafe
@@ -265,14 +265,14 @@ if { $unixOS } {
   }
 }
 
-# Reversed mouse buttons in mac (::MB2 and ::MB3 are middle and right mouse buttons respectively.):
+# Mouse button mapping:
+# - MB2 is middle, MB3 is right.
+set ::MB2 2
+set ::MB3 3
+
 if { $macOS } {
-  set ::MB2 3
-  set ::MB3 2
   set ::COMMAND Command
 } else {
-  set ::MB2 2
-  set ::MB3 3
   set ::COMMAND Control
 }
 
@@ -756,10 +756,7 @@ move.tcl
 main.tcl
 tools/uci.tcl
 end.tcl
-tools/tacgame.tcl
-tools/sergame.tcl
 tools/calvar.tcl
-tools/fics.tcl
 tools/opening.tcl
 tools/tactics.tcl
 tools/reviewgame.tcl

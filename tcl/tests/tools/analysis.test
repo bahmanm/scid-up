@@ -24,10 +24,10 @@ proc ::analysis_test::setup {} {
 
     set ::pgn::moveNumberSpaces 0
 
-    set ::informant("+=") 0.20
-    set ::informant("+/-") 0.40
-    set ::informant("+-") 0.80
-    set ::informant("+--") 1.60
+    set ::informant(+=) 0.20
+    set ::informant(+/-) 0.40
+    set ::informant(+-) 0.80
+    set ::informant(+--) 1.60
 
     set ::scid_test::sc_pos_side white
     set ::scid_test::sc_pos_moveNumber 1
@@ -56,10 +56,10 @@ proc ::analysis_test::cleanup {} {
 
     set ::pgn::moveNumberSpaces 0
 
-    set ::informant("+=") 0.20
-    set ::informant("+/-") 0.40
-    set ::informant("+-") 0.80
-    set ::informant("+--") 1.60
+    set ::informant(+=) 0.20
+    set ::informant(+/-) 0.40
+    set ::informant(+-) 0.80
+    set ::informant(+--) 1.60
 
     set ::scid_test::sc_pos_side white
     set ::scid_test::sc_pos_moveNumber 1

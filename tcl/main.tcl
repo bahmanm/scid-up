@@ -187,11 +187,10 @@ proc updateStatusBar {} {
         regexp $clkExp $comment -> ::gamePlayers(clockW)
         regexp $clkExp $prevCom -> ::gamePlayers(clockB)
         regexp $clkExp $movetime -> movetime
-        catch {
-            set movetime [expr {
-                [clock scan $movetime -format {%H:%M:%S}] - \
-                [clock scan $::gamePlayers(clockW) -format {%H:%M:%S}] }]
-            set ::gamePlayers(movetime) [format_clock_from_seconds $movetime]
+        set _mt [clock_to_seconds $movetime]
+        set _cw [clock_to_seconds $::gamePlayers(clockW)]
+        if {$_mt ne "" && $_cw ne ""} {
+            set ::gamePlayers(movetime) [format_clock_from_seconds [expr {$_mt - $_cw}]]
         }
         if {$toMove == "white"} {
             set temp_swap $::gamePlayers(clockW)
@@ -931,22 +930,8 @@ proc addMoveUCI {{moveUCI} {animate "-animate"}} {
 
     if {[info exists ::playMode] && [eval "$::playMode premove {$moveUCI}"]} { return 0 } ;# not player's turn
 
-    if { [::fics::setPremove $sq1 $sq2] || ! [::fics::playerCanMove]} { return 0 } ;# not player's turn
-
     if {! [::move::Follow $moveUCI] && ! [addMoveEx $moveUCI]} {
         return 0
-    }
-
-    # TODO: move this to fics.tcl
-    if {[winfo exists .fics]} {
-        if { [::fics::playerCanMove] } {
-            if { [string length $moveUCI] == 5 } {
-                set promoletter [ string tolower [ string index $moveUCI end ] ]
-                ::fics::writechan "promote $promoletter"
-            }
-            ::fics::writechan [ string range [sc_game info previousMoveUCI] 0 3 ]
-            ::fics::storeTime
-        }
     }
 
     if {$::novag::connected} {
@@ -964,7 +949,6 @@ proc suggestMove {} {
     if {[info exists ::playMode]} {
         return [eval "$::playMode suggestMove"]
     }
-    if {$::fics::playing != 0} { return 0 }
     return 1
 }
 
@@ -1006,8 +990,6 @@ proc leaveSquare { square } {
 #
 proc pressSquare { square } {
     global selectedSq highcolor
-
-    if { ![::fics::playerCanMove] } { return } ;# not player's turn
 
     # if training with calculations of var is on, just log the event
     if { [winfo exists .calvarWin] } {

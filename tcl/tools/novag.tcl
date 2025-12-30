@@ -131,11 +131,6 @@ namespace eval novag {
       if { [ catch { sc_move addSan $m } err ] } {
         puts $err
       } else {
-        if {[winfo exists .fics]} {
-          if { $::fics::playing == 1} {
-            ::fics::writechan [ sc_game info previousMoveNT ]
-          }
-        }
       }
       updateBoard -pgn
       return

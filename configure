@@ -25,7 +25,7 @@ set var(SHAREDIR) /usr/local/share/scid
 set var(TCL_VERSION) [info tclversion]
 set var(WARNINGS) "-Wall -Wno-deprecated-declarations"
 set var(MAKEFILE) Makefile.conf
-set var(INSTALL) {install_scid install_engines}
+set var(INSTALL) {install_scid}
 set var(LIBS) {}
 
 set defaultVar(TCL_INCLUDE) {/usr/include}

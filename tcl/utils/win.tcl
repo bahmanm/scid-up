@@ -1040,9 +1040,8 @@ proc ::docking::manage_rightclick_ {noteb x y localX localY} {
 #   - Updates `::docking::layout_list($slot)` with window geometry, paned-window
 #     structure, and the list of currently undocked windows.
 ################################################################################
+# saves layout (bail out if some windows cannot be restored)
 proc ::docking::layout_save { slot } {
-  #TODo: Save FICS window
-
   # on Windows the geometry is false if the window was maximized (x and y offsets are the ones before the maximization)
   set geometry [wm geometry .]
   set ::docking::layout_list($slot) [list [list "MainWindowGeometry" $geometry] ]

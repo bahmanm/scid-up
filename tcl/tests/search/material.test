@@ -72,8 +72,8 @@ proc ::material_search_test::setup {} {
 
     # Arrange
     # Avoid trace side effects during tests; we call the logic directly.
-    catch {trace vdelete pMin w checkPieceCounts}
-    catch {trace vdelete pMax w checkPieceCounts}
+    catch {trace remove variable pMin write checkPieceCounts}
+    catch {trace remove variable pMax write checkPieceCounts}
 
     # Reset globals to their standard "any" state.
     ::search::material::any

@@ -11,7 +11,7 @@
 # Initiated: 28 October 1996
 
 
-package require Tk 8.5-
+package require Tk 9
 
 #------------------------------------------------------------------------
 # PROCEDURE
@@ -367,11 +367,7 @@ proc ::tooltip::createToplevel {} {
     if {[winfo exists $b]} { return }
 
     toplevel $b -class Tooltip -borderwidth 0
-    if {[tk windowingsystem] eq "aqua"} {
-        ::tk::unsupported::MacWindowStyle style $b help none
-    } else {
-        wm overrideredirect $b 1
-    }
+    wm overrideredirect $b 1
     catch {wm attributes $b -topmost 1}
     # avoid the blink issue with 1 to <1 alpha on Windows
     catch {wm attributes $b -alpha 0.99}

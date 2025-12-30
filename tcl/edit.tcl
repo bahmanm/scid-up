@@ -10,9 +10,9 @@ set toMove White       ;# side to move, "White" or "Black".
 set pastePiece K       ;# Piece being pasted, "K", "k", "Q", "q", etc.
 
 # Traces to keep entry values sensible:
-trace variable moveNum  w {::utils::validate::Integer 999 0}
-trace variable epFile   w {::utils::validate::Regexp {^(-|[a-h])?$}}
-trace variable castling w {::utils::validate::Regexp {^(-|[a-hA-hKQkq]*)$}}
+trace add variable moveNum  write {::utils::validate::Integer 999 0}
+trace add variable epFile   write {::utils::validate::Regexp {^(-|[a-h])?$}}
+trace add variable castling write {::utils::validate::Regexp {^(-|[a-hA-hKQkq]*)$}}
 
 set setupBd {}
 set setupFen {}
@@ -425,4 +425,3 @@ proc pasteFEN {} {
   }
   updateBoard -pgn
 }
-

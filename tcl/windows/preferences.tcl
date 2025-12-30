@@ -224,12 +224,47 @@ proc ::preferences::internationalization { w } {
     }
     ttk::frame $w.n
     ttk::label $w.n.nlb -text [tr OptionsNumbers]
-    ttk::combobox $w.n.number -width 9 -textvar ::newNumbers -values $numList -state readonly -font font_Fixed
-    set popdown [ttk::combobox::PopdownWindow $w.n.number]
-    $popdown.f.l configure -font font_Fixed
+    ttk::combobox $w.n.number -width 9 -textvar ::newNumbers -values $numList -state readonly -font font_Fixed \
+        -postcommand [list ::preferences::configureComboboxListboxFont $w.n.number font_Fixed]
     bind $w.n.number <<ComboboxSelected>> "::preferences::numbers $w.n.number"
     pack $w.n.nlb $w.n.number -side left -padx "0 5"
     pack $w.n $w.tp  -side top -anchor w
+}
+
+proc ::preferences::configureComboboxListboxFont {combo font} {
+    if {![winfo exists $combo]} { return }
+
+    # Avoid ttk private APIs and instead locate the posted popdown via public geometry
+    # plus `winfo containing`.
+    after idle [list ::preferences::configureComboboxListboxFont_ $combo $font]
+}
+
+proc ::preferences::configureComboboxListboxFont_ {combo font} {
+    if {![winfo exists $combo]} { return }
+
+    set rootX [winfo rootx $combo]
+    set rootY [winfo rooty $combo]
+    set h [winfo height $combo]
+
+    # Prefer a point just below the widget; also try just above for cases where
+    # Tk posts the list upwards (near the bottom of the screen).
+    set x [expr {$rootX + 2}]
+    foreach y [list [expr {$rootY + $h + 2}] [expr {$rootY - 2}]] {
+        set start [winfo containing $x $y]
+        if {$start eq ""} { continue }
+
+        set stack [list $start]
+        while {[llength $stack] > 0} {
+            set w [lindex $stack 0]
+            set stack [lrange $stack 1 end]
+            if {![winfo exists $w]} { continue }
+            if {[winfo class $w] eq "Listbox"} {
+                catch { $w configure -font $font }
+                return
+            }
+            set stack [concat [winfo children $w] $stack]
+        }
+    }
 }
 
 # preferences dialog for fonts

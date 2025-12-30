@@ -234,24 +234,6 @@ set windowsDock 1
 
 set ::tactics::analysisTime 3
 
-set ::tacgame::threshold 0.9
-set ::tacgame::blunderwarning false
-set ::tacgame::blunderwarningvalue 0.0
-set ::tacgame::levelMin 1200
-set ::tacgame::levelMax 2200
-set ::tacgame::levelFixed 1500
-set ::tacgame::randomLevel 0
-set ::tacgame::isLimitedAnalysisTime 1
-set ::tacgame::showblunder 1
-set ::tacgame::showblundervalue 1
-set ::tacgame::showblunderfound 1
-set ::tacgame::showmovevalue 1
-set ::tacgame::showevaluation 1
-set ::tacgame::isLimitedAnalysisTime 1
-set ::tacgame::analysisTime 10
-set ::tacgame::openingType new
-set ::tacgame::chosenOpening 0
-
 # Analysis command: to start chess analysis engine.
 set analysisCommand ""
 if {$windowsOS} {
@@ -284,36 +266,6 @@ set pgnColor(Nag) {#cf6403}
 set pgnColor(Comment) {#008b00}
 set pgnColor(Current) steelBlue
 
-# Defaults for FICS
-set ::fics::use_timeseal 0
-set ::fics::timeseal_exec "timeseal"
-set ::fics::port_fics 5000
-set ::fics::port_timeseal 5001
-set ::fics::login ""
-set ::fics::password ""
-set ::fics::usedefaultvars 1
-set ::fics::findopponent(initTime) 15
-set ::fics::findopponent(incTime) 20
-set ::fics::findopponent(rated) "rated"
-set ::fics::findopponent(color) ""
-set ::fics::findopponent(limitrating) 1
-set ::fics::findopponent(rating1) 1500
-set ::fics::findopponent(rating2) 3000
-set ::fics::findopponent(manual) "auto"
-set ::fics::findopponent(formula) ""
-set ::fics::consolebg     black
-set ::fics::consolefg     LimeGreen
-set ::fics::consoleheight 10
-set ::fics::consolewidth  40
-set ::fics::colseeking     coral
-set ::fics::colgame        grey70
-set ::fics::colgameresult  SlateBlue1
-set ::fics::colficspercent khaki1
-set ::fics::colficshelpnext blue
-set ::fics::server_ip "0.0.0.0"
-set ::fics::premoveEnabled 1
-set ::fics::playing 0
-
 # default resolvers for player info
 set ::pinfo::wikipAPI      "http://de.wikipedia.org/w/api.php?action=query&format=xml"
 # Appers PND resolver
@@ -326,24 +278,6 @@ set ::pinfo::dnburl        "http://d-nb.info/gnd"
 
 # Defaults for Novag Citrine
 set ::novag::referee "OFF"
-
-# Defaults for serious game training
-set ::sergame::isOpening 0
-set ::sergame::chosenOpening 0
-set ::sergame::chosenEngine 0
-set ::sergame::useBook 1
-set ::sergame::bookToUse ""
-set ::sergame::startFromCurrent 0
-set ::sergame::coachIsWatching 0
-set ::sergame::timeMode "timebonus"
-set ::sergame::depth 3
-set ::sergame::movetime 0
-set ::sergame::nodes 10000
-set ::sergame::ponder 0
-set ::uci::uciInfo(wtime3) [expr 5 * 60 * 1000 ]
-set ::uci::uciInfo(winc3) [expr 10 * 1000 ]
-set ::uci::uciInfo(btime3) [expr 5 * 60 * 1000 ]
-set ::uci::uciInfo(binc3) [expr 10 * 1000 ]
 
 # Defaults for initial directories:
 set initialDir(base) "."
@@ -449,14 +383,14 @@ array set preportDefaults [array get preport]
 # Analysis options (Informant values)
 # The different threshold values for !? ?? += etc
 array set informant {}
-set informant("!?") 0.5
-set informant("?") 1.5
-set informant("??") 3.0
-set informant("?!") 0.5
-set informant("+=") 0.5
-set informant("+/-") 1.5
-set informant("+-") 3.0
-set informant("+--") 5.5
+set informant(!?) 0.5
+set informant(?) 1.5
+set informant(??) 3.0
+set informant(?!) 0.5
+set informant(+=) 0.5
+set informant(+/-) 1.5
+set informant(+-) 3.0
+set informant(+--) 5.5
 
 # Export file options:
 set exportFlags(comments) 1
@@ -548,8 +482,6 @@ set ::book::lastBook "" ; # book name without extension (.bin)
 # Engines data:
 set engines(list) {}
 set engines(sort) Time
-set engineCoach1 {}
-set engineCoach2 {}
 
 
 
@@ -647,18 +579,9 @@ proc options.write {} {
           gameInfo(photos) gameInfo(hideNextMove) gameInfo(wrap) \
           gameInfo(fullComment) gameInfo(showMarks) \
           gameInfo(showMaterial) gameInfo(showFEN) \
-          engineCoach1 engineCoach2 scidBooksDir scidBasesDir ::book::lastBook \
+          scidBooksDir scidBasesDir ::book::lastBook \
           ::utils::sound::soundFolder ::utils::sound::announceNew \
           ::utils::sound::announceForward ::utils::sound::announceBack \
-          ::tacgame::threshold ::tacgame::blunderwarning ::tacgame::blunderwarningvalue \
-          ::tacgame::levelMin  ::tacgame::levelMax  ::tacgame::levelFixed ::tacgame::randomLevel \
-          ::tacgame::isLimitedAnalysisTime ::tacgame::showblunder ::tacgame::showblundervalue \
-          ::tacgame::showblunderfound ::tacgame::showmovevalue ::tacgame::showevaluation \
-          ::tacgame::isLimitedAnalysisTime ::tacgame::analysisTime ::tacgame::openingType ::tacgame::chosenOpening \
-          ::sergame::chosenOpening ::sergame::chosenEngine ::sergame::useBook ::sergame::bookToUse \
-          ::sergame::startFromCurrent ::sergame::coachIsWatching ::sergame::timeMode \
-          ::sergame::depth ::sergame::movetime ::sergame::nodes ::sergame::ponder ::sergame::isOpening \
-          ::uci::uciInfo(wtime3) ::uci::uciInfo(winc3) ::uci::uciInfo(btime3) ::uci::uciInfo(binc3) \
           boardfile_lite boardfile_dark \
           FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo \
           FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO lookTheme ThemePackageFile autoResizeBoard \
@@ -724,15 +647,6 @@ proc options.write {} {
       puts $optionF "set informant($i) [list $informant($i)]"
     }
     puts $optionF ""
-
-    # save FICS config
-    foreach i { use_timeseal timeseal_exec port_fics port_timeseal login password usedefaultvars premoveEnabled \
-          consolebg consolefg consoleheight consolewidth colseeking colgame colgameresult colficspercent server_ip } {
-      puts $optionF "set ::fics::$i [list [set ::fics::$i]]"
-    }
-    foreach i [lsort [array names ::fics::profileVars]] {
-      puts $optionF "set ::fics::profileVars($i) [list $::fics::profileVars($i)]"
-    }
 
     # save pinfo config
     foreach i { wikipurl dnburl SeeAlsoPND2WP wikipAPI} {
