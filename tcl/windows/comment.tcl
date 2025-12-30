@@ -14,6 +14,20 @@ namespace eval ::windows::commenteditor {
 	variable undoComment_ 1
 	variable undoNAGs_ 1
 
+	################################################################################
+	# ::windows::commenteditor::clearComment_
+	# Visibility:
+	#   Private.
+	# Inputs:
+	#   - None.
+	# Returns:
+	#   - None.
+	# Side effects:
+	#   - When a comment exists, calls `undoFeature save` and clears the current
+	#     position comment via `sc_pos setComment ""`.
+	#   - Sets `::windows::commenteditor::needNotify_` when a change is made.
+	#   - Schedules a `::notify::PosChanged pgnonly` notification.
+	################################################################################
 	proc clearComment_ {} {
 		if {[sc_pos getComment] != ""} {
 			undoFeature save
@@ -23,6 +37,21 @@ namespace eval ::windows::commenteditor {
 		notify_ idle
 	}
 
+
+	################################################################################
+	# ::windows::commenteditor::clearNAGs_
+	# Visibility:
+	#   Private.
+	# Inputs:
+	#   - None.
+	# Returns:
+	#   - None.
+	# Side effects:
+	#   - When NAGs exist, calls `undoFeature save` and clears them via
+	#     `sc_pos clearNags`.
+	#   - Sets `::windows::commenteditor::needNotify_` when a change is made.
+	#   - Schedules a `::notify::PosChanged pgnonly` notification.
+	################################################################################
 	proc clearNAGs_ {} {
 		if {[sc_pos getNags] != 0} {
 			undoFeature save
@@ -32,6 +61,19 @@ namespace eval ::windows::commenteditor {
 		notify_ idle
 	}
 
+
+	################################################################################
+	# ::windows::commenteditor::notify_
+	#   Schedules a position-changed notification if the editor has made changes.
+	# Visibility:
+	#   Private.
+	# Inputs:
+	#   - wait: Delay passed to `after` (e.g. "idle", or a millisecond count).
+	# Returns:
+	#   - None.
+	# Side effects:
+	#   - Cancels and re-schedules `::notify::PosChanged pgnonly`.
+	################################################################################
 	proc notify_ {wait} {
 		if {$::windows::commenteditor::needNotify_} {
 			after cancel "::notify::PosChanged pgnonly"
@@ -39,10 +81,41 @@ namespace eval ::windows::commenteditor {
 		}
 	}
 
+
+	################################################################################
+	# ::windows::commenteditor::notifyCancel_
+	# Visibility:
+	#   Private.
+	# Inputs:
+	#   - None.
+	# Returns:
+	#   - None.
+	# Side effects:
+	#   - Cancels any pending `::notify::PosChanged pgnonly`.
+	################################################################################
 	proc notifyCancel_ {} {
 		after cancel "::notify::PosChanged pgnonly"
 	}
 
+
+	################################################################################
+	# ::windows::commenteditor::storeComment_
+	#   Persists the edited comment to the current position.
+	# Visibility:
+	#   Private.
+	# Inputs:
+	#   - None.
+	# Returns:
+	#   - None.
+	# Side effects:
+	#   - Reads from `$w_.cf.txtframe.text`.
+	#   - When the comment has changed, calls `undoFeature save` at most once per
+	#     refresh cycle (guarded by `::windows::commenteditor::undoComment_`).
+	#   - Updates the current position comment via `sc_pos setComment`.
+	#   - Sets `::windows::commenteditor::needNotify_` when a change is made.
+	#   - Schedules a delayed `::notify::PosChanged pgnonly`.
+	#   - Resets the text widget's modified flag.
+	################################################################################
 	proc storeComment_ {} {
 		variable w_
 		if {![$w_.cf.txtframe.text edit modified]} { return }
@@ -63,6 +136,24 @@ namespace eval ::windows::commenteditor {
 		$w_.cf.txtframe.text edit modified false
 	}
 
+
+	################################################################################
+	# ::windows::commenteditor::storeNAGs_
+	#   Persists the edited NAG list to the current position.
+	# Visibility:
+	#   Private.
+	# Inputs:
+	#   - None.
+	# Returns:
+	#   - None.
+	# Side effects:
+	#   - Reads NAGs from `$w_.nf.text`.
+	#   - When NAGs have changed, calls `undoFeature save` at most once per refresh
+	#     cycle (guarded by `::windows::commenteditor::undoNAGs_`).
+	#   - Updates the current position NAGs via `sc_pos clearNags` / `sc_pos addNag`.
+	#   - Sets `::windows::commenteditor::needNotify_` when a change is made.
+	#   - Schedules a delayed `::notify::PosChanged pgnonly`.
+	################################################################################
 	proc storeNAGs_ {} {
 		variable w_
 		set nag_stored [sc_pos getNags]
@@ -85,6 +176,23 @@ namespace eval ::windows::commenteditor {
 	}
 }
 
+################################################################################
+# ::windows::commenteditor::createWin
+#   Creates (or focuses) the comment editor window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - focus_if_exists: When the window already exists, a non-zero value focuses
+#     it; a zero value closes it. (When the window does not exist, it is created
+#     regardless of this flag.)
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.commentWin` and its child widgets when not already open.
+#   - Calls `::windows::commenteditor::Refresh` to load the current comment and
+#     NAGs.
+#   - Sets up bindings and schedules focus on the comment text widget.
+################################################################################
 proc ::windows::commenteditor::createWin { {focus_if_exists 1} } {
 	variable w_
 
@@ -169,9 +277,24 @@ proc ::windows::commenteditor::createWin { {focus_if_exists 1} } {
 	after idle focus $w_.cf.txtframe.text
 }
 
-# Gets the comment and NAGs for the current position and updates the
-# corresponding widgets.
-# Disables NAGs widgets if at vstart (NAGs cannot be inserted before moves).
+################################################################################
+# ::windows::commenteditor::Refresh
+#   Updates the comment and NAG widgets for the current position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - When the window is open, reads the current comment and NAGs via `sc_pos`
+#     and updates the corresponding widgets.
+#   - Cancels any pending `::notify::PosChanged pgnonly`.
+#   - Resets `::windows::commenteditor::needNotify_`, `undoNAGs_`, and
+#     `undoComment_`.
+#   - Disables NAG controls when at `vstart` (NAGs cannot be inserted before
+#     moves).
+################################################################################
 proc ::windows::commenteditor::Refresh {} {
 	variable w_
 	if {![winfo exists $w_]} { return }
@@ -207,6 +330,19 @@ proc ::windows::commenteditor::Refresh {} {
 	}
 }
 
+################################################################################
+# makeCommentWin
+#   Convenience entry point for opening the comment editor window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - toggle: When equal to "toggle", closes the window if it is already open.
+#     Otherwise, focuses the existing window.
+# Returns:
+#   - None.
+# Side effects:
+#   - Delegates to `::windows::commenteditor::createWin`.
+################################################################################
 proc makeCommentWin {{toggle ""}} {
 	::windows::commenteditor::createWin [string compare "$toggle" "toggle"]
 }
