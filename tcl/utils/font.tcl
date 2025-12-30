@@ -107,10 +107,10 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.family_list
   ttk::frame $fr
   ttk::treeview $fr.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$fr.scroll set"
+             -yscrollcommand [list $fr.scroll set]
   $fr.list configure -height 7
   $fr.list column 0 -width 140
-  ttk::scrollbar $fr.scroll -command "$fr.list yview"
+  ttk::scrollbar $fr.scroll -command [list $fr.list yview]
 
   set i 0
   foreach f $families {
@@ -128,10 +128,10 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.style_list
   ttk::frame $fr
   ttk::treeview $fr.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$fr.scroll set"
+             -yscrollcommand [list $fr.scroll set]
   $fr.list configure -height 7
   $fr.list column 0 -width 60
-  ttk::scrollbar $fr.scroll -command "$fr.list yview"
+  ttk::scrollbar $fr.scroll -command [list $fr.list yview]
 
   set i 0
   foreach style { "Regular" "Bold" "Italic" "Bold Italic" } {
@@ -149,10 +149,10 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.size_list
   ttk::frame $fr
   ttk::treeview $fr.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$fr.scroll set"
+             -yscrollcommand [list $fr.scroll set]
   $fr.list configure -height 7
   $fr.list column 0 -width 30
-  ttk::scrollbar $fr.scroll -command "$fr.list yview"
+  ttk::scrollbar $fr.scroll -command [list $fr.list yview]
 
   set i 0
   for {set j 7} {$j <= 20} {incr j} {
@@ -170,11 +170,11 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.ok_cancel
   ttk::frame $fr
 
-  ttk::button $fr.ok -text "OK" -command "set fd_close 1"
-  ttk::button $fr.cancel  -text [tr Cancel] -command "set fd_close 0"
+  ttk::button $fr.ok -text "OK" -command [list set fd_close 1]
+  ttk::button $fr.cancel  -text [tr Cancel] -command [list set fd_close 0]
   pack $fr.ok -side top -fill x
   pack $fr.cancel -side top -fill x -pady 2
-  ttk::button $fr.help -text [tr Help] -command "helpWindow Options"
+  ttk::button $fr.help -text [tr Help] -command [list helpWindow Options]
   pack $fr.help -side top -fill x -pady 10
   grid config $fr -column 4 -row 1 -rowspan 2 -sticky snew -padx "10 0"
 

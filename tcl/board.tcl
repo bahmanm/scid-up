@@ -209,7 +209,7 @@ proc chooseBoardColors { w {choice -1}} {
   bind $bd.p.pieces <<ComboboxSelected>> { setPieceFont $::boardStyle; updateBoard }
   ttk::frame $bd.s
   ttk::label $bd.s.lb -text [tr OptionsBoardSize]
-  ttk::checkbutton $bd.s.auto -text "Auto" -variable ::autoResizeBoard -command "::resizeMainBoard"
+  ttk::checkbutton $bd.s.auto -text "Auto" -variable ::autoResizeBoard -command [list ::resizeMainBoard]
   ttk::combobox $bd.s.size -width 4 -textvar ::boardSize  -values $::boardSizes
   bind $bd.s.size <<ComboboxSelected>> { ::board::resize .main.board $::boardSize }
   pack $bd.p.lb $bd.p.pieces -side left -anchor w -padx 5
@@ -225,10 +225,10 @@ proc chooseBoardColors { w {choice -1}} {
   } n {
     LightSquares DarkSquares SelectedSquares SuggestedSquares
   } {
-    button $f.b$c -image e20 -background [set $c] -command "
-    set x \[ tk_chooseColor -initialcolor \$newColors($c) -title Scid \]
-    if {\$x != \"\"} { set newColors($c) \$x; updateBoardColors $w}
-    "
+    button $f.b$c -image e20 -background [set $c] -command [list apply {{w c} {
+      set x [tk_chooseColor -initialcolor $::newColors($c) -title Scid]
+      if {$x ne ""} { set ::newColors($c) $x; updateBoardColors $w }
+    }} $w $c]
     ttk::label $f.l$c -text "$::tr($n)  "
     grid $f.b$c -row $row -column $column
     grid $f.l$c -row $row -column [expr {$column + 1} ] -sticky w
@@ -239,7 +239,7 @@ proc chooseBoardColors { w {choice -1}} {
   foreach i {0 1 2 3} {
     if {$i != 0} { pack [ttk::frame $f.gap$i -width 20] -side left -padx 1 }
     set b $f.b$i
-    ttk::radiobutton $b -text "$i:" -variable ::borderwidth -value $i -command "set ::borderwidth $i; ::board::border .main.board $i; updateBoard"
+    ttk::radiobutton $b -text "$i:" -variable ::borderwidth -value $i -command [list ::board::setBorderWidthAndUpdate $i]
     set c $f.c$i
     canvas $c -height $psize -width $psize -background black
     $c create rectangle 0 0 [expr {20 - $i}] [expr {20 - $i}] -tag dark
@@ -301,7 +301,7 @@ proc chooseBoardColors { w {choice -1}} {
     ttk::label $f.wlite -image wp$psize -background [lindex $list 1]
     ttk::label $f.wdark -image wp$psize -background [lindex $list 2]
     ttk::button $f.select -text [expr {$count + 1}] \
-        -command "updateBoardColors $w $count"
+        -command [list updateBoardColors $w $count]
     bind $f.blite <1> "$f.select invoke"
     bind $f.bdark <1> "$f.select invoke"
     bind $f.wlite <1> "$f.select invoke"
@@ -332,7 +332,7 @@ proc chooseBoardColors { w {choice -1}} {
     $f.c create image $psize 0 -image wp$psize -anchor nw
     $f.c create image 0 $psize -image wp$psize -anchor nw
     $f.c create image $psize $psize -image bp$psize -anchor nw
-    ttk::button $f.select -text [expr {$count + 1}] -command "chooseBoardTextures $count"
+    ttk::button $f.select -text [expr {$count + 1}] -command [list chooseBoardTextures $count]
     bind $f.c <1> "chooseBoardTextures $count"
     pack $f.c $f.select -side top
 
@@ -542,7 +542,7 @@ proc ::board::addInfoBar {w varname} {
   ttk::button $w.bar.endvar -image tb_BD_ForwardEnd -style Toolbutton
   set menu [::board::newToolBar_ $w $varname]
   ttk::button $w.bar.cmd -image tb_BD_ShowToolbar -style Toolbutton \
-    -command "::board::updateToolBar_ $menu $varname $w.bar.cmd"
+    -command [list ::board::updateToolBar_ $menu $varname $w.bar.cmd]
   grid $w.bar.cmd -in $w.bar -row 0 -column 0 -sticky news
   grid $w.bar.info -in $w.bar -row 0 -column 1 -sticky news -padx 4
   grid $w.bar.leavevar -row 0 -column 2 -sticky news
@@ -707,11 +707,11 @@ proc ::board::updateToolBar_ {{menu} {varname} {mb ""} } {
   while {$i >= 0} {
     set idx -1
     catch { set idx [lindex [$menu entryconfigure $i -image] 4] }
-    if {[info exists "${varname}($idx)"] } {
-      $menu entryconfigure $i -state normal -command [list ::board::invokeToolBarCommand $varname $idx]
-    } else {
-      catch { $menu entryconfigure $i -state disabled -command "" }
-    }
+	    if {[info exists "${varname}($idx)"] } {
+	      $menu entryconfigure $i -state normal -command [list ::board::invokeToolBarCommand $varname $idx]
+	    } else {
+	      catch { $menu entryconfigure $i -state disabled -command {} }
+	    }
     incr i -1
   }
   if {$mb != ""} {
@@ -894,6 +894,12 @@ proc ::board::border {w {border ""}} {
     set ::board::_border($w) $border
     ::board::resize $w redraw
   }
+}
+
+proc ::board::setBorderWidthAndUpdate {width} {
+  set ::borderwidth $width
+  ::board::border .main.board $width
+  updateBoard
 }
 
 # ::board::getSquare

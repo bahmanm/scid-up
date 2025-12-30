@@ -100,8 +100,8 @@ proc updateHelpWindow {name {heading ""}} {
     setWinSize $w
     
     wm minsize $w 20 5
-    text $w.text -setgrid yes -wrap word -width $::winWidth($w) -height $::winHeight($w) -relief sunken -border 0 -yscroll "$w.scroll set"
-    ttk::scrollbar $w.scroll -command "$w.text yview"
+    text $w.text -setgrid yes -wrap word -width $::winWidth($w) -height $::winHeight($w) -relief sunken -border 0 -yscroll [list $w.scroll set]
+    ttk::scrollbar $w.scroll -command [list $w.text yview]
     
     ttk::frame $w.b -relief raised -border 2
     pack $w.b -side bottom -fill x

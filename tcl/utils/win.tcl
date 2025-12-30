@@ -1006,18 +1006,18 @@ proc ::docking::manage_rightclick_ {noteb x y localX localY} {
 	if { [winfo exists $m] } { destroy $m }
 	menu $m -tearoff 0
 	$m add command -label [ ::tr DockTop ] -state $state \
-		-command "::docking::move_tab_ $wnd $noteb n"
+		-command [list ::docking::move_tab_ $wnd $noteb n]
 	$m add command -label [ ::tr DockBottom ] -state $state \
-		-command "::docking::move_tab_ $wnd $noteb s"
+		-command [list ::docking::move_tab_ $wnd $noteb s]
 	$m add command -label [ ::tr DockLeft ] -state $state \
-		-command "::docking::move_tab_ $wnd $noteb w"
+		-command [list ::docking::move_tab_ $wnd $noteb w]
 	$m add command -label [ ::tr DockRight ] -state $state \
-		-command "::docking::move_tab_ $wnd $noteb e"
+		-command [list ::docking::move_tab_ $wnd $noteb e]
 	# Main board can not be closed or undocked
 	if { $wnd != ".main" } {
 		$m add separator
-		$m add command -label [ ::tr Undock ] -command "::win::undockWindow $wnd $noteb"
-		$m add command -label [ ::tr Close ] -command "::win::closeWindow $wnd"
+		$m add command -label [ ::tr Undock ] -command [list ::win::undockWindow $wnd $noteb]
+		$m add command -label [ ::tr Close ] -command [list ::win::closeWindow $wnd]
 	}
 	tk_popup $m $x $y
 }

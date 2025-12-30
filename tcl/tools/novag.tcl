@@ -26,8 +26,8 @@ namespace eval novag {
     $w.f add $w.f.top -weight 1
     $w.f add $w.f.bottom -weight 1
     
-    ttk::scrollbar $w.f.top.ysc -command { .novag.f.top.output yview }
-    text $w.f.top.output -width 20 -height 20  -wrap word  -yscrollcommand ".novag.f.top.ysc set"
+	    ttk::scrollbar $w.f.top.ysc -command { .novag.f.top.output yview }
+	    text $w.f.top.output -width 20 -height 20  -wrap word  -yscrollcommand [list .novag.f.top.ysc set]
     pack $w.f.top.ysc -side left -fill y -side right
     pack .novag.f.top.output -side left -fill both -expand 1 -side right
     

@@ -327,11 +327,11 @@ proc ::ptrack::make {} {
     image create photo ptrack_$col -width 101 -height 20
     for {set i 0} {$i <= 100} {incr i} {
       set color [::ptrack::color $i $col]
-      ptrack_$col put $color -to $i 0 [expr {$i+1} ] 19
-    }
-    $f.b.menu add command -image ptrack_$col \
-      -command "::ptrack::recolor $col"
-  }
+	    ptrack_$col put $color -to $i 0 [expr {$i+1} ] 19
+	  }
+	  $f.b.menu add command -image ptrack_$col \
+	      -command [list ::ptrack::recolor $col]
+	}
   $f.b configure -image ptrack_$::ptrack::color
   ttk::label $f.label -text $::tr(GlistColor:) -font font_Bold
   pack $f.label $f.b -side left -pady 5
@@ -358,10 +358,10 @@ proc ::ptrack::make {} {
   bind $f.to <FocusOut> +::ptrack::status
 
   set f $w.t.buttons
-  ttk::button $f.stop -text $::tr(Stop) -command progressBarCancel -state disabled
-  ttk::button $f.update -text $::tr(Update) -command ::ptrack::refresh
-  ttk::button $f.close -text $::tr(Close) -command "destroy $w"
-  pack $f.close $f.update $f.stop -side right -padx 3 -pady 5
+	ttk::button $f.stop -text $::tr(Stop) -command progressBarCancel -state disabled
+	ttk::button $f.update -text $::tr(Update) -command ::ptrack::refresh
+	ttk::button $f.close -text $::tr(Close) -command [list destroy $w]
+	pack $f.close $f.update $f.stop -side right -padx 3 -pady 5
   ::ptrack::status
   bind $w <Configure> "recordWinSize $w"
   wm resizable $w 0 0

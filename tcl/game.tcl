@@ -103,9 +103,12 @@ proc ::game::LoadMenu {w base gnum x y} {
     $m add command -label $::tr(LoadGame)
     $m add command -label $::tr(MergeGame)
   }
-  $m entryconfigure 0 -command "::gbrowser::new $base $gnum"
-  $m entryconfigure 1 -command "::file::SwitchToBase $base 0; ::game::Load $gnum"
-  $m entryconfigure 2 -command "mergeGame $base $gnum"
+  $m entryconfigure 0 -command [list ::gbrowser::new $base $gnum]
+  $m entryconfigure 1 -command [list apply {{base gnum} {
+    ::file::SwitchToBase $base 0
+    ::game::Load $gnum
+  } ::} $base $gnum]
+  $m entryconfigure 2 -command [list mergeGame $base $gnum]
   event generate $w <ButtonRelease-1>
   $m post $x $y
   event generate $m <ButtonPress-1>

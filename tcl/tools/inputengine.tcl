@@ -204,7 +204,10 @@ namespace eval ExtHardware {
        destroy .exthardwareConfig
        $::ExtHardware::bindbutton
     }
-    ttk::button $w.bCancel -text [::tr Cancel] -command "::ExtHardware::HWbuttonImg tb_eng_disconnected ; destroy $w"
+    ttk::button $w.bCancel -text [::tr Cancel] -command [list apply {{w} {
+        ::ExtHardware::HWbuttonImg tb_eng_disconnected
+        destroy $w
+    } ::} $w]
     packdlgbuttons $w.bCancel $w.bOk -in $w.buttons
 
     grid $w.options    -stick ew    -row 0 -column 0
@@ -310,7 +313,7 @@ namespace eval inputengine {
     ::setTitle $w [::tr IEConsole]
 
     ttk::scrollbar $w.ysc     -command { .inputengineconsole.console yview }
-    text      $w.console -height 5  -width 80 -wrap word -yscrollcommand "$w.ysc set"
+    text      $w.console -height 5  -width 80 -wrap word -yscrollcommand [list $w.ysc set]
 
     ttk::label     $w.lmode   -text [::tr IESending]
 

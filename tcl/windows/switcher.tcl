@@ -519,20 +519,25 @@ proc changeBaseType {baseNum} {
 
   ttk::style configure btypeWin.Treeview -rowheight 36
   ttk::treeview $w.t -columns {} -show tree -selectmode browse \
-        -yscrollcommand "$w.yscroll set" -style btypeWin.Treeview
+        -yscrollcommand [list $w.yscroll set] -style btypeWin.Treeview
   bind $w.t <<TreeviewSelect>> "selectBaseType \[$w.t selection\]"
   $w.t configure -height 9
 
-  ttk::scrollbar $w.yscroll -command "$w.t yview" -takefocus 0
+  ttk::scrollbar $w.yscroll -command [list $w.t yview] -takefocus 0
   pack [ttk::frame $w.b] -side bottom -anchor e
   pack $w.yscroll -side right -fill y
   pack $w.t -side left -fill both -expand yes
 
   dialogbutton $w.b.set -text "OK" -command \
-    "catch {sc_base extra $baseNum type \$temp_dbtype}; ::windows::switcher::Refresh; ::maint::Refresh;
-     focus .; destroy $w"
+    [list apply {{w baseNum} {
+      catch {sc_base extra $baseNum type $::temp_dbtype}
+      ::windows::switcher::Refresh
+      ::maint::Refresh
+      focus .
+      destroy $w
+    }} $w $baseNum]
 
-  dialogbutton $w.b.cancel -text $::tr(Cancel) -command "focus .; destroy $w"
+  dialogbutton $w.b.cancel -text $::tr(Cancel) -command [list apply {{w} { focus .; destroy $w }} $w]
   packdlgbuttons $w.b.cancel $w.b.set
 
   set numtypes [llength $base_types]
@@ -589,23 +594,23 @@ proc ::windows::switcher::releaseMouseEvent {fromBase x y {w .baseWin}} {
 
 proc ::windows::switcher::popupmenu { {switcherWin} {w} {abs_x} {abs_y} {baseIdx} } {
   $w.menu delete 0 end
-  $w.menu add command -label "[tr NewGameListWindow]" -command "::windows::gamelist::Open $baseIdx"
+  $w.menu add command -label "[tr NewGameListWindow]" -command [list ::windows::gamelist::Open $baseIdx]
   $w.menu add separator
   $w.menu add command -label [tr FileOpen] -command ::file::Open
   if {![sc_base isReadOnly $baseIdx]} {
-    $w.menu add command -label [tr ToolsImportFile] -command "importPgnFile $baseIdx"
+    $w.menu add command -label [tr ToolsImportFile] -command [list importPgnFile $baseIdx]
   }
   if { $baseIdx != $::clipbase_db } {
     $w.menu add command -label [tr FileClose] -command [list ::file::Close $baseIdx]
-    $w.menu add command -label $::tr(CompactDatabase) -command "compactDB $baseIdx"
+    $w.menu add command -label $::tr(CompactDatabase) -command [list compactDB $baseIdx]
     if { [::file::autoLoadBases.find $baseIdx] == "-1" } {
       set ::sw_DummyCheckbutton 0
       $w.menu add checkbutton -label "[tr LoadatStartup]" -variable ::sw_DummyCheckbutton \
-        -command "::file::autoLoadBases.add $baseIdx"
+        -command [list ::file::autoLoadBases.add $baseIdx]
     } else {
       set ::sw_DummyCheckbutton 1
       $w.menu add checkbutton -label "[tr LoadatStartup]" -variable ::sw_DummyCheckbutton \
-        -command "::file::autoLoadBases.remove $baseIdx"
+        -command [list ::file::autoLoadBases.remove $baseIdx]
     }
     $w.menu add command -label [tr AboutDatabase] -command [list apply {{base} {
       set name [file nativename [sc_base filename $base]]
@@ -625,7 +630,7 @@ proc ::windows::switcher::popupmenu { {switcherWin} {w} {abs_x} {abs_y} {baseIdx
   }
 
   $w.menu add separator
-  $w.menu add command -label [tr ChangeIcon] -command "changeBaseType $baseIdx"
+  $w.menu add command -label [tr ChangeIcon] -command [list changeBaseType $baseIdx]
   tk_popup $w.menu $abs_x $abs_y
 }
 

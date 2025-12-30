@@ -339,7 +339,7 @@ proc openSpellCheckWin {type {parent .}} {
     # The ambiguous check mark
     # Hitting it starts a new correction scan
     ttk::checkbutton $f.ambig -variable spellcheckAmbiguous \
-                              -text $::tr(Ambiguous) -command "updateSpellCheckWin $type"
+                              -text $::tr(Ambiguous) -command [list updateSpellCheckWin $type]
     pack $f.ambig -side left -padx 2 -ipady 2 -ipadx 3
 
     # When correcting player names, we add a surnames option
@@ -349,7 +349,7 @@ proc openSpellCheckWin {type {parent .}} {
         # Hitting it starts a new correction scan
         #
         ttk::checkbutton $f.surnames -variable spellcheckSurnames \
-                                     -text $::tr(Surnames) -command "updateSpellCheckWin Player"
+                                     -text $::tr(Surnames) -command [list updateSpellCheckWin Player]
         pack $f.surnames -side left -padx 2 -ipady 2 -ipadx 3
     }
 
@@ -413,5 +413,4 @@ proc openSpellCheckWin {type {parent .}} {
     #
     updateSpellCheckWin $type
 }
-
 

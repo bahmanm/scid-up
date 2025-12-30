@@ -291,7 +291,7 @@ proc ::file::finder::Refresh {{newdir ""}} {
     lappend mlist $d
   }
   foreach m $mlist {
-    $data(menu) add command -label $m -command "::file::finder::Refresh [list $m]"
+    $data(menu) add command -label $m -command [list ::file::finder::Refresh $m]
   }
   
   #store actual directory string in menubutton
@@ -329,12 +329,12 @@ proc ::file::finder::contextMenu {win fullPath x y xc yc} {
   if { [winfo exists $mctxt] } { destroy $mctxt }
   
   menu $mctxt
-  $mctxt add command -label [tr FinderCtxOpen ] -command "::file::Open [list $fullPath]"
-  $mctxt add command -label [tr FinderCtxBackup ] -command "::file::finder::backup [list $fullPath]"
-  $mctxt add command -label [tr FinderCtxCopy ] -command "::file::finder::copy [list $fullPath]"
-  $mctxt add command -label [tr FinderCtxMove ] -command "::file::finder::move [list $fullPath]"
+  $mctxt add command -label [tr FinderCtxOpen ] -command [list ::file::Open $fullPath]
+  $mctxt add command -label [tr FinderCtxBackup ] -command [list ::file::finder::backup $fullPath]
+  $mctxt add command -label [tr FinderCtxCopy ] -command [list ::file::finder::copy $fullPath]
+  $mctxt add command -label [tr FinderCtxMove ] -command [list ::file::finder::move $fullPath]
   $mctxt add separator
-  $mctxt add command -label [tr FinderCtxDelete ] -command "::file::finder::delete $fullPath"
+  $mctxt add command -label [tr FinderCtxDelete ] -command [list ::file::finder::delete $fullPath]
   
   $mctxt post [winfo pointerx .] [winfo pointery .]
   
@@ -576,4 +576,3 @@ proc ::file::finder::GetFiles {dir {len -1}} {
   }
   return $flist
 }
-

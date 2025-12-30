@@ -38,7 +38,7 @@ proc ::windows::eco::Refresh {{code "x"}} {
     pack $w.b -side bottom -fill x
     ttk::button $w.b.classify -textvar ::tr(ReclassifyGames) -command classifyAllGames
     dialogbutton $w.b.help -textvar ::tr(Help) -command {helpWindow ECO}
-    dialogbutton $w.b.close -textvar ::tr(Close) -command "destroy $w"
+    dialogbutton $w.b.close -textvar ::tr(Close) -command [list destroy $w]
     pack $w.b.classify -side left -padx 5 -pady 5
     packbuttons right $w.b.close $w.b.help
     set pane [::utils::pane::Create $w.pane graph text 500 400 0.5]
@@ -266,4 +266,3 @@ proc ::windows::eco::KeyPress {key} {
     ::windows::eco::Refresh
   }
 }
-

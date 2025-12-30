@@ -17,7 +17,7 @@ proc ::tip::show {{n -1}} {
     ttk::checkbutton $w.b.start -textvar ::tr(TipAtStartup) -variable startup(tip) -style Small.TCheckbutton
     dialogbuttonsmall $w.b.prev [list -text "<" ]
     dialogbuttonsmall $w.b.next [list -text ">" ]
-    dialogbuttonsmall $w.b.close [list -textvar ::tr(Close) -command "destroy $w" ]
+    dialogbuttonsmall $w.b.close [list -textvar ::tr(Close) -command [list destroy $w] ]
     pack $w.b.start -side left -padx 2
     packdlgbuttons $w.b.close $w.b.next $w.b.prev
 
@@ -46,8 +46,8 @@ proc ::tip::show {{n -1}} {
   set prev [expr $n - 1]
   if {$prev < 0} {set prev [expr $ntips - 1]}
   set next [expr ($n + 1) % $ntips]
-  $w.b.prev configure -command "::tip::show $prev"
-  $w.b.next configure -command "::tip::show $next"
+  $w.b.prev configure -command [list ::tip::show $prev]
+  $w.b.next configure -command [list ::tip::show $next]
   set tip "<center><b>$::tr(Tip) [expr $n + 1]:</b></center><br><br>"
   append tip [string trim [lindex $tiplist $n]]
   ::htext::display $w.text $tip "" 0
@@ -273,4 +273,3 @@ set tips(E) {
     look in the <a Appearance>help section</a>.
   }
 }
-

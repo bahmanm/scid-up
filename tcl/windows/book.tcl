@@ -402,7 +402,7 @@ namespace eval book {
     set moveList [ sc_pos moves ]
     foreach move $moveList {
       if { [ lsearch  $moves $move ] == -1 } {
-        $w.fbutton.mbAdd.otherMoves add command -label [::trans $move] -command "::book::addBookMove $move"
+        $w.fbutton.mbAdd.otherMoves add command -label [::trans $move] -command [list ::book::addBookMove $move]
       }
     }
   }

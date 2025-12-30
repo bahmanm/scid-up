@@ -424,7 +424,10 @@ proc playerInfo {{player ""}} {
       -command {::preport::preportDlg $playerInfoName}
     dialogbutton $w.b2.help -textvar ::tr(Help) -command {helpWindow PInfo}
     dialogbutton $w.b2.update -textvar ::tr(Update) -command {::pinfo::playerInfo $playerInfoName}
-    dialogbutton $w.b2.close -textvar ::tr(Close) -command "focus .; destroy $w"
+    dialogbutton $w.b2.close -textvar ::tr(Close) -command [list apply {{w} {
+        focus .
+        destroy $w
+    } ::} $w]
     packbuttons right $w.b2.close $w.b2.update $w.b2.help
     pack $w.b.eloT $w.b.eloF $w.b.eloD -side left -padx "5 0"
     packbuttons left $w.b.graph $w.b.edit

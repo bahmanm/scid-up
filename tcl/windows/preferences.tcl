@@ -120,11 +120,12 @@ proc ::preferences::resources { } {
         if { [info exists $file] } { set temp [set $file] }
         ttk::entry $w.$idx.file -width 80
         $w.$idx.file insert end $temp
-        ttk::button $w.$idx.b -text "..." -command "$command $w.$idx.file"
-        $w.$idx.file configure -validate key -validatecommand "
-              after cancel ::preferences::checkFileDir $w.$idx.file $checkvaluecommand $valtype $file
-              after 200 ::preferences::checkFileDir $w.$idx.file $checkvaluecommand $valtype $file
-              return true"
+        ttk::button $w.$idx.b -text "..." -command [list $command $w.$idx.file]
+        $w.$idx.file configure -validate key -validatecommand [list apply {{w checkvaluecommand valtype varName} {
+              after cancel [list ::preferences::checkFileDir $w $checkvaluecommand $valtype $varName]
+              after 200 [list ::preferences::checkFileDir $w $checkvaluecommand $valtype $varName]
+              return true
+        } ::} $w.$idx.file $checkvaluecommand $valtype $file]
         pack $w.$file $w.$idx -anchor w -fill x
         pack $w.$idx.b -side right -padx 2
         pack $w.$idx.file -side left -padx 2 -fill x -expand yes
@@ -134,7 +135,7 @@ proc ::preferences::resources { } {
 
     ttk::frame $w.b
     pack $w.b -side bottom -fill x
-    dialogbutton $w.b.ok -text "OK" -command "destroy $w"
+    dialogbutton $w.b.ok -text "OK" -command [list destroy $w]
     packbuttons right $w.b.ok
 
     wm protocol $w WM_DELETE_WINDOW [list apply {{w} {
@@ -182,13 +183,13 @@ proc ::preferences::moves { t } {
     ttk::spinbox $t.auto.spDelay -width 4 -textvariable tempdelay -from 1 -to 999 -increment 1 \
         -validate all -validatecommand { ::preferences::validateautoplay }
     ttk::labelframe $t.high -text [tr OptionsMovesHighlightLastMove]
-    ttk::checkbutton $t.high.hlm -variable ::highlightLastMove -text [tr OptionsMovesHighlightLastMoveDisplay] -command "updateBoard"
-    ttk::checkbutton $t.high.arrow -variable ::arrowLastMove -text [tr OptionsMovesHighlightLastMoveArrow] -command "updateBoard"
+    ttk::checkbutton $t.high.hlm -variable ::highlightLastMove -text [tr OptionsMovesHighlightLastMoveDisplay] -command [list updateBoard]
+    ttk::checkbutton $t.high.arrow -variable ::arrowLastMove -text [tr OptionsMovesHighlightLastMoveArrow] -command [list updateBoard]
     ttk::label $t.high.tl -text [tr OptionsMovesHighlightLastMoveWidth]
     ttk::spinbox $t.high.thick -width 2 -textvariable ::highlightLastMoveWidth -from 1 -to 5 -increment 1 \
-        -validate key -validatecommand { return [string is digit %S] } -command "updateBoard"
+        -validate key -validatecommand { return [string is digit %S] } -command [list updateBoard]
     ttk::button $t.high.color -text $::tr(ColorMarker) -command chooseHighlightColor
-    ttk::checkbutton $t.high.nag -variable ::highlightLastMoveNag -text [tr OptionsMovesHighlightLastMoveNag] -command "updateBoard"
+    ttk::checkbutton $t.high.nag -variable ::highlightLastMoveNag -text [tr OptionsMovesHighlightLastMoveNag] -command [list updateBoard]
     grid $t.high.hlm -row 0 -column 0 -sticky w
     grid $t.high.tl -row 0 -column 1 -padx "10 5"
     grid $t.high.thick -row 0 -column 2
@@ -212,7 +213,10 @@ proc ::preferences::internationalization { w } {
     global locale
 
     ttk::checkbutton $w.tp -variable ::translatePieces -text [tr OptionsMovesTranslatePieces] \
-        -command "setLanguage; ::notify::PosChanged pgnonly"
+        -command [list apply {{} {
+            setLanguage
+            ::notify::PosChanged pgnonly
+        } ::}]
     set numList { }
     set pre ""
     foreach numeric {".,"   ". "   ",."   ", "   "."   ","} {

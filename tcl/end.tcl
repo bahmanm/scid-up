@@ -128,7 +128,7 @@ proc mergeGame {base gnum} {
       set label_width [string length $label]
     }
     ttk::button $w.b.m$i -text $label -width $label_width -padding 0 \
-      -command "updateMergeGame $w $i"
+      -command [list updateMergeGame $w $i]
     pack $w.b.m$i -side left
   }
   dialogbutton $w.b.ok -text "OK" -command {
@@ -139,7 +139,7 @@ proc mergeGame {base gnum} {
     updateBoard -pgn
   }
   dialogbutton $w.b.cancel -text $::tr(Cancel) \
-      -command "catch {grab release $w}; destroy $w"
+      -command [list apply {{w} { catch {grab release $w}; destroy $w }} $w]
   packbuttons right $w.b.cancel $w.b.ok
   grab $w
   updateMergeGame $w [expr $merge(ply) / 2]
@@ -223,19 +223,19 @@ proc setExportText {exportType} {
   $pane.start.text insert end $exportStartFile($exportType)
   $pane.end.text insert end $exportEndFile($exportType)
 
-  ttk::button $w.buttons.default -text "Reset to Default" -command "
-  $pane.start.text delete 1.0 end
-  $pane.start.text insert end \$default_exportStartFile($exportType)
-  $pane.end.text delete 1.0 end
-  $pane.end.text insert end \$default_exportEndFile($exportType)
-  "
-  dialogbutton $w.buttons.ok -text "OK" -command "
-  set exportStartFile($exportType) \[$pane.start.text get 1.0 end-1c\]
-  set exportEndFile($exportType) \[$pane.end.text get 1.0 end-1c\]
-  focus .
-  destroy $w
-  "
-  dialogbutton $w.buttons.cancel -text $::tr(Cancel) -command "focus .; destroy $w"
+  ttk::button $w.buttons.default -text "Reset to Default" -command [list apply {{pane exportType} {
+    $pane.start.text delete 1.0 end
+    $pane.start.text insert end $::default_exportStartFile($exportType)
+    $pane.end.text delete 1.0 end
+    $pane.end.text insert end $::default_exportEndFile($exportType)
+  }} $pane $exportType]
+  dialogbutton $w.buttons.ok -text "OK" -command [list apply {{w pane exportType} {
+    set ::exportStartFile($exportType) [$pane.start.text get 1.0 end-1c]
+    set ::exportEndFile($exportType) [$pane.end.text get 1.0 end-1c]
+    focus .
+    destroy $w
+  }} $w $pane $exportType]
+  dialogbutton $w.buttons.cancel -text $::tr(Cancel) -command [list apply {{w} { focus .; destroy $w }} $w]
   pack $w.buttons.default -side left -padx 5 -pady 2
   packdlgbuttons $w.buttons.cancel $w.buttons.ok
   focus $pane.start.text

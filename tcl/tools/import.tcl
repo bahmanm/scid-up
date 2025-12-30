@@ -43,10 +43,10 @@ proc importPgnGame {} {
   
   # Right-mouse button cut/copy/paste menu:
   menu $edit.text.rmenu -tearoff 0
-  $edit.text.rmenu add command -label "Cut" -command "tk_textCut $edit.text"
-  $edit.text.rmenu add command -label "Copy" -command "tk_textCopy $edit.text"
-  $edit.text.rmenu add command -label "Paste" -command "tk_textPaste $edit.text"
-  $edit.text.rmenu add command -label "Select all" -command "$edit.text tag add sel 1.0 end"
+  $edit.text.rmenu add command -label "Cut" -command [list tk_textCut $edit.text]
+  $edit.text.rmenu add command -label "Copy" -command [list tk_textCopy $edit.text]
+  $edit.text.rmenu add command -label "Paste" -command [list tk_textPaste $edit.text]
+  $edit.text.rmenu add command -label "Select all" -command [list $edit.text tag add sel 1.0 end]
   bind $edit.text <ButtonPress-$::MB3> "tk_popup $edit.text.rmenu %X %Y"
   
   autoscrollText y $pane.err.f $pane.err.text Treeview
@@ -248,10 +248,7 @@ proc importPgnFile {{base} {fnames ""}} {
     -fill black -text "0:00 / 0:00"
 
   ttk::button $w.buttons.stop -textvar ::tr(Stop) -command { progressBarCancel}
-  ttk::button $w.buttons.close -textvar ::tr(Close) -state disabled -command "
-    focus .
-    destroy $w
-  "
+  ttk::button $w.buttons.close -textvar ::tr(Close) -state disabled -command [list apply {{w} { focus .; destroy $w }} $w]
   grid $w.progress $w.buttons.stop $w.buttons.close -in $w.buttons
   grid rowconfigure $w.buttons 0 -weight 1
   grid columnconfigure $w.buttons 0 -weight 1

@@ -413,7 +413,7 @@ proc ::createMainEvalBarMenu {w} {
             }
         } else {
             $w.evalbar_menu add command -label $engName \
-                -command "set ::mainEvalBarEngineID_ \[::enginewin::start $engID\]"
+                -command [list apply {{engID} { set ::mainEvalBarEngineID_ [::enginewin::start $engID] }} $engID]
         }
     }
     foreach {engName} [enginecfg::names] {
@@ -816,10 +816,10 @@ proc getPromoPiece {} {
     wm resizable $w 0 0
     set col "w"
     if { [sc_pos side] == "black" } { set col "b" }
-    ttk::button $w.bq -image ${col}q45 -command "set ::result 2 ; destroy $w"
-    ttk::button $w.br -image ${col}r45 -command "set ::result 3 ; destroy $w"
-    ttk::button $w.bb -image ${col}b45 -command "set ::result 4 ; destroy $w"
-    ttk::button $w.bn -image ${col}n45 -command "set ::result 5 ; destroy $w"
+    ttk::button $w.bq -image ${col}q45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 2]
+    ttk::button $w.br -image ${col}r45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 3]
+    ttk::button $w.bb -image ${col}b45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 4]
+    ttk::button $w.bn -image ${col}n45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 5]
     pack $w.bq $w.br $w.bb $w.bn -side left
     bind $w <Escape> "set ::result 2 ; destroy $w"
     bind $w <Return> "set ::result 2 ; destroy $w"
@@ -1510,7 +1510,7 @@ proc ConfigToolbar { w } {
   foreach i {newdb open closedb finder save bkm row gprev gnext row newgame copy paste row boardsearch headersearch \
 		 materialsearch row switcher glist pgn tmt maint eco tree crosstab engine } {
       if { $i eq "row" } { incr row; set col 0 } else {
-	  ttk::button $w.f.$i -image tb_$i -command "toggleToolbarButton $w.f $i"
+		  ttk::button $w.f.$i -image tb_$i -command [list toggleToolbarButton $w.f $i]
 	  if { $::toolbar_temp($i) } { $w.f.$i state pressed }
 	  grid $w.f.$i -row $row -column $col -sticky news -padx 4 -pady "0 8"
 	  incr col
@@ -1519,8 +1519,8 @@ proc ConfigToolbar { w } {
   setToolbarTooltips $w.f
   addHorizontalRule $w
   pack [ttk::frame $w.b] -side bottom -fill x
-  ttk::button $w.on -text "+ [::utils::string::Capital $::tr(all)]" -command "toggleAllToolbarButtons $w.f 1"
-  ttk::button $w.off -text "- [::utils::string::Capital $::tr(all)]" -command "toggleAllToolbarButtons $w.f 0"
+	  ttk::button $w.on -text "+ [::utils::string::Capital $::tr(all)]" -command [list toggleAllToolbarButtons $w.f 1]
+	  ttk::button $w.off -text "- [::utils::string::Capital $::tr(all)]" -command [list toggleAllToolbarButtons $w.f 0]
 
   pack $w.on $w.off -side left -padx 2 -pady "5 0"
 }

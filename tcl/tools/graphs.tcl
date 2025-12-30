@@ -200,15 +200,15 @@ proc configureFilterGraph {} {
       ttk::labelframe $w.filterold -text "Config StatYear StatElo OldYear OldElo"
       foreach { i h v s } { Elo OprepStatBoth r* "+" Year OprepStatSince y* ".01.01" } {
          ttk::frame $w.filterold.old$i
-         ttk::label $w.filterold.old$i.label -textvariable ::tr($h) -font font_Bold
-         ttk::treeview $w.filterold.old$i.list -columns {0} -show {} -selectmode extended \
-             -yscrollcommand "$w.filterold.old$i.ybar set"
-         $w.filterold.old$i.list column 0 -width 100
-         $w.filterold.old$i.list configure -height 7
-         ttk::scrollbar $w.filterold.old$i.ybar -command "$w.filterold.old$i.list yview"
-         pack $w.filterold.old$i.label -side top -anchor w
-         pack $w.filterold.old$i.ybar -side right -fill y
-         pack $w.filterold.old$i.list -side left -fill both -expand 1
+	         ttk::label $w.filterold.old$i.label -textvariable ::tr($h) -font font_Bold
+	         ttk::treeview $w.filterold.old$i.list -columns {0} -show {} -selectmode extended \
+	             -yscrollcommand [list $w.filterold.old$i.ybar set]
+	         $w.filterold.old$i.list column 0 -width 100
+	         $w.filterold.old$i.list configure -height 7
+	         ttk::scrollbar $w.filterold.old$i.ybar -command [list $w.filterold.old$i.list yview]
+	         pack $w.filterold.old$i.label -side top -anchor w
+	         pack $w.filterold.old$i.ybar -side right -fill y
+	         pack $w.filterold.old$i.list -side left -fill both -expand 1
          set j 0
          set il {}
          foreach y [lsort -decreasing [array names ::windows::stats::display $v]] {
@@ -319,12 +319,12 @@ proc tools::graphs::filter::Open {} {
   $w.menu add cascade -label GraphFile -menu $w.menu.file
   configMenuText $w.menu 0 GraphFile $::language
   menu $w.menu.file
-  $w.menu.file add command -label GraphFileColor -command "::tools::graphs::Save color $w.c"
+  $w.menu.file add command -label GraphFileColor -command [list ::tools::graphs::Save color $w.c]
   configMenuText $w.menu.file 0 GraphFileColor $::language
-  $w.menu.file add command -label GraphFileGrey -command "::tools::graphs::Save gray $w.c"
+  $w.menu.file add command -label GraphFileGrey -command [list ::tools::graphs::Save gray $w.c]
   configMenuText $w.menu.file 1 GraphFileGrey $::language
   $w.menu.file add separator
-  $w.menu.file add command -label GraphFileClose -command "destroy $w"
+  $w.menu.file add command -label GraphFileClose -command [list destroy $w]
   configMenuText $w.menu.file 3 GraphFileClose $::language
   wm title $w $::tr(TitleFilterGraph)
   set filterGraph 1
@@ -752,34 +752,34 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
     menu $w.menu
     ::setMenu $w $w.menu
     $w.menu add cascade -label GraphFile -menu $w.menu.file
-    menu $w.menu.file
-    $w.menu.file add command -label GraphFileColor \
-        -command "::tools::graphs::Save color $w.c"
-    $w.menu.file add command -label GraphFileGrey \
-        -command "::tools::graphs::Save gray $w.c"
-    $w.menu.file add separator
-    $w.menu.file add command -label GraphFileClose -command "destroy $w"
+	    menu $w.menu.file
+	    $w.menu.file add command -label GraphFileColor \
+	        -command [list ::tools::graphs::Save color $w.c]
+	    $w.menu.file add command -label GraphFileGrey \
+	        -command [list ::tools::graphs::Save gray $w.c]
+	    $w.menu.file add separator
+	    $w.menu.file add command -label GraphFileClose -command [list destroy $w]
     $w.menu add cascade -label GraphOptions -menu $w.menu.options
     $w.menu add command -label Help -accelerator F1 -command {helpWindow Graphs Score}
     #Checkbuttons for Invert white/black Score in Score graph
     menu $w.menu.options
-    foreach i {White Black} {
-      $w.menu.options add checkbutton -label GraphOptions$i \
-          -variable ::tools::graphs::score::$i -offvalue "0" -onvalue "1" \
-          -command "::tools::graphs::score::Refresh"
-    }
+	    foreach i {White Black} {
+	      $w.menu.options add checkbutton -label GraphOptions$i \
+	          -variable ::tools::graphs::score::$i -offvalue "0" -onvalue "1" \
+	          -command [list ::tools::graphs::score::Refresh]
+	    }
     canvas $w.c -width 500 -height 300 -selectforeground [ttk::style lookup . -foreground] -background [ttk::style lookup . -background]
 
     $w.c create text 25 5 -tag text -justify center -width 1 \
         -font font_Regular -anchor n
     ttk::frame $w.fbuttons
     # TODO translate
-    ttk::checkbutton $w.fbuttons.score -text "Eval" -variable ::tools::graphs::score::Scores \
-        -command "::tools::graphs::score::Refresh"
-    ttk::checkbutton $w.fbuttons.time -text [tr Time] -variable ::tools::graphs::score::Times \
-        -command "::tools::graphs::score::Refresh"
-    ttk::checkbutton $w.fbuttons.timesum -text $::tr(AnnotateTime) -variable ::tools::graphs::score::TimeSum \
-        -command "::tools::graphs::score::Refresh" -offvalue "1" -onvalue "0"
+	    ttk::checkbutton $w.fbuttons.score -text "Eval" -variable ::tools::graphs::score::Scores \
+	        -command [list ::tools::graphs::score::Refresh]
+	    ttk::checkbutton $w.fbuttons.time -text [tr Time] -variable ::tools::graphs::score::Times \
+	        -command [list ::tools::graphs::score::Refresh]
+	    ttk::checkbutton $w.fbuttons.timesum -text $::tr(AnnotateTime) -variable ::tools::graphs::score::TimeSum \
+	        -command [list ::tools::graphs::score::Refresh] -offvalue "1" -onvalue "0"
     # TODO translate
     ttk::label $w.fbuttons.labelm -text "Max Score:"
     ttk::spinbox $w.fbuttons.maxy -textvariable ::tools::graphs::score::MaxY -justify right -from 1 -to 12 -width 2 -command ::tools::graphs::score::Refresh
@@ -976,31 +976,31 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
     ::setMenu $w $w.menu
     $w.menu add cascade -label GraphFile -menu $w.menu.file
     menu $w.menu.file
-    $w.menu.file add command -label GraphFileColor \
-        -command "::tools::graphs::Save color $w.c"
-    $w.menu.file add command -label GraphFileGrey \
-        -command "::tools::graphs::Save gray $w.c"
+	    $w.menu.file add command -label GraphFileColor \
+	        -command [list ::tools::graphs::Save color $w.c]
+	    $w.menu.file add command -label GraphFileGrey \
+	        -command [list ::tools::graphs::Save gray $w.c]
     $w.menu.file add separator
-    $w.menu.file add command -label GraphFileClose -command "destroy $w"
+    $w.menu.file add command -label GraphFileClose -command [list destroy $w]
     $w.menu add cascade -label GraphOptions -menu $w.menu.options
     menu $w.menu.options
-    foreach i {White Black Both PInfo} j {white black both player} {
-      $w.menu.options add radiobutton -label GraphOptions$i \
-          -variable ::tools::graphs::rating::type -value $j \
-          -command "::tools::graphs::rating::Refresh"
-    }
+	    foreach i {White Black Both PInfo} j {white black both player} {
+	      $w.menu.options add radiobutton -label GraphOptions$i \
+	          -variable ::tools::graphs::rating::type -value $j \
+	          -command [list ::tools::graphs::rating::Refresh]
+	    }
     $w.menu.options add separator
-    foreach i { EloDB EloFile } j {info elo} {
-      $w.menu.options add radiobutton -label GraphOptions$i \
-        -variable ::tools::graphs::rating::elo -value $j \
-        -command "::tools::graphs::rating::Refresh"
-    }
+	    foreach i { EloDB EloFile } j {info elo} {
+	      $w.menu.options add radiobutton -label GraphOptions$i \
+	        -variable ::tools::graphs::rating::elo -value $j \
+	        -command [list ::tools::graphs::rating::Refresh]
+	    }
     $w.menu.options add separator
-    foreach i {1900 1980 1985 1990 1995 2000 2005 2010 2015 } {
-      $w.menu.options add radiobutton -label "Since $i" \
-          -variable ::tools::graphs::rating::year -value $i \
-          -command "::tools::graphs::rating::Refresh"
-    }
+	    foreach i {1900 1980 1985 1990 1995 2000 2005 2010 2015 } {
+	      $w.menu.options add radiobutton -label "Since $i" \
+	          -variable ::tools::graphs::rating::year -value $i \
+	          -command [list ::tools::graphs::rating::Refresh]
+	    }
 
     canvas $w.c -width 500 -height 300 -selectforeground [ttk::style lookup . -foreground] -background [ttk::style lookup . -background]
     $w.c create text 25 10 -tag text -justify center -width 1 \
@@ -1131,12 +1131,12 @@ proc tools::graphs::absfilter::Open {} {
   $w.menu add cascade -label GraphFile -menu $w.menu.file
   configMenuText $w.menu 0 GraphFile $::language
   menu $w.menu.file
-  $w.menu.file add command -label GraphFileColor -command "::tools::graphs::Save color $w.c"
+  $w.menu.file add command -label GraphFileColor -command [list ::tools::graphs::Save color $w.c]
   configMenuText $w.menu.file 0 GraphFileColor $::language
-  $w.menu.file add command -label GraphFileGrey -command "::tools::graphs::Save gray $w.c"
+  $w.menu.file add command -label GraphFileGrey -command [list ::tools::graphs::Save gray $w.c]
   configMenuText $w.menu.file 1 GraphFileGrey $::language
   $w.menu.file add separator
-  $w.menu.file add command -label GraphFileClose -command "destroy $w"
+  $w.menu.file add command -label GraphFileClose -command [list destroy $w]
   configMenuText $w.menu.file 3 GraphFileClose $::language
   wm title $w $::tr(TitleFilterGraph)
   set absfilterGraph 1

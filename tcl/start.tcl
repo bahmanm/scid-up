@@ -580,7 +580,7 @@ configure_menus
 # Based on a ttk::checkbutton, update -text to reflect its state.
 # Example:
 #     ttk::checkbutton widget_name -style Switch.Toolbutton \
-#         -command "::update_switch_btn widget_name"
+#         -command [list ::update_switch_btn widget_name]
 #     ::update_switch_btn widget_name initial_value
 # Return the value of the variable associated with the widget.
 proc ::update_switch_btn {widget {set_value ""}} {

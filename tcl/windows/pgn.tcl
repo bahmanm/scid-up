@@ -85,7 +85,7 @@ namespace eval pgn {
     }
     $w.menu.file add separator
     $w.menu.file add command -label PgnFileClose \
-        -command "::win::closeWindow $w"
+        -command [list ::win::closeWindow $w]
 
     $w.menu.opt add checkbutton -label PgnOptColor \
         -variable ::pgn::showColor -command {updateBoard -pgn}
@@ -205,9 +205,9 @@ namespace eval pgn {
     $mctxt.evals2 add command -label "N" -command {::addNag N}
     $mctxt.evals2 add command -label "D" -command {::addNag D}
 
-    $mctxt add command -label [tr EditDelete] -state $state -command "::pgn::deleteVar"
-    $mctxt add command -label [tr EditFirst] -state $state -command "::pgn::firstVar"
-    $mctxt add command -label [tr EditMain] -state $state -command "::pgn::mainVar"
+    $mctxt add command -label [tr EditDelete] -state $state -command [list ::pgn::deleteVar]
+    $mctxt add command -label [tr EditFirst] -state $state -command [list ::pgn::firstVar]
+    $mctxt add command -label [tr EditMain] -state $state -command [list ::pgn::mainVar]
     $mctxt add separator
     $mctxt add command -label "[tr EditStrip]:[tr EditStripBegin]" -command {::game::TruncateBegin}
     $mctxt add command -label "[tr EditStrip]:[tr EditStripEnd]" -command {::game::Truncate}

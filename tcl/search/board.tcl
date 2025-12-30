@@ -67,14 +67,17 @@ proc ::search::Open {ref_base ref_filter title create_subwnd} {
 
 	grid [ttk::frame $w.buttons] -sticky news
 	ttk::menubutton $w.buttons.save -text [::tr Presets] -direction above
-	$w.buttons.save configure {*}[$options_cmd $w.buttons.save]
-	ttk::button $w.buttons.reset_values -text [::tr Defaults] \
-		-command "set ::search::filterOp_($w) reset; $options_cmd reset"
-	ttk::button $w.buttons.search_new -text "[tr Search] ([tr GlistNewSort] [tr Filter])" \
-		-command "::search::start_ 1 $w $options_cmd"
-	ttk::button $w.buttons.search -text [::tr Search] \
-		-command "::search::start_ 0 $w $options_cmd"
-	grid $w.buttons.save $w.buttons.reset_values x $w.buttons.search_new $w.buttons.search -sticky w -padx "0 5"
+		$w.buttons.save configure {*}[$options_cmd $w.buttons.save]
+		ttk::button $w.buttons.reset_values -text [::tr Defaults] \
+			-command [list apply {{w options_cmd} {
+				set ::search::filterOp_($w) reset
+				{*}$options_cmd reset
+			} ::} $w $options_cmd]
+		ttk::button $w.buttons.search_new -text "[tr Search] ([tr GlistNewSort] [tr Filter])" \
+			-command [list ::search::start_ 1 $w $options_cmd]
+		ttk::button $w.buttons.search -text [::tr Search] \
+			-command [list ::search::start_ 0 $w $options_cmd]
+		grid $w.buttons.save $w.buttons.reset_values x $w.buttons.search_new $w.buttons.search -sticky w -padx "0 5"
 	grid columnconfigure $w.buttons 2 -weight 1
 
 	ttk::button $w.buttons.stop -text [::tr Stop] -command progressBarCancel

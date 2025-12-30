@@ -100,9 +100,16 @@ proc ::preport::preportDlg {args} {
   dialogbutton $w.b.help -text $::tr(Help) \
       -command {helpWindow Reports Player}
   dialogbutton $w.b.ok -text OK \
-      -command "catch {grab release $w}; destroy $w; ::preport::makeReportWin"
+      -command [list apply {{w} {
+        catch {grab release $w}
+        destroy $w
+        ::preport::makeReportWin
+      } ::} $w]
   dialogbutton $w.b.cancel -text $::tr(Cancel) \
-      -command "catch {grab release $w}; destroy $w"
+      -command [list apply {{w} {
+        catch {grab release $w}
+        destroy $w
+      } ::} $w]
   # foreach button {help ok cancel} {
   # $w.b.$button configure -font font_Small
   # }
@@ -276,7 +283,7 @@ proc ::preport::makeReportWin {args} {
         -command ::preport::setOptions
     $w.menu.file add separator
     $w.menu.file add command -label Close \
-        -command "$w.b.close invoke"
+        -command [list $w.b.close invoke]
     $w.menu.helpmenu add command -label "Player Report Help" \
         -accelerator F1 -command {helpWindow Reports Player}
     $w.menu.helpmenu add command -label "Index" \
@@ -302,7 +309,10 @@ proc ::preport::makeReportWin {args} {
     ttk::button $w.b.update -textvar ::tr(Update...) -command {
       ::preport::preportDlg
     }
-    ttk::button $w.b.close -textvar ::tr(Close) -command "focus .; destroy $w"
+    ttk::button $w.b.close -textvar ::tr(Close) -command [list apply {{w} {
+      focus .
+      destroy $w
+    } ::} $w]
     pack $w.b -side bottom -fill x
     pack $w.scroll -side top -fill both -expand yes
     pack $w.b.close $w.b.update -side right -padx 2 -pady 2

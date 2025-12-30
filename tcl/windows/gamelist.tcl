@@ -464,7 +464,7 @@ proc ::windows::gamelist::createWin_ { {w} {base} {filter} } {
 
 proc ::windows::gamelist::createMenu_ {w} {
 	ttk::frame $w.buttons -padding {5 5 2 5}
-	ttk::button $w.buttons.filter -image tb_search_on -command "::windows::gamelist::menu_ $w filter"
+	ttk::button $w.buttons.filter -image tb_search_on -command [list ::windows::gamelist::menu_ $w filter]
 	# TODO: Use a single button for statistics and positional search
 	# It doesn't make sense to show statistics if positional search is not selected.
 	# But I also want the ability to hide the statistics when positional search is selected.
@@ -508,13 +508,13 @@ proc ::windows::gamelist::createMenu_ {w} {
 	grid rowconfigure $w.filter 0 -weight 1
 	grid columnconfigure $w.filter 0 -weight 1
 	ttk::button $w.filter.b.rfilter -image tb_rfilter  \
-		-command "::windows::gamelist::filter_ $w r"
+		-command [list ::windows::gamelist::filter_ $w r]
 	ttk::button $w.filter.b.bsearch -image tb_bsearch \
-		-command "::windows::gamelist::filter_ $w b"
+		-command [list ::windows::gamelist::filter_ $w b]
 	ttk::button $w.filter.b.hsearch -image tb_hsearch \
-		-command "::windows::gamelist::filter_ $w h"
+		-command [list ::windows::gamelist::filter_ $w h]
 	ttk::button $w.filter.b.msearch -image tb_msearch \
-		-command "::windows::gamelist::filter_ $w m"
+		-command [list ::windows::gamelist::filter_ $w m]
 	ttk::button $w.filter.b.tmt -image tb_tmt \
 		-command ::tourney::toggle
 	ttk::button $w.filter.b.crosst -image tb_crosst \
@@ -551,7 +551,7 @@ proc ::windows::gamelist::createGList_ {{w}} {
 proc ::windows::gamelist::createExportMenu_ {{w} {m}} {
 	$m delete 0 end
 	$m add command -label [tr ToolsExpFilter] \
-        -command "::windows::gamelist::FilterExport $w"
+        -command [list ::windows::gamelist::FilterExport $w]
 	set bases [lmap i [sc_base list] {
 		if { $i == $::gamelistBase($w) || [sc_base isReadOnly $i] } { continue }
 		list $i
@@ -560,7 +560,7 @@ proc ::windows::gamelist::createExportMenu_ {{w} {m}} {
 	foreach i $bases {
 		set fname [::file::BaseName $i]
 		$m add command -label "Base $i: $fname" \
-		  -command "::windows::gamelist::CopyGames $w $::gamelistBase($w) $i"
+		  -command [list ::windows::gamelist::CopyGames $w $::gamelistBase($w) $i]
 	}
 	return $m
 }
@@ -836,8 +836,8 @@ proc glist.create {{w} {layout} {reset_layout false}} {
 
   autoscrollBars both $w $w.glist 1
   set ::glistYScroll($w.glist) [$w.glist cget -yscrollcommand]
-  $w.glist configure -yscrollcommand "glist.yscroll_ $w.glist"
-  $w.ybar configure -command "glist.ybar_ $w.glist"
+  $w.glist configure -yscrollcommand [list glist.yscroll_ $w.glist]
+  $w.ybar configure -command [list glist.ybar_ $w.glist]
   bindMouseWheel $w.glist "glist.ybar_ $w.glist"
   bind $w.glist <$::COMMAND-f> "event generate $w <<FindBarShow>>"
 
@@ -850,26 +850,32 @@ proc glist.create {{w} {layout} {reset_layout false}} {
     ::search::header $::gamelistBase($w_top) $::gamelistFilter($w_top)
   }} $w]
   ::utils::tooltip::Set "$w.find.advanced" "$::helpMessage($::language,SearchHeader)"
-  ttk::button $w.find.reset -image ::icon::filter_reset -style Toolbutton -command "
+  ttk::button $w.find.reset -image ::icon::filter_reset -style Toolbutton -command [list apply {{w} {
     $w.find.text delete 0 end
-	$w.find.filter invoke
-  "
+    $w.find.filter invoke
+  }} $w]
   ::utils::tooltip::Set "$w.find.reset" "$::helpMessage($::language,SearchReset)"
   ttk::label $w.find.t_text -text $::tr(Search)
   ttk::entry $w.find.text -width 20
   ttk::button $w.find.filter -image ::icon::filter_go -style Toolbutton \
-    -command "glist.findgame_ $w awe"
+    -command [list glist.findgame_ $w awe]
   ttk::button $w.find.b1_text -image ::icon::arrow_down16 -style Toolbutton -command \
-    "after cancel glist.findgame_ $w 1; after idle glist.findgame_ $w 1"
+    [list apply {{w} {
+      after cancel [list glist.findgame_ $w 1]
+      after idle [list glist.findgame_ $w 1]
+    }} $w]
   ttk::button $w.find.b2_text -image ::icon::arrow_up16 -style Toolbutton -command \
-    "after cancel glist.findgame_ $w 0; after idle glist.findgame_ $w 0"
+    [list apply {{w} {
+      after cancel [list glist.findgame_ $w 0]
+      after idle [list glist.findgame_ $w 0]
+    }} $w]
   bind $w.find.text <Escape> "glist.showfindbar_ $w.glist $layout 0"
   bind $w.find.text <Return> "$w.find.filter invoke"
   bind $w.find.text <KeyPress-Down> "$w.find.b1_text invoke; break"
   bind $w.find.text <KeyPress-Up> "$w.find.b2_text invoke; break"
   #TODO: -from 0 -to 100
   #TODO: set scale position when normal ybar is used
-  ttk::scale $w.find.scale -command "glist.ybar_ $w.glist moveto"
+  ttk::scale $w.find.scale -command [list glist.ybar_ $w.glist moveto]
   grid $w.find.size $w.find.reset $w.find.advanced $w.find.t_text $w.find.text \
     $w.find.filter $w.find.b2_text $w.find.b1_text -in $w.find.t -padx 2
   grid $w.find.t -row 0 -column 1 -padx 6
@@ -1155,42 +1161,42 @@ proc glist.popupmenu_ {{w} {x} {y} {abs_x} {abs_y} {layout}} {
       $w.game_menu delete 0 end
       #LOAD/BROWSE/MERGE GAME
       $w.game_menu add command -label $::tr(LoadGame) \
-         -command "::file::SwitchToBase $::glistBase($w) 0; ::game::Load $idx $ply"
+         -command [list apply {{base idx ply} { ::file::SwitchToBase $base 0; ::game::Load $idx $ply }} $::glistBase($w) $idx $ply]
       $w.game_menu add command -label $::tr(BrowseGame) \
-         -command "::gbrowser::new $::glistBase($w) $idx $ply"
+         -command [list ::gbrowser::new $::glistBase($w) $idx $ply]
       $w.game_menu add command -label $::tr(MergeGame) \
-         -command "mergeGame $::glistBase($w) $idx"
+         -command [list mergeGame $::glistBase($w) $idx]
       menu $w.game_menu.merge
       menu $w.game_menu.copy
       $w.game_menu add cascade -label $::tr(GlistMergeGameInBase) -menu $w.game_menu.merge
       $w.game_menu add cascade -label $::tr(CopyGameTo) -menu $w.game_menu.copy
       $w.game_menu add command -label [expr {[sc_base gameflag $::glistBase($w) $idx get del] ? $::tr(UndeleteGame) : $::tr(DeleteGame) }] \
-        -command "glist.delflag_ $w $idx; $w selection set {};"
+        -command [list apply {{w idx} { glist.delflag_ $w $idx; $w selection set {} }} $w $idx]
 
       $w.game_menu add separator
       set w_top [regexp -inline {^\.[^.]+} $w]
       menu $w.game_menu.filter
       $w.game_menu.filter add separator
       $w.game_menu.filter add command -label [tr SearchReset] \
-        -command "::windows::gamelist::FilterReset $w_top $::glistBase($w)"
+        -command [list ::windows::gamelist::FilterReset $w_top $::glistBase($w)]
       $w.game_menu.filter add command -label [tr SearchNegate] \
-        -command "::windows::gamelist::FilterNegate $w_top $::glistBase($w)"
+        -command [list ::windows::gamelist::FilterNegate $w_top $::glistBase($w)]
       $w.game_menu.filter add separator
       $w.game_menu.filter add command -label $::tr(GlistRemoveGameAndAboveFromFilter) \
-        -command "glist.removeFromFilter_ $w $idx -"
+        -command [list glist.removeFromFilter_ $w $idx -]
       $w.game_menu.filter add command -label $::tr(GlistRemoveThisGameFromFilter) \
-        -command "glist.removeFromFilter_ $w $idx"
+        -command [list glist.removeFromFilter_ $w $idx]
       $w.game_menu.filter add command -label $::tr(GlistRemoveGameAndBelowFromFilter) \
-        -command "glist.removeFromFilter_ $w $idx +"
+        -command [list glist.removeFromFilter_ $w $idx +]
       $w.game_menu.filter add separator
       $w.game_menu.filter add command -label $::tr(GlistDeleteAllGames) \
-        -command "sc_base gameflag $::glistBase($w) $::glistFilter($w) set del; ::notify::DatabaseModified $::glistBase($w)"
+        -command [list apply {{base filter} { sc_base gameflag $base $filter set del; ::notify::DatabaseModified $base }} $::glistBase($w) $::glistFilter($w)]
       $w.game_menu.filter add command -label $::tr(GlistUndeleteAllGames) \
-        -command "sc_base gameflag $::glistBase($w) $::glistFilter($w) unset del; ::notify::DatabaseModified $::glistBase($w)"
+        -command [list apply {{base filter} { sc_base gameflag $base $filter unset del; ::notify::DatabaseModified $base }} $::glistBase($w) $::glistFilter($w)]
       $w.game_menu add cascade -label $::tr(Filter) -menu $w.game_menu.filter
       menu $w.game_menu.export
       $w.game_menu.export add command -label [tr ToolsExpFilter] \
-        -command "::windows::gamelist::FilterExport $w_top"
+        -command [list ::windows::gamelist::FilterExport $w_top]
       $w.game_menu.export add separator
       $w.game_menu add cascade -label [tr CopyGames] -menu $w.game_menu.export
 
@@ -1198,18 +1204,18 @@ proc glist.popupmenu_ {{w} {x} {y} {abs_x} {abs_y} {layout}} {
         if { $i == $::glistBase($w) || [sc_base isReadOnly $i] } { continue }
         set fname [::file::BaseName $i]
         $w.game_menu.merge add command -label "$i $fname" \
-          -command "::game::mergeInBase $::glistBase($w) $i $idx"
+          -command [list ::game::mergeInBase $::glistBase($w) $i $idx]
         $w.game_menu.copy add command -label "$i $fname" \
-          -command "sc_base copygames $::glistBase($w) $idx $i; ::notify::DatabaseModified $i"
+          -command [list apply {{srcBase idx destBase} { sc_base copygames $srcBase $idx $destBase; ::notify::DatabaseModified $destBase }} $::glistBase($w) $idx $i]
         $w.game_menu.export add command -label "$i $fname" \
-          -command "::windows::gamelist::CopyGames $w_top $::glistBase($w) $i"
+          -command [list ::windows::gamelist::CopyGames $w_top $::glistBase($w) $i]
       }
 
       $w.game_menu add separator
       $w.game_menu add checkbutton -variable ::glist_FindBar($layout) \
-                   -label $::tr(FindBar) -command "glist.showfindbar_ $w $layout"
+                   -label $::tr(FindBar) -command [list glist.showfindbar_ $w $layout]
       if {$::glistBase($w) == [sc_base current] && [sc_game number] != 0} {
-        $w.game_menu add command -label $::tr(FindCurrentGame) -command "glist.findcurrentgame_ $w [sc_game number]"
+        $w.game_menu add command -label $::tr(FindCurrentGame) -command [list glist.findcurrentgame_ $w [sc_game number]]
       } else {
         $w.game_menu add command -label $::tr(FindCurrentGame) -state disabled
       }
@@ -1225,15 +1231,15 @@ proc glist.popupmenu_ {{w} {x} {y} {abs_x} {abs_y} {layout}} {
     set cur_a [lindex $::glist_ColAnchor($layout) $col_idx]
     if {$cur_a != "w"} {
       $w.header_menu add command -label $::tr(GlistAlignL) \
-                     -command "$w column $col -anchor w; lset ::glist_ColAnchor($layout) $col_idx w"
+                     -command [list apply {{w col layout col_idx} { $w column $col -anchor w; lset ::glist_ColAnchor($layout) $col_idx w }} $w $col $layout $col_idx]
     }
     if {$cur_a != "e"} {
       $w.header_menu add command -label $::tr(GlistAlignR) \
-                     -command "$w column $col -anchor e; lset ::glist_ColAnchor($layout) $col_idx e"
+                     -command [list apply {{w col layout col_idx} { $w column $col -anchor e; lset ::glist_ColAnchor($layout) $col_idx e }} $w $col $layout $col_idx]
     }
     if {$cur_a != "c"} {
       $w.header_menu add command -label $::tr(GlistAlignC) \
-                     -command "$w column $col -anchor c; lset ::glist_ColAnchor($layout) $col_idx c"
+                     -command [list apply {{w col layout col_idx} { $w column $col -anchor c; lset ::glist_ColAnchor($layout) $col_idx c }} $w $col $layout $col_idx]
     }
 
     #ADD/REMOVE COLUMN
@@ -1244,28 +1250,28 @@ proc glist.popupmenu_ {{w} {x} {y} {abs_x} {abs_y} {layout}} {
     foreach h $::glist_Headers {
       if {[lsearch -exact $::glist_ColOrder($layout) $i] == -1} {
         set empty normal
-        $w.header_menu.addcol add command -label $::tr($h) -command "glist.insertcol_ $w $layout $i $col"
+        $w.header_menu.addcol add command -label $::tr($h) -command [list glist.insertcol_ $w $layout $i $col]
       }
       incr i
     }
     $w.header_menu add cascade -label $::tr(GlistAddField) -menu $w.header_menu.addcol -state $empty
-    $w.header_menu add command -label $::tr(GlistDeleteField) -command "glist.removecol_ $w $layout $col"
+    $w.header_menu add command -label $::tr(GlistDeleteField) -command [list glist.removecol_ $w $layout $col]
 
     #RESET SORT
     $w.header_menu add separator
-    $w.header_menu add command -label $::tr(ResetSort) -command "glist.sort_ $w 0 $layout 1"
+    $w.header_menu add command -label $::tr(ResetSort) -command [list glist.sort_ $w 0 $layout 1]
 
     #LAYOUTS
     destroy $w.header_menu.layouts
     menu $w.header_menu.layouts
-    $w.header_menu.layouts add command -label $::tr(Save) -command "glist.layout_save $layout"
+    $w.header_menu.layouts add command -label $::tr(Save) -command [list glist.layout_save $layout]
     $w.header_menu.layouts add separator
     $w.header_menu.layouts add command -label $::tr(Defaults) \
-      -command "glist.layout_apply [winfo parent $w] $layout DEFAULT"
+      -command [list glist.layout_apply [winfo parent $w] $layout DEFAULT]
     if {[info exists ::glist_Layouts]} {
       foreach elem $::glist_Layouts {
         $w.header_menu.layouts add command -label $elem \
-          -command "glist.layout_apply [winfo parent $w] $layout $elem"
+          -command [list glist.layout_apply [winfo parent $w] $layout $elem]
       }
     }
     $w.header_menu add cascade -label "Layouts" -menu $w.header_menu.layouts
@@ -1273,7 +1279,7 @@ proc glist.popupmenu_ {{w} {x} {y} {abs_x} {abs_y} {layout}} {
     #BARS
     $w.header_menu add separator
     $w.header_menu add checkbutton -variable ::glist_FindBar($layout) \
-                   -label $::tr(FindBar) -command "glist.showfindbar_ $w $layout"
+                   -label $::tr(FindBar) -command [list glist.showfindbar_ $w $layout]
 
     tk_popup $w.header_menu $abs_x $abs_y
   }

@@ -700,7 +700,7 @@ namespace eval uci {
             ::uci::saveConfig
             destroy .uciConfigWin
         }
-        ttk::button $w.fbuttons.cancel -text $::tr(Cancel) -command "destroy .uciConfigWin"
+        ttk::button $w.fbuttons.cancel -text $::tr(Cancel) -command [list destroy .uciConfigWin]
         pack $w.fbuttons.save $w.fbuttons.cancel -side left -expand yes -fill x -padx 20 -pady 2
         pack $w.fopt -expand 1 -fill both
         addHorizontalRule $w

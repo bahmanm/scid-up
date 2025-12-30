@@ -143,10 +143,10 @@ proc ::maint::OpenClose {} {
   
   ttk::frame $w.dbdesc
   ttk::label $w.dbdesc.lab -text $::tr(Description:) -font font_SmallBold
-  ttk::entry $w.dbdesc.text -textvariable ::maint::dbdesc -validate key -validatecommand "
+  ttk::entry $w.dbdesc.text -textvariable ::maint::dbdesc -validate key -validatecommand [list apply {{w} {
     $w.dbdesc.edit configure -state normal
     return true
-  "
+  }} $w]
   ttk::button $w.dbdesc.edit -text "[tr Save]" -style Small.TButton -command {
     if { [catch {sc_base extra $::curr_db description $::maint::dbdesc}] } {
       ERROR::MessageBox
@@ -159,13 +159,13 @@ proc ::maint::OpenClose {} {
 
   ttk::frame $w.customFlags
   ttk::label $w.customFlags.lab -text "[::tr CustomFlags]:" -font font_SmallBold
-  ttk::entry $w.customFlags.text1 -width 8 -validate key -validatecommand "::maint::validateCustomFlag $w %P"
-  ttk::entry $w.customFlags.text2 -width 8 -validate key -validatecommand "::maint::validateCustomFlag $w %P"
-  ttk::entry $w.customFlags.text3 -width 8 -validate key -validatecommand "::maint::validateCustomFlag $w %P"
-  ttk::entry $w.customFlags.text4 -width 8 -validate key -validatecommand "::maint::validateCustomFlag $w %P"
-  ttk::entry $w.customFlags.text5 -width 8 -validate key -validatecommand "::maint::validateCustomFlag $w %P"
-  ttk::entry $w.customFlags.text6 -width 8 -validate key -validatecommand "::maint::validateCustomFlag $w %P"
-  ttk::button $w.customFlags.edit -text "[tr Save]" -style Small.TButton -command "::maint::saveCustomFlags $w"
+  ttk::entry $w.customFlags.text1 -width 8 -validate key -validatecommand [list ::maint::validateCustomFlag $w %P]
+  ttk::entry $w.customFlags.text2 -width 8 -validate key -validatecommand [list ::maint::validateCustomFlag $w %P]
+  ttk::entry $w.customFlags.text3 -width 8 -validate key -validatecommand [list ::maint::validateCustomFlag $w %P]
+  ttk::entry $w.customFlags.text4 -width 8 -validate key -validatecommand [list ::maint::validateCustomFlag $w %P]
+  ttk::entry $w.customFlags.text5 -width 8 -validate key -validatecommand [list ::maint::validateCustomFlag $w %P]
+  ttk::entry $w.customFlags.text6 -width 8 -validate key -validatecommand [list ::maint::validateCustomFlag $w %P]
+  ttk::button $w.customFlags.edit -text "[tr Save]" -style Small.TButton -command [list ::maint::saveCustomFlags $w]
   grid $w.customFlags.lab $w.customFlags.text1 $w.customFlags.text2 $w.customFlags.text3 \
        $w.customFlags.text4 $w.customFlags.text5 $w.customFlags.text6 -padx "0 5"
   grid $w.customFlags.edit -row 0 -column 7 -sticky e
@@ -205,14 +205,14 @@ proc ::maint::OpenClose {} {
   menu $w.dm.mark.title.m -font $font
   
   foreach flag $maintFlaglist  {
-      $w.dm.mark.title.m add command -label $flag -command "set maintFlag $flag; ::maint::Refresh"
+      $w.dm.mark.title.m add command -label $flag -command [list apply {{flag} { set maintFlag $flag; ::maint::Refresh }} $flag]
   }
   
   foreach flag {delete mark} on {Delete Mark} off {Undelete Unmark} {
     set row 0
     foreach b {Current Filter All} {
-      ttk::button $w.dm.$flag.on$b -textvar "::tr($on$b)" -style Small.TButton -command "::maint::SetGameFlags $flag [string tolower $b] 1"
-      ttk::button $w.dm.$flag.off$b -textvar "::tr($off$b)" -style Small.TButton -command "::maint::SetGameFlags $flag [string tolower $b] 0"
+      ttk::button $w.dm.$flag.on$b -textvar "::tr($on$b)" -style Small.TButton -command [list ::maint::SetGameFlags $flag [string tolower $b] 1]
+      ttk::button $w.dm.$flag.off$b -textvar "::tr($off$b)" -style Small.TButton -command [list ::maint::SetGameFlags $flag [string tolower $b] 0]
     }
 
     if { $flag eq "mark" } {
@@ -477,11 +477,11 @@ proc markTwins {{parent .}} {
   dialogbutton $w.f.b.defaults -textvar ::tr(Defaults) -command {
     array set twinSettings [array get twinSettingsDefaults]
   }
-  dialogbuttonsmall $w.f.b.help [ list -text $::tr(Help) -command "helpWindow Maintenance Twins; focus $w" ]
+  dialogbuttonsmall $w.f.b.help [ list -text $::tr(Help) -command [list apply {{w} { helpWindow Maintenance Twins; focus $w }} $w] ]
   dialogbuttonsmall $w.f.b.go [ list -text $::tr(TwinsDelete) -command {
     if {[twinCriteriaOK .twinSettings]} {
       grab release .twinSettings
-      .twinSettings.f.b.cancel configure -command "progressBarCancel"
+      .twinSettings.f.b.cancel configure -command [list progressBarCancel]
       set result [doMarkDups .twinSettings]
       focus .
       destroy .twinSettings
@@ -494,7 +494,7 @@ proc markTwins {{parent .}} {
     }
   } ]
   
-  dialogbuttonsmall $w.f.b.cancel [ list -text $::tr(Cancel) -command "grab release $w; focus .; destroy $w" ]
+  dialogbuttonsmall $w.f.b.cancel [ list -text $::tr(Cancel) -command [list apply {{w} { grab release $w; focus .; destroy $w }} $w] ]
   
   canvas $w.f.progress -width 300 -height 20 -bg white -relief solid -border 1
   $w.f.progress create rectangle 0 0 0 0 -fill blue -outline blue -tags bar
@@ -689,7 +689,7 @@ proc makeClassifyWin {} {
   
   ttk::frame $w.f.b
   ttk::button $w.f.b.go -textvar ::tr(Classify) -command {
-    .classify.f.b.cancel configure -command "progressBarCancel"
+    .classify.f.b.cancel configure -command [list progressBarCancel]
     .classify.f.b.cancel configure -textvar ::tr(Stop)
     progressBarSet .classify.f.progress 301 21
     grab .classify.f.b.cancel
@@ -703,7 +703,7 @@ proc makeClassifyWin {} {
     .classify.f.b.cancel configure -textvar ::tr(Close)
     ::windows::gamelist::Refresh
   }
-  ttk::button $w.f.b.cancel -textvar ::tr(Close) -command "focus .; destroy $w"
+  ttk::button $w.f.b.cancel -textvar ::tr(Close) -command [list apply {{w} { focus .; destroy $w }} $w]
   canvas $w.f.progress -width 300 -height 20 -bg white -relief solid -border 1
   $w.f.progress create rectangle 0 0 0 0 -fill blue -outline blue -tags bar
   $w.f.progress create text 295 10 -anchor e -font font_Regular -tags time \
@@ -795,9 +795,9 @@ proc updateTwinChecker {} {
         -command {::game::LoadNextPrev next}
     ttk::button $w.b.share -text $::tr(TwinCheckTag) -underline 0
     ttk::button $w.b.delete -text $::tr(DeleteTwins) -underline 0 \
-        -command "markTwins $w"
+        -command [list markTwins $w]
     ttk::button $w.b.help -text $::tr(Help) -command {helpWindow Maintenance Twins}
-    ttk::button $w.b.close -text $::tr(Close) -command "focus .; destroy $w"
+    ttk::button $w.b.close -text $::tr(Close) -command [list apply {{w} { focus .; destroy $w }} $w]
     packdlgbuttons $w.b.close $w.b.delete $w.b.help
     pack $w.b.prev $w.b.next $w.b.share -side left -padx 5 -pady "15 5"
     bind $w <F1> "$w.b.help invoke"
@@ -835,7 +835,7 @@ proc updateTwinChecker {} {
   
   if {$gn > 0} {
     set twincheck(left) [sc_base gameflag [sc_base current] $gn get del]
-    $w.f.left.title.d configure -command "sc_base gameflag \[sc_base current\] $gn invert del; ::notify::GameChanged"
+    $w.f.left.title.d configure -command [list apply {{gn} { sc_base gameflag [sc_base current] $gn invert del; ::notify::GameChanged }} $gn]
     $w.f.left.title.d configure -state normal
     set tmt [sc_game crosstable count +deleted]
     $w.f.left.tmt configure -text [concat $::tr(TwinCheckTournament) $tmt]
@@ -846,7 +846,7 @@ proc updateTwinChecker {} {
   if {$dup > 0} {
     set twincheck(right) [sc_base gameflag [sc_base current] $dup get del]
     $w.f.right.title.label configure -text [concat $::tr(game) " $dup:  "]
-    $w.f.right.title.d configure -command "sc_base gameflag \[sc_base current\] $dup invert del; ::notify::GameChanged"
+    $w.f.right.title.d configure -command [list apply {{dup} { sc_base gameflag [sc_base current] $dup invert del; ::notify::GameChanged }} $dup]
     $w.f.right.title.d configure -state normal
     set tmt [sc_game crosstable count -game $dup +deleted]
     $w.f.right.tmt configure -text [concat $::tr(TwinCheckTournament) $tmt]
@@ -859,7 +859,7 @@ proc updateTwinChecker {} {
   $w.b.share configure -state disabled -command {}
   if {$gn > 0  &&  $dup > 0} {
     if {[llength [sc_game tags share check $gn $dup]] > 0} {
-      $w.b.share configure -state normal -command "shareTwinTags $gn $dup $w"
+      $w.b.share configure -state normal -command [list shareTwinTags $gn $dup $w]
     }
   }
   set t $w.f.left.t.text
@@ -1084,9 +1084,9 @@ proc allocateRatings {} {
   pack $w.r -side top -anchor w -fill x -pady "5 0"
   pack [ttk::frame $w.b] -side top -fill x
   ttk::button $w.b.ok -text "OK" \
-      -command "catch {grab release $w}; destroy $w; doAllocateRatings"
+      -command [list apply {{w} { catch {grab release $w}; destroy $w; doAllocateRatings }} $w]
   ttk::button $w.b.cancel -text $::tr(Cancel) \
-      -command "catch {grab release $w}; destroy $w"
+      -command [list apply {{w} { catch {grab release $w}; destroy $w }} $w]
   packdlgbuttons $w.b.cancel $w.b.ok
   catch {grab $w}
   focus $w.b.ok
@@ -1182,23 +1182,23 @@ proc stripTags {} {
   unset -nocomplain ::stripTagChoice
   foreach tag [lsort [array names stripTagCount]] {
     set ::stripTagChoice($tag) 0
-    ttk::checkbutton $w.f.t$tag -text "$tag" -variable stripTagChoice($tag) -command "
-      foreach {tag selected} \[array get ::stripTagChoice\] {
-        if {\$selected} {
+    ttk::checkbutton $w.f.t$tag -text "$tag" -variable stripTagChoice($tag) -command [list apply {{w} {
+      foreach {tag selected} [array get ::stripTagChoice] {
+        if {$selected} {
           $w.b.strip configure -state normal
           return
         }
       }
       $w.b.strip configure -state disabled
-    "
+    }} $w]
     ttk::label $w.f.c$tag -text "  [::utils::thousands $stripTagCount($tag)]"
     grid $w.f.t$tag -row $row -column 0 -sticky w
     grid $w.f.c$tag -row $row -column 1 -sticky e
     incr row
   }
-  ttk::button $w.b.strip -text $::tr(StripTag...) -state disabled -command "doStripTags $w"
+  ttk::button $w.b.strip -text $::tr(StripTag...) -state disabled -command [list doStripTags $w]
   ttk::button $w.b.cancel -text $::tr(Cancel) \
-      -command "catch {grab release $w}; destroy $w"
+      -command [list apply {{w} { catch {grab release $w}; destroy $w }} $w]
   packdlgbuttons $w.b.cancel $w.b.strip
   wm resizable $w 0 0
   update
@@ -1295,8 +1295,8 @@ proc cleanerWin {} {
   }
   
   pack [ttk::frame $w.f.b] -side bottom -fill x
-  ttk::button $w.f.b.ok -text "OK" -command "catch {grab release $w}; destroy $w; doCleaner"
-  ttk::button $w.f.b.cancel -text $::tr(Cancel) -command "catch {grab release $w}; destroy $w"
+  ttk::button $w.f.b.ok -text "OK" -command [list apply {{w} { catch {grab release $w}; destroy $w; doCleaner }} $w]
+  ttk::button $w.f.b.cancel -text $::tr(Cancel) -command [list apply {{w} { catch {grab release $w}; destroy $w }} $w]
   packdlgbuttons $w.f.b.cancel $w.f.b.ok
   wm resizable $w 0 0
   update
@@ -1344,11 +1344,11 @@ proc doCleaner {} {
     pack [ttk::frame $w.f.b] -side bottom -fill x -expand yes
     pack [ttk::frame $w.f.t] -side top -fill both -expand yes
     text $w.f.t.text -width 60 -height 10 -wrap none -setgrid 1 \
-        -cursor top_left_arrow -yscrollcommand "$w.f.t.ybar set"
-    ttk::scrollbar $w.f.t.ybar -orient vertical -command "$w.f.t.text yview" -takefocus 0
+        -cursor top_left_arrow -yscrollcommand [list $w.f.t.ybar set]
+    ttk::scrollbar $w.f.t.ybar -orient vertical -command [list $w.f.t.text yview] -takefocus 0
     pack $w.f.t.ybar -side right -fill y
     pack $w.f.t.text -side left -fill both -expand yes
-    ttk::button $w.f.b.close -text $::tr(Close) -command "catch {grab release $w}; destroy $w"
+    ttk::button $w.f.b.close -text $::tr(Close) -command [list apply {{w} { catch {grab release $w}; destroy $w }} $w]
     packdlgbuttons $w.f.b.close
     wm minsize $w 20 5
   }

@@ -288,7 +288,7 @@ proc addVerticalRule {w {xpadding 5} {relief sunken}} {
 #   Creates a window with a label, progress bar, and (if specified),
 #   a cancel button and cancellation command.
 #
-proc progressWindow { title text {button ""} {command "progressBarCancel"} } {
+proc progressWindow { title text {button ""} {cancelCmdPrefix {progressBarCancel}} } {
   set w .progressWin
   if {[winfo exists $w]} { return }
 
@@ -306,7 +306,7 @@ proc progressWindow { title text {button ""} {command "progressBarCancel"} } {
   canvas $w.f.c -width 400 -height 20 -bg white -relief solid -border 1 -highlightthickness 0
   $w.f.c create rectangle 0 0 0 0 -fill DodgerBlue3 -outline DodgerBlue3 -tags bar
   $w.f.c create text 395 10 -anchor e -font font_Regular -tags time -fill black -text "0:00 / 0:00"
-  ttk::button $w.f.cancel -text $button -command "$command"
+  ttk::button $w.f.cancel -text $button -command [list {*}$cancelCmdPrefix]
 
   grid $w.f.t -row 0 -columnspan 2 -pady 4 -sticky news
   grid $w.f.cmsg -row 1 -columnspan 2 -pady 4 -sticky news
@@ -416,7 +416,7 @@ proc closeProgressWindow {{force false}} {
 
   if {!$force && [$w.f.cmsg.text index end] != "2.0" } {
     $w.f.cancel configure -text "$::tr(Close)"
-    $w.f.cancel configure -command "closeProgressWindow true"
+    $w.f.cancel configure -command [list closeProgressWindow true]
     grid forget $w.f.c
     grid $w.f.cancel
     $w.f.cmsg.text configure -state disabled

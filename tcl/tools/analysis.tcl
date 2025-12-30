@@ -394,7 +394,7 @@ proc ::enginelist::choose {} {
     ttk::frame $w.list
     # Set up enginelist
     ttk::treeview $w.list.list -columns { "Name" "Elo" "Time" } -height 12 \
-        -show headings -selectmode browse -yscrollcommand "$w.list.ybar set"
+        -show headings -selectmode browse -yscrollcommand [list $w.list.ybar set]
     set wid [font measure font_Regular W]
     $w.list.list column Name -width [expr 12 * $wid]
     $w.list.list heading Name -text [tr EngineName]
@@ -402,7 +402,7 @@ proc ::enginelist::choose {} {
     $w.list.list heading Elo -text [tr EngineElo]
     $w.list.list column Time -width [expr 12 * $wid]
     $w.list.list heading Time -text [tr EngineTime]
-    ttk::scrollbar $w.list.ybar -command "$w.list.list yview"
+    ttk::scrollbar $w.list.ybar -command [list $w.list.list yview]
     pack $w.list.list $w.list.ybar -side left -fill both -expand 1
     
     # The list of choices:
@@ -657,7 +657,11 @@ proc ::enginelist::edit {index} {
             focus .enginelist
         }
     }
-    ttk::button $f.cancel -text $::tr(Cancel) -command "destroy $w; raise .enginelist; focus .enginelist"
+    ttk::button $f.cancel -text $::tr(Cancel) -command [list apply {{w} {
+        destroy $w
+        raise .enginelist
+        focus .enginelist
+    } ::} $w]
     pack $f -side bottom -fill x
     pack $f.cancel $f.ok -side right -padx 2 -pady 2
     ttk::label $f.required -font font_Small -text $::tr(EngineRequired)
@@ -2033,47 +2037,49 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     
     ttk::frame $w.b1
     pack $w.b1 -side bottom -fill x
-    ttk::button $w.b1.automove -image tb_training  -command "toggleAutomove $n"
+    ttk::button $w.b1.automove -image tb_training  -command [list toggleAutomove $n]
     ::utils::tooltip::Set $w.b1.automove $::tr(Training)
     
-    ttk::button $w.b1.lockengine -image tb_lockengine -command "toggleLockEngine $n"
+    ttk::button $w.b1.lockengine -image tb_lockengine -command [list toggleLockEngine $n]
     ::utils::tooltip::Set $w.b1.lockengine $::tr(LockEngine)
     .analysisWin$n.b1.lockengine configure -state disabled
     
-    ttk::button $w.b1.line -image tb_addvar -command "addAnalysisVariation $n"
+    ttk::button $w.b1.line -image tb_addvar -command [list addAnalysisVariation $n]
     ::utils::tooltip::Set $w.b1.line $::tr(AddVariation)
     
-    ttk::button $w.b1.alllines -image tb_addallvars -command "addAllVariations $n"
+    ttk::button $w.b1.alllines -image tb_addallvars -command [list addAllVariations $n]
     ::utils::tooltip::Set $w.b1.alllines $::tr(AddAllVariations)
     
-    ttk::button $w.b1.move -image tb_addmove -command "makeAnalysisMove $n"
+    ttk::button $w.b1.move -image tb_addmove -command [list makeAnalysisMove $n]
     ::utils::tooltip::Set $w.b1.move $::tr(AddMove)
 
     ttk::spinbox $w.b1.multipv -from 1 -to 8 -increment 1 -textvariable analysis(multiPVCount$n) -state disabled -width 2 \
-            -command "after idle changePVSize $n"
+            -command [list apply {{n val} {
+                after idle [list changePVSize $n $val]
+            } ::} $n]
     ::utils::tooltip::Set $w.b1.multipv $::tr(Lines)
     
     # add a button to start/stop engine analysis
-    ttk::button $w.b1.bStartStop -image tb_eng_on -command "toggleEngineAnalysis $n"
+    ttk::button $w.b1.bStartStop -image tb_eng_on -command [list toggleEngineAnalysis $n]
     ::utils::tooltip::Set $w.b1.bStartStop "$::tr(StartEngine) (F[expr 3 + $n])"
 
     if {$n == 1} {
         set ::finishGameMode 0
-        ttk::button $w.b1.bFinishGame -image tb_finish_off -command "toggleFinishGame $n"
+        ttk::button $w.b1.bFinishGame -image tb_finish_off -command [list toggleFinishGame $n]
         ::utils::tooltip::Set $w.b1.bFinishGame $::tr(FinishGame)
     }
-    ttk::button $w.b1.showboard -image tb_coords -command "toggleAnalysisBoard $n"
+    ttk::button $w.b1.showboard -image tb_coords -command [list toggleAnalysisBoard $n]
     ::utils::tooltip::Set $w.b1.showboard $::tr(ShowAnalysisBoard)
     
-    ttk::button $w.b1.showinfo -image tb_engineinfo -command "toggleEngineInfo $n"
+    ttk::button $w.b1.showinfo -image tb_engineinfo -command [list toggleEngineInfo $n]
     ::utils::tooltip::Set $w.b1.showinfo $::tr(ShowInfo)
     
     if {$n == 1} {
-        ttk::button $w.b1.annotate -command "configAnnotation" \
+        ttk::button $w.b1.annotate -command [list configAnnotation] \
             -image [list tb_annotate pressed tb_annotate_on]
         ::utils::tooltip::Set $w.b1.annotate $::tr(Annotate...)
     }
-    ttk::button $w.b1.priority -image tb_cpu_hi -command "setAnalysisPriority $w $n"
+    ttk::button $w.b1.priority -image tb_cpu_hi -command [list setAnalysisPriority $w $n]
     ::utils::tooltip::Set $w.b1.priority $::tr(LowPriority)
     
     ttk::button $w.b1.help -image tb_help -command { helpWindow Analysis }

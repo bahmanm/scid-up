@@ -215,7 +215,7 @@ proc ::optable::makeReportWin {args} {
         -command ::optable::setOptions
     $w.menu.file add separator
     $w.menu.file add command -label OprepFileClose \
-        -command "$w.b.close invoke"
+        -command [list $w.b.close invoke]
     $w.menu.favorites add command -label OprepFavoritesAdd \
         -command ::optable::addFavoriteDlg
     $w.menu.favorites add command -label OprepFavoritesEdit \
@@ -260,7 +260,10 @@ proc ::optable::makeReportWin {args} {
 
     ttk::button $w.b.mergeGames -textvar ::tr(MergeGames) -command ::optable::mergeGames
     ttk::button $w.b.help -textvar ::tr(Help) -command {helpWindow Reports Opening}
-    ttk::button $w.b.close -textvar ::tr(Close) -command "focus .; destroy $w"
+    ttk::button $w.b.close -textvar ::tr(Close) -command [list apply {{w} {
+      focus .
+      destroy $w
+    } ::} $w]
     pack $w.b -side bottom -fill x
     pack $w.scroll -side left -fill both -expand yes
     pack $w.b.close $w.b.update -side right -padx 1 -pady 2
@@ -286,9 +289,9 @@ proc ::optable::makeReportWin {args} {
   }
   ::board::update $w.text.bd [sc_pos board]
   $w.b.exclude.m delete 0 end
-  $w.b.exclude.m add radiobutton -label "---" -variable ::optable::_data(exclude) -command "$w.b.update invoke"
+  $w.b.exclude.m add radiobutton -label "---" -variable ::optable::_data(exclude) -command [list $w.b.update invoke]
   foreach move $::optable::_data(moves) {
-    $w.b.exclude.m add radiobutton -label $move -variable ::optable::_data(exclude) -command "$w.b.update invoke"
+    $w.b.exclude.m add radiobutton -label $move -variable ::optable::_data(exclude) -command [list $w.b.update invoke]
   }
   if {[lsearch $::optable::_data(moves) $::optable::_data(exclude)] < 0} {
     set ::optable::_data(exclude) "---"
@@ -1384,7 +1387,10 @@ proc ::optable::updateFavoritesMenu {} {
     set name [lindex $entry 0]
     set moves [lindex $entry 1]
     $m add command -label $name \
-        -command "importMoveList [list $moves]; ::optable::makeReportWin"
+        -command [list apply {{moves} {
+          importMoveList [list $moves]
+          ::optable::makeReportWin
+        } ::} $moves]
   }
   if {[llength $::reportFavorites] == 0} {
     $m entryconfigure 1 -state disabled
@@ -1449,7 +1455,10 @@ proc ::optable::addFavoriteDlg {} {
   ttk::frame $w.b
   pack $w.b -side bottom -fill x
   ttk::button $w.b.ok -text OK -command ::optable::addFavoriteOK
-  ttk::button $w.b.cancel -text $::tr(Cancel) -command "grab release $w; destroy $w"
+  ttk::button $w.b.cancel -text $::tr(Cancel) -command [list apply {{w} {
+    grab release $w
+    destroy $w
+  } ::} $w]
   packdlgbuttons $w.b.cancel $w.b.ok
   focus $w.e
   grab $w
@@ -1517,15 +1526,15 @@ proc ::optable::editFavoritesDlg {} {
   bind $w <F1> {helpWindow Reports Opening}
   ttk::entry $w.e -width 60 \
       -textvariable reportFavoritesName -exportselection 0
-  $w.e configure -validate key -validatecommand "after 200 ::optable::editFavoritesRefresh; return true"
+  $w.e configure -validate key -validatecommand [list apply {{} { after 200 ::optable::editFavoritesRefresh; return true }}]
   pack $w.e -side top -fill x
   pack [ttk::frame $w.b] -side bottom -fill x
   ttk::frame $w.f
   ttk::treeview $w.f.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$w.f.ybar set"
+             -yscrollcommand [list $w.f.ybar set]
   $w.f.list configure -height 10
   $w.f.list column 0 -width 50
-  ttk::scrollbar $w.f.ybar -takefocus 0 -command "$w.f.list yview"
+  ttk::scrollbar $w.f.ybar -takefocus 0 -command [list $w.f.list yview]
   pack $w.f.ybar -side right -fill y
   pack $w.f.list -side left -fill both -expand 1
   pack $w.f -side top -fill both -expand yes
@@ -1811,8 +1820,16 @@ proc ::optable::generateFavoriteReports {} {
   addHorizontalRule $w
   pack [ttk::frame $w.b] -side bottom -fill x
   ttk::button $w.b.ok -text "OK"\
-      -command "::optable::reportFavoritesOK; grab release $w; destroy $w; ::optable::makeReportWin"
-  ttk::button $w.b.cancel -text $::tr(Cancel) -command "grab release $w; destroy $w"
+      -command [list apply {{w} {
+        ::optable::reportFavoritesOK
+        grab release $w
+        destroy $w
+        ::optable::makeReportWin
+      } ::} $w]
+  ttk::button $w.b.cancel -text $::tr(Cancel) -command [list apply {{w} {
+    grab release $w
+    destroy $w
+  } ::} $w]
   packdlgbuttons $w.b.cancel $w.b.ok
   grab $w
 }
