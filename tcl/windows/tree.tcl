@@ -330,7 +330,7 @@ proc ::tree::listTreeBases {{base ""}} {
             $w.buttons.stop configure -state normal
             $w.progress coords bar 0 0 0 0
             grid $w.progress -in $w.statusframe -column 0 -row 0 -sticky nsew
-            set progress "$w.progress [lindex [grid bbox $w.statusframe] 2] 100"
+            set progress [list $w.progress [lindex [grid bbox $w.statusframe] 2] 100]
             $w.buttons.stop configure -command "
                 ::cancelUpdateTreeFilter [list $progress]
                 ::tree::restoreButtons $w

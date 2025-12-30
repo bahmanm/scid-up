@@ -708,7 +708,7 @@ proc ::board::updateToolBar_ {{menu} {varname} {mb ""} } {
     set idx -1
     catch { set idx [lindex [$menu entryconfigure $i -image] 4] }
     if {[info exists "${varname}($idx)"] } {
-      $menu entryconfigure $i -state normal -command "eval \$::${varname}($idx)"
+      $menu entryconfigure $i -state normal -command [list ::board::invokeToolBarCommand $varname $idx]
     } else {
       catch { $menu entryconfigure $i -state disabled -command "" }
     }
@@ -722,6 +722,15 @@ proc ::board::updateToolBar_ {{menu} {varname} {mb ""} } {
     if {$y >= $mh} { incr y -$mh } { incr y $bh }
     tk_popup $menu $x $y
   }
+}
+
+proc ::board::invokeToolBarCommand {varname idx} {
+  set qualifiedVarName "::${varname}"
+  if {![info exists ${qualifiedVarName}($idx)]} {
+    return
+  }
+  set cmdPrefix [set ${qualifiedVarName}($idx)]
+  {*}$cmdPrefix
 }
 
 proc ::board::newToolBar_ {{w} {varname}} {
@@ -1123,7 +1132,7 @@ proc ::board::mark::getEmbeddedCmds {comment} {
 #
 proc ::board::mark::remove {win args} {
   if {[llength $args] == 2} {
-    eval add $win arrow $args nocolor 1
+    add $win arrow {*}$args nocolor 1
   } else {
     add $win DEL [lindex $args 0] "" nocolor 1
   }
@@ -1186,7 +1195,7 @@ proc ::board::mark::add {win args} {
       if {![llength [info procs $drawingScript]]} { return }
 
       # ... and try it:
-      if {[catch {eval $drawingScript $board $square $dest $color}]} {
+      if {[catch {$drawingScript $board $square $dest $color}]} {
         return
       }
     }
@@ -1232,10 +1241,9 @@ proc ::board::mark::DrawDisk {pathName square color} {
   set size 0.6	;# 0.0 <  $size < 1.0 = size of rectangle
 
   set box [GetBox $pathName $square $size]
-  eval $pathName \
-      {create oval [lrange $box 0 3]} \
+  $pathName create oval {*}[lrange $box 0 3] \
       -fill $color \
-      {-tag [list mark disk mark$square p$square]}
+      -tag [list mark disk mark$square p$square]
 }
 
 # ::board::mark::DrawText --
@@ -1247,20 +1255,20 @@ proc ::board::mark::DrawText {pathName square char color {size 0} {shadowColor "
   set y   [lindex $box 6]
   $pathName delete text$square mark$square
   if {$shadowColor!=""} {
-    eval $pathName \
-        create text [expr $x+1] [expr $y+1] -fill $shadowColor \
-        {-font [list helvetica $len bold]} \
-        {-text [string index $char 0]}     \
-        {-anchor c} \
-        {-tag  [list mark text text$square mark$square p$square]}
+    $pathName create text [expr {$x+1}] [expr {$y+1}] \
+        -fill $shadowColor \
+        -font [list helvetica $len bold] \
+        -text [string index $char 0] \
+        -anchor c \
+        -tag [list mark text text$square mark$square p$square]
 
   }
-  eval $pathName \
-      create text $x $y -fill $color     \
-      {-font [list helvetica $len bold]} \
-      {-text [string index $char 0]}     \
-      {-anchor c} \
-      {-tag  [list mark text text$square mark$square p$square]}
+  $pathName create text $x $y \
+      -fill $color \
+      -font [list helvetica $len bold] \
+      -text [string index $char 0] \
+      -anchor c \
+      -tag [list mark text text$square mark$square p$square]
 }
 
 # Draw an arrow with a custom thickness, shape and associated tag.
@@ -1633,7 +1641,7 @@ proc ::board::update {w {board ""} {animate 0}} {
         # Find a subroutine to draw the canvas object:
         set drawingScript "mark::Draw[string totitle $type]"
         if {[llength [info procs $drawingScript]]} {
-          catch {eval $drawingScript $w.bd [join [lrange $mark 1 3]]}
+          catch {$drawingScript $w.bd {*}[lrange $mark 1 3]}
         }
       }
     }
@@ -1964,7 +1972,7 @@ proc ::board::animate {w oldboard newboard} {
           [string tolower [string index $newboard $rto]] == "r"} {
           # A castling move animation.
           # Move the rook back to initial square until animation is complete:
-          eval $w.bd coords p$rto [::board::midSquare $w $rfrom]
+          $w.bd coords p$rto {*}[::board::midSquare $w $rfrom]
           set from $kfrom
           set to $kto
           set from2 $rfrom
@@ -1973,7 +1981,7 @@ proc ::board::animate {w oldboard newboard} {
           [string tolower [string index $newboard $rfrom]] == "r"  &&
           [string tolower [string index $oldboard $kto]] == "k"  &&
           [string tolower [string index $oldboard $rto]] == "r"} {
-          eval $w.bd coords p$rfrom [::board::midSquare $w $rto]
+          $w.bd coords p$rfrom {*}[::board::midSquare $w $rto]
           set from $kto
           set to $kfrom
           set from2 $rto
@@ -2063,7 +2071,7 @@ proc ::board::animate {w oldboard newboard} {
   }
 
   # Move the animated piece back to its starting point:
-  eval $w.bd coords p$to [::board::midSquare $w $from]
+  $w.bd coords p$to {*}[::board::midSquare $w $from]
   $w.bd raise p$to
 
   # Start the animation:

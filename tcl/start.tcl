@@ -304,7 +304,7 @@ proc safeSource {filename args} {
     $::safeInterp eval [list set $varname $value]
   }
   $::safeInterp eval [list set vdir $vdir]
-  $::safeInterp eval "source \$vdir/$n"
+  $::safeInterp eval [list source [file join $vdir $n]]
   foreach {varname value} $args {
     $::safeInterp eval [list unset $varname]
   }
@@ -346,7 +346,7 @@ proc safeSourceStyle {filename} {
   interp alias $safeInterp ::styleOption {} ::safeStyleOption $safeInterp
 
   $safeInterp eval [list set vdir $vdir]
-  $safeInterp eval "source \$vdir/[file tail $filename]"
+  $safeInterp eval [list source [file join $vdir [file tail $filename]]]
   ::safe::interpDelete $safeInterp
 }
 

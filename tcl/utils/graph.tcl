@@ -91,7 +91,7 @@ proc ::utils::graph::create args {
   set ::utils::graph::_data($graph,sets) {}
 
   set args [concat graph $graph $::utils::graph::_defaults(graph) [lrange $args 1 end]]
-  set extraArgs [eval "::utils::graph::_configure $args"]
+  set extraArgs [::utils::graph::_configure {*}$args]
   if {$extraArgs != ""} {
     error "Unrecognised arguments: $extraArgs"
   }
@@ -172,7 +172,7 @@ proc ::utils::graph::data args {
   set args [concat data $graph,$dataset $_defaults(data) \
               [lrange $args 2 end]]
 
-  set extraArgs [eval "::utils::graph::_configure $args"]
+  set extraArgs [::utils::graph::_configure {*}$args]
   if {$extraArgs != ""} {
     error "Unrecognised graph data options: $extraArgs"
   }
@@ -236,7 +236,7 @@ proc ::utils::graph::cget {graph opt} {
 ################################################################################
 proc ::utils::graph::configure args {
   set newargs [concat "graph" [lindex $args 0] [lrange $args 1 end]]
-  eval "::utils::graph::_configure $newargs"
+  ::utils::graph::_configure {*}$newargs
 }
 
 
@@ -520,8 +520,10 @@ proc ::utils::graph::plot_data {graph} {
     # Plot line:
     if {$_data($graph,$dataset,lines)} {
       # Catch errors drawing line in case the data set contains no data:
-      catch {eval "$canvas create line $coords -fill $color \
-                   -width $_data($graph,$dataset,linewidth) -tag $tag"}
+      catch {
+        $canvas create line {*}$coords -fill $color \
+            -width $_data($graph,$dataset,linewidth) -tag $tag
+      }
     }
 
     # Plot points:
@@ -795,4 +797,3 @@ proc ::utils::graph::set_range {graph} {
     }
   }
 }
-

@@ -120,7 +120,7 @@ proc ::windows::gamelist::listTreeBases {{base ""}} {
 		if { $::gamelistPosMask($w) != 0 && ($base == "" || $base == $::gamelistBase($w)) } {
 			$w.games.glist tag configure fsmall -foreground #bababa
 			$w.buttons.boardFilter configure -image tb_BoardMaskBusy
-			set progressbar "$w.progress 100 100"
+			set progressbar [list $w.progress 100 100]
 			lappend bases [list $::gamelistBase($w) $::gamelistFilter($w) $progressbar]
 		}
 	}
@@ -239,15 +239,14 @@ proc ::windows::gamelist::Awesome {{w} {txt}} {
 		sc_filter reset "$::gamelistBase($w)" $filter full
 	} else {
 		sc_filter reset "$::gamelistBase($w)" $filter empty
-		#Split the string using " + "
-		foreach {dummy sub} [regexp -all -inline {(.+?)(?:\s\+\s|$)} $txt] {
-			set cmd "sc_filter search $::gamelistBase($w) $filter header -filter OR"
-			progressWindow "Scid" "$::tr(HeaderSearch)..." $::tr(Cancel)
-			set res [eval "$cmd [AweParse $sub]"]
-			closeProgressWindow
+			#Split the string using " + "
+			foreach {dummy sub} [regexp -all -inline {(.+?)(?:\s\+\s|$)} $txt] {
+				progressWindow "Scid" "$::tr(HeaderSearch)..." $::tr(Cancel)
+				sc_filter search $::gamelistBase($w) $filter header -filter OR {*}[AweParse $sub]
+				closeProgressWindow
+			}
 		}
-	}
-	::notify::filter $::gamelistBase($w) $filter
+		::notify::filter $::gamelistBase($w) $filter
 }
 
 proc ::windows::gamelist::AweInit {} {
@@ -376,7 +375,7 @@ proc ::windows::gamelist::AweParse {{txt}} {
 		lappend res [list $param $value]
 	}
 
-	return [join $res]
+	return [concat {*}$res]
 }
 
 proc ::windows::gamelist::CopyGames {{w} {srcBase} {dstBase} {filter "dbfilter"} {ask true}} {

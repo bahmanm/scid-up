@@ -63,7 +63,7 @@ proc dialogbuttonframe {frame buttonlist} {
   foreach buttonargs $buttonlist {
     set bname $frame.[lindex $buttonargs 0]
     set bargs [lrange $buttonargs 1 end]
-    eval ttk::button $bname $bargs
+    ttk::button $bname {*}$bargs
     set bnames [linsert $bnames 0 $bname]
     set length [string length [$bname cget -text]]
     if {$length > $maxlength} { set length $maxlength}
@@ -80,7 +80,7 @@ proc dialogbuttonframe {frame buttonlist} {
 #   with a standard amount of padding.
 #
 proc packbuttons {side args} {
-  eval pack $args -side $side -padx 5 -pady 3
+  pack {*}$args -side $side -padx 5 -pady 3
 }
 proc packdlgbuttons {args} {
   pack {*}$args -side right -padx 5 -pady "15 5"
@@ -90,7 +90,7 @@ proc packdlgbuttons {args} {
 #   is given a minimum width.
 #
 proc dialogbutton {w args} {
-  set retval [eval ttk::button $w $args] ;# -style TButton
+  set retval [ttk::button $w {*}$args] ;# -style TButton
   set length [string length [$w cget -text]]
   if {$length < 7} { set length 7 }
   $w configure -width $length
@@ -98,7 +98,7 @@ proc dialogbutton {w args} {
 }
 
 proc dialogbuttonsmall {w args {style "Small.TButton"} } {
-  set retval [eval ttk::button $w -style $style $args]
+  set retval [ttk::button $w -style $style {*}$args]
   set length [string length [$w cget -text]]
   if {$length < 7} { set length 7 }
   $w configure -width $length
@@ -142,7 +142,7 @@ proc autoscrollframe {args} {
   if {! [winfo exists $w]} {
     $type $w
     if {[llength $args] > 0} {
-      eval $w configure $args
+      $w configure {*}$args
     }
     $w configure -relief flat -borderwidth 0
   }
@@ -213,7 +213,7 @@ proc _autoscroll {bar args} {
       }
     }
   }
-  eval $bar set $args
+  $bar set {*}$args
 }
 
 proc _autoscrollMap {frame} {
@@ -592,10 +592,10 @@ namespace eval gameclock {
   ################################################################################
   proc every {ms body n} {
     incr ::gameclock::data(counter$n)
-    eval $body
+    {*}$body
     if {$::gameclock::data(id$n) == "" ||
         [winfo exists $::gameclock::data(id$n)]} {
-      after $ms [info level 0]
+      set ::gameclock::data(after$n) [after $ms [list ::gameclock::every $ms $body $n]]
     }
   }
   ################################################################################
@@ -622,13 +622,16 @@ namespace eval gameclock {
   proc start { n } {
     if {$::gameclock::data(running$n)} { return }
     set ::gameclock::data(running$n) 1
-    ::gameclock::every 1000 "draw $n" $n
+    ::gameclock::every 1000 [list draw $n] $n
   }
   ################################################################################
   proc stop { n } {
     if {! $::gameclock::data(running$n)} { return 0 }
     set ::gameclock::data(running$n) 0
-    after cancel "::gameclock::every 1000 \{draw $n\} $n"
+    if {[info exists ::gameclock::data(after$n)]} {
+      after cancel $::gameclock::data(after$n)
+      unset ::gameclock::data(after$n)
+    }
     return 1
   }
   ################################################################################

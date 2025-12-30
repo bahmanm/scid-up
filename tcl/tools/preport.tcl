@@ -213,8 +213,8 @@ proc ::preport::makeReportWin {args} {
   set searchArgs {}
   lappend searchArgs -filter RESET
   lappend searchArgs "-$::preport::_color"
-  lappend searchArgs "\"$::preport::_player\""
-  eval sc_search header $searchArgs
+  lappend searchArgs $::preport::_player
+  sc_search header {*}$searchArgs
   if {$showProgress} {
     if {$::preport::_interrupt} {
       catch {grab release $w.b.cancel}

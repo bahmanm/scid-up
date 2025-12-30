@@ -851,7 +851,7 @@ namespace eval uci {
                 after $max_wait "::uci::onReady_ $n"
             }
         } else {
-            eval {*}$cmd
+            {*}$cmd
         }
     }
 
@@ -923,7 +923,7 @@ namespace eval uci {
         while { [llength $::analysis(whenReady$n)] } {
             set cmd [lindex $::analysis(whenReady$n) 0]
             set ::analysis(whenReady$n) [lrange $::analysis(whenReady$n) 1 end]
-            eval {*}$cmd
+            {*}$cmd
             if { $::analysis(waitForReadyOk$n) || \
                  $::analysis(waitForBestMove$n) || \
                  [info exists ::analysis(thinking$n)] } {  break }

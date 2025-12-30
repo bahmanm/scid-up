@@ -323,7 +323,7 @@ proc ::updateTreeFilter {{base ""}} {
         #TODO: don't do a full database search if there is only one filter.
         #set n_filters [llength [lsort -unique -index 1 $::treeFilterUpdating_]]
 
-        eval progressBarSet $progressbar
+        progressBarSet {*}$progressbar
         set err [catch {sc_filter search $base "tree" board}]
         if {$err && $::errorCode != $::ERROR::UserCancel} {
             ERROR::MessageBox
