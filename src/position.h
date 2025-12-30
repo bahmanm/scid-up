@@ -16,6 +16,7 @@
 #ifndef SCID_POSITION_H
 #define SCID_POSITION_H
 
+#include <cstddef>
 #include "common.h"
 #include "movelist.h"
 #include <stdio.h>
@@ -275,7 +276,7 @@ public:
     errorT      ReadFromFEN (const char * s);
     errorT      ReadFromFENorUCI (std::string_view str);
     void        PrintCompactStr (char * cboard);
-    void        PrintFEN(char* str) const;
+    void        PrintFEN(char* str, size_t len) const;
     void        DumpLatexBoard (DString * dstr, bool flip);
     void        DumpLatexBoard (DString * dstr) {
         DumpLatexBoard (dstr, false);
@@ -308,4 +309,3 @@ private:
 //////////////////////////////////////////////////////////////////////
 //  EOF: position.h
 //////////////////////////////////////////////////////////////////////
-

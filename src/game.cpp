@@ -22,6 +22,7 @@
 #include "stored.h"
 #include "textbuf.h"
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 // Piece letters translation
@@ -94,7 +95,7 @@ game_printNag (byte nag, char * str, bool asSymbol, gameFormatT format)
 
     if (nag >= (sizeof evalNagsRegular / sizeof (const char *))) {
         if (format == PGN_FORMAT_LaTeX) *str = 0;
-        else sprintf (str, "$%u", nag);
+        else std::snprintf(str, 10, "$%u", nag);
         return;
     }
 
@@ -115,7 +116,7 @@ game_printNag (byte nag, char * str, bool asSymbol, gameFormatT format)
        }
        return;
     } else {
-    sprintf (str, "%s$%d", format == PGN_FORMAT_LaTeX ? "\\" : "", nag);
+    std::snprintf(str, 10, "%s$%d", format == PGN_FORMAT_LaTeX ? "\\" : "", nag);
     }
 }
 
@@ -813,19 +814,19 @@ std::string Game::currentPosUCI() const {
 	while ((move = move->getPrevMove())) {
 		if (move->moveData.isNullMove()) {
 			Position lastValidPos = *currentPos();
-			for (const moveT* m : moves) {
-				lastValidPos.UndoSimpleMove(m->moveData);
+				for (const moveT* m : moves) {
+					lastValidPos.UndoSimpleMove(m->moveData);
+				}
+				lastValidPos.PrintFEN(FEN, sizeof(FEN));
+				break;
 			}
-			lastValidPos.PrintFEN(FEN);
-			break;
-		}
 		moves.emplace_back(move);
 	}
 
-	if (*FEN || HasNonStandardStart(FEN)) {
-		res.replace(9, 4, "fen ");
-		res.replace(13, 4, FEN);
-	}
+		if (*FEN || HasNonStandardStart(FEN, sizeof(FEN))) {
+			res.replace(9, 4, "fen ");
+			res.replace(13, 4, FEN);
+		}
 
 	const auto allocSpeedup = res.size();
 	res.resize(allocSpeedup + moves.size() * 6);
@@ -976,13 +977,13 @@ void Game::Truncate() {
 // Game::TruncateStart():
 //      Truncate all moves leading to current position.
 void Game::TruncateStart() {
-    // It is necessary to rebuild the current position using ReadFromFEN()
-    // because the order of pieces is important when encoding to SCIDv4 format.
-    char tempStr[256];
-    CurrentPos->PrintFEN(tempStr);
-    auto pos = std::make_unique<Position>();
-    if (pos->ReadFromFEN(tempStr) != OK)
-        return;
+	    // It is necessary to rebuild the current position using ReadFromFEN()
+	    // because the order of pieces is important when encoding to SCIDv4 format.
+	    char tempStr[256];
+	    CurrentPos->PrintFEN(tempStr, sizeof(tempStr));
+	    auto pos = std::make_unique<Position>();
+	    if (pos->ReadFromFEN(tempStr) != OK)
+	        return;
 
     if (VarDepth != 0 && MainVariation() != OK)
 		return;
@@ -1490,7 +1491,7 @@ Game::GetPartialMoveList (DString * outStr, uint plyCount)
         }
         if (i != 0) { outStr->Append (" "); }
         if (i == 0  ||  CurrentPos->GetToMove() == WHITE) {
-            sprintf (temp, "%d%s", CurrentPos->GetFullMoveCount(),
+            std::snprintf(temp, sizeof(temp), "%d%s", CurrentPos->GetFullMoveCount(),
                      (CurrentPos->GetToMove() == WHITE ? "." : "..."));
             outStr->Append (temp);
         }
@@ -1748,7 +1749,7 @@ errorT Game::WriteMoveList(TextBuffer* tb, moveT* oldCurrentMove,
             if ((PgnStyle & PGN_STYLE_COLUMN)  &&  VarDepth == 0) {
                 tb->PrintString (startColumn);
                 char temp [10];
-                sprintf (temp, "%4u.", CurrentPos->GetFullMoveCount());
+                std::snprintf(temp, sizeof(temp), "%4u.", CurrentPos->GetFullMoveCount());
                 tb->PrintString (temp);
                 if (CurrentPos->GetToMove() == BLACK) {
                     tb->PauseTranslations();
@@ -2015,7 +2016,7 @@ errorT Game::WriteMoveList(TextBuffer* tb, moveT* oldCurrentMove,
                     if (IsColorFormat()) {
                         if (VarDepth < 19) {
                             char tmp_str[16];
-                            sprintf(tmp_str, "<ip%u>", VarDepth + 1);
+                            std::snprintf(tmp_str, sizeof(tmp_str), "<ip%u>", VarDepth + 1);
                             tb->PrintString(tmp_str);
                         }
                     } else {
@@ -2066,7 +2067,7 @@ errorT Game::WriteMoveList(TextBuffer* tb, moveT* oldCurrentMove,
                     if (IsColorFormat()) {
                         if (VarDepth < 19) {
                             char tmp_str[16];
-                            sprintf(tmp_str, "</ip%u><br>", VarDepth + 1);
+                            std::snprintf(tmp_str, sizeof(tmp_str), "</ip%u><br>", VarDepth + 1);
                             tb->PrintString(tmp_str);
                         }
                     } else {
@@ -2169,7 +2170,7 @@ errorT Game::WritePGN(TextBuffer* tb) {
         if (PgnFormat==PGN_FORMAT_Color) {tb->PrintString ("<tag>"); }
         tb->PrintString (GetWhiteStr());
         if (WhiteElo > 0) {
-            sprintf (temp, "  (%u)", WhiteElo);
+            std::snprintf(temp, sizeof(temp), "  (%u)", WhiteElo);
             tb->PrintString (temp);
         }
         switch (PgnFormat) {
@@ -2186,7 +2187,7 @@ errorT Game::WritePGN(TextBuffer* tb) {
         }
         tb->PrintString (GetBlackStr());
         if (BlackElo > 0) {
-            sprintf (temp, "  (%u)", BlackElo);
+            std::snprintf(temp, sizeof(temp), "  (%u)", BlackElo);
             tb->PrintString (temp);
         }
         //if (IsHtmlFormat()) { tb->PrintString ("</font>"); }
@@ -2223,7 +2224,7 @@ errorT Game::WritePGN(TextBuffer* tb) {
         }
         auto annotator = FindExtraTag("Annotator");
         if (annotator != NULL) {
-            sprintf(temp, " (%s)", annotator);
+            std::snprintf(temp, sizeof(temp), " (%s)", annotator);
             tb->PrintString(temp);
         }
 
@@ -2243,9 +2244,10 @@ errorT Game::WritePGN(TextBuffer* tb) {
                 StartPos->DumpHtmlBoard (&dstr, HtmlStyle, NULL);
                 tb->PrintString (dstr.Data());
             } else {
-                StartPos->PrintFEN(std::copy_n("Position: ", 10, temp));
-                std::strcat(temp, newline);
-                tb->PrintString (temp);
+	                auto* out = std::copy_n("Position: ", 10, temp);
+	                StartPos->PrintFEN(out, sizeof(temp) - 10);
+	                std::strcat(temp, newline);
+	                tb->PrintString (temp);
             }
         }
     } else {
@@ -2255,61 +2257,62 @@ errorT Game::WritePGN(TextBuffer* tb) {
         uint wrapColumn = tb->GetWrapColumn();
         tb->SetWrapColumn (99999);
         if (IsColorFormat()) { tb->PrintString ("<tag>"); }
-        sprintf (temp, "[Event \"%s\"]%s", GetEventStr(), newline);
+        std::snprintf(temp, sizeof(temp), "[Event \"%s\"]%s", GetEventStr(), newline);
         tb->PrintString (temp);
-        sprintf (temp, "[Site \"%s\"]%s", GetSiteStr(), newline);
+        std::snprintf(temp, sizeof(temp), "[Site \"%s\"]%s", GetSiteStr(), newline);
         tb->PrintString (temp);
-        sprintf (temp, "[Date \"%s\"]%s", dateStr, newline);
+        std::snprintf(temp, sizeof(temp), "[Date \"%s\"]%s", dateStr, newline);
         tb->PrintString (temp);
-        sprintf (temp, "[Round \"%s\"]%s", GetRoundStr(), newline);
+        std::snprintf(temp, sizeof(temp), "[Round \"%s\"]%s", GetRoundStr(), newline);
         tb->PrintString (temp);
-        sprintf (temp, "[White \"%s\"]%s", GetWhiteStr(), newline);
+        std::snprintf(temp, sizeof(temp), "[White \"%s\"]%s", GetWhiteStr(), newline);
         tb->PrintString (temp);
-        sprintf (temp, "[Black \"%s\"]%s", GetBlackStr(), newline);
+        std::snprintf(temp, sizeof(temp), "[Black \"%s\"]%s", GetBlackStr(), newline);
         tb->PrintString (temp);
-        sprintf (temp, "[Result \"%s\"]%s", RESULT_LONGSTR[Result], newline);
+        std::snprintf(temp, sizeof(temp), "[Result \"%s\"]%s", RESULT_LONGSTR[Result], newline);
         tb->PrintString (temp);
 
         // Print all tags, not just the standard seven, if applicable:
-        if (PgnStyle & PGN_STYLE_TAGS) {
-            if (WhiteElo > 0) {
-                sprintf (temp, "[White%s \"%u\"]%s",
+            if (PgnStyle & PGN_STYLE_TAGS) {
+                if (WhiteElo > 0) {
+                std::snprintf(temp, sizeof(temp), "[White%s \"%u\"]%s",
                          ratingTypeNames [WhiteRatingType], WhiteElo, newline);
                 tb->PrintString (temp);
-            }
-            if (BlackElo > 0) {
-                sprintf (temp, "[Black%s \"%u\"]%s",
+                }
+                if (BlackElo > 0) {
+                std::snprintf(temp, sizeof(temp), "[Black%s \"%u\"]%s",
                          ratingTypeNames [BlackRatingType], BlackElo, newline);
                 tb->PrintString (temp);
-            }
-            if (EcoCode != 0) {
+                }
+                if (EcoCode != 0) {
                 ecoStringT ecoStr;
                 eco_ToExtendedString (EcoCode, ecoStr);
-                sprintf (temp, "[ECO \"%s\"]%s", ecoStr, newline);
+                std::snprintf(temp, sizeof(temp), "[ECO \"%s\"]%s", ecoStr, newline);
                 tb->PrintString (temp);
-            }
-            if (EventDate != ZERO_DATE) {
-                char edateStr [20];
-                date_DecodeToString (EventDate, edateStr);
-                sprintf (temp, "[EventDate \"%s\"]%s", edateStr, newline);
+                }
+                if (EventDate != ZERO_DATE) {
+                    char edateStr [20];
+                    date_DecodeToString (EventDate, edateStr);
+                std::snprintf(temp, sizeof(temp), "[EventDate \"%s\"]%s", edateStr, newline);
                 tb->PrintString (temp);
-            }
+                }
 
-            if (PgnStyle & PGN_STYLE_SCIDFLAGS  &&  *ScidFlags != 0) {
-                sprintf (temp, "[ScidFlags \"%s\"]%s", ScidFlags, newline);
+                if (PgnStyle & PGN_STYLE_SCIDFLAGS  &&  *ScidFlags != 0) {
+                std::snprintf(temp, sizeof(temp), "[ScidFlags \"%s\"]%s", ScidFlags, newline);
                 tb->PrintString (temp);
-            }
+                }
 
-            // Now print other tags
-            for (auto& e : extraTags_) {
-                sprintf(temp, "[%s \"%s\"]%s", e.first.c_str(),
+                // Now print other tags
+                for (auto& e : extraTags_) {
+                std::snprintf(temp, sizeof(temp), "[%s \"%s\"]%s", e.first.c_str(),
                         e.second.c_str(), newline);
                 tb->PrintString(temp);
+                }
             }
-        }
         // Finally, write the FEN tag if necessary:
         if (StartPos) {
-            StartPos->PrintFEN(std::copy_n("[FEN \"", 6, temp));
+            auto* out = std::copy_n("[FEN \"", 6, temp);
+            StartPos->PrintFEN(out, sizeof(temp) - 6);
             auto it_end = std::copy_n("\"]", 2, temp + std::strlen(temp));
             std::strcpy(it_end, newline);
             tb->PrintString (temp);
@@ -2902,10 +2905,10 @@ std::pair<IndexEntry, TagRoster> Game::Encode(std::vector<byte>& dest) const {
     // This will be the non-STR (non-"seven tag roster") PGN tags.
     encodeTags(GetExtraTags(), dest);
 
-    // Encode the promotion flags and the start position
-    char FEN[256];
-    encodeStartBoard(promo, underPromo,
-                     HasNonStandardStart(FEN) ? FEN : nullptr, dest);
+	    // Encode the promotion flags and the start position
+	    char FEN[256];
+	    encodeStartBoard(promo, underPromo,
+	                     HasNonStandardStart(FEN, sizeof(FEN)) ? FEN : nullptr, dest);
 
     auto [commentCount, markComments] = countComments(FirstMove);
 
