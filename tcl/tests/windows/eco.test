@@ -1,0 +1,351 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::windows {}
+namespace eval ::windows::eco {}
+namespace eval ::utils {}
+namespace eval ::utils::graph {}
+namespace eval ::htext {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows eco.tcl]
+
+namespace eval ::eco_test {
+    variable stubbedCommands {}
+
+    variable refreshCalls {}
+
+    variable graphCalls {}
+    variable graphXunmapValue 0.0
+
+    variable winfoCalls {}
+
+    variable scBaseCalls {}
+    variable scEcoCalls {}
+
+    variable htextCalls {}
+
+}
+
+proc ::eco_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::eco_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::eco_test::setup {} {
+    ::eco_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::eco_test::refreshCalls {}
+
+    set ::eco_test::graphCalls {}
+    set ::eco_test::graphXunmapValue 0.0
+
+    set ::eco_test::winfoCalls {}
+
+    set ::eco_test::scBaseCalls {}
+    set ::eco_test::scEcoCalls {}
+
+    set ::eco_test::htextCalls {}
+
+    # Minimal translation array for code paths that reference `$::tr(...)`.
+    if {![info exists ::tr]} { array set ::tr {} }
+    set ::tr(ECOAllSections) "AllSections"
+    set ::tr(ECOSection) "Section"
+    set ::tr(ECOCode) "Code"
+    set ::tr(ECOFrequency) "ECOFrequency"
+    set ::tr(ECOSummary) "ECOSummary"
+    set ::tr(games) "games"
+
+    # Avoid UI creation: record Refresh calls.
+    ::eco_test::stubCommand ::windows::eco::Refresh {args} {
+        lappend ::eco_test::refreshCalls $args
+        return
+    }
+
+    # Minimal graph stubs.
+    ::eco_test::stubCommand ::utils::graph::create {graph args} {
+        lappend ::eco_test::graphCalls [list create $graph {*}$args]
+        return
+    }
+
+    ::eco_test::stubCommand ::utils::graph::data {graph series args} {
+        lappend ::eco_test::graphCalls [list data $graph $series {*}$args]
+        return
+    }
+
+    ::eco_test::stubCommand ::utils::graph::configure {graph args} {
+        lappend ::eco_test::graphCalls [list configure $graph {*}$args]
+        return
+    }
+
+    ::eco_test::stubCommand ::utils::graph::redraw {graph} {
+        lappend ::eco_test::graphCalls [list redraw $graph]
+        return
+    }
+
+    ::eco_test::stubCommand ::utils::graph::xunmap {graph xc} {
+        lappend ::eco_test::graphCalls [list xunmap $graph $xc]
+        return $::eco_test::graphXunmapValue
+    }
+
+    # winfo is used by update for widget dimensions.
+    ::eco_test::stubCommand winfo {subcmd args} {
+        lappend ::eco_test::winfoCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            height { return 300 }
+            width { return 560 }
+            default { error "winfo $subcmd not stubbed in eco tests" }
+        }
+    }
+
+    # sc_base stats/current stubs.
+    ::eco_test::stubCommand sc_base {subcmd args} {
+        lappend ::eco_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            current { return 9 }
+            stats {
+                # stats <base> eco <code>
+                set ecoCode [lindex $args 2]
+
+                # Return a 6-item list as expected by eco.tcl:
+                # {freq wins draws losses ignored percent}
+                switch -- $ecoCode {
+                    A { return {10 1 2 7 0 10} }
+                    B { return {600 300 100 200 0 50} }
+                    C { return {20 5 5 10 0 25} }
+                    D { return {0 0 0 0 0 0} }
+                    E { return {1 0 1 0 0 50} }
+                    "" { return {631 306 108 217 0 49} }
+                    default {
+                        # For other lengths, return something small by default.
+                        return {1 0 0 1 0 0}
+                    }
+                }
+            }
+            default {
+                error "sc_base $subcmd not stubbed in eco tests"
+            }
+        }
+    }
+
+    ::eco_test::stubCommand sc_eco {subcmd args} {
+        lappend ::eco_test::scEcoCalls [list $subcmd {*}$args]
+        if {$subcmd ne "summary"} {
+            error "sc_eco $subcmd not stubbed in eco tests"
+        }
+        return "SUMMARY"
+    }
+
+    ::eco_test::stubCommand ::htext::display {w text} {
+        lappend ::eco_test::htextCalls [list $w $text]
+        return
+    }
+
+    # Widget command doubles used by `::windows::eco::update`.
+    #
+    # Modelled widgets:
+    #   - `.ecograph.title`            (entry-like: configure/delete/insert)
+    #   - `.ecograph.pane.text.text`  (text-like: configure/delete)
+    ::scid_test::widgets::defineWidget .ecograph.title
+    ::scid_test::widgets::defineWidget .ecograph.pane.text.text
+
+    set ::windows::eco::code ""
+    set ::windows::eco::count 0
+    set ::windows::eco::isOpen 0
+}
+
+proc ::eco_test::cleanup {} {
+    ::eco_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::curr_db}
+}
+
+# ---- Tests ----
+
+test eco-KeyPress-accepts-section-letter-1.0 {KeyPress accepts A-E at the top level and calls Refresh} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code ""
+
+    # Act
+    ::windows::eco::KeyPress b
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {B {{}}}
+
+
+test eco-KeyPress-rejects-invalid-section-letter-1.0 {KeyPress rejects non A-E at the top level} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code ""
+
+    # Act
+    ::windows::eco::KeyPress z
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {{} {}}
+
+
+test eco-KeyPress-accepts-digit-for-second-char-1.0 {KeyPress accepts digits when code length is 1 or 2} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code "A"
+
+    # Act
+    ::windows::eco::KeyPress 1
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {A1 {{}}}
+
+
+test eco-KeyPress-accepts-letter-for-fourth-char-1.0 {KeyPress accepts a-z when code length is 3} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code "A12"
+
+    # Act
+    ::windows::eco::KeyPress C
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {A12c {{}}}
+
+
+test eco-KeyPress-backspace-removes-last-char-1.0 {KeyPress "<" removes the last character and refreshes} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code "A12c"
+
+    # Act
+    ::windows::eco::KeyPress "<"
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {A12 {{}}}
+
+
+test eco-Select-top-level-selects-A-1.0 {Select chooses section letters at top level based on x coordinate} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code ""
+    set ::windows::eco::count 5
+
+    set ::eco_test::graphXunmapValue 1.0
+
+    # Act
+    ::windows::eco::Select 42
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {A {{}}}
+
+
+test eco-Select-digit-selects-index-1.0 {Select appends a digit when code length is 1 or 2} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code "A"
+    set ::windows::eco::count 10
+
+    set ::eco_test::graphXunmapValue 3.0
+
+    # Act
+    ::windows::eco::Select 99
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {A2 {{}}}
+
+
+test eco-Select-letter-selects-index-1.0 {Select appends a letter when code length is 3} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code "A12"
+    set ::windows::eco::count 26
+
+    set ::eco_test::graphXunmapValue 3.0
+
+    # Act
+    ::windows::eco::Select 101
+
+    # Assert
+    list $::windows::eco::code $::eco_test::refreshCalls
+} -cleanup {
+    ::eco_test::cleanup
+} -result {A12c {{}}}
+
+
+test eco-update-builds-graph-and-title-1.0 {update collects stats, builds graph series, and updates title/count} -setup {
+    ::eco_test::setup
+} -body {
+    # Arrange
+    set ::windows::eco::code ""
+
+    # Act
+    ::windows::eco::update
+
+    # Assert
+    set createCall [lsearch -all -inline $::eco_test::graphCalls {create *}]
+
+    # Pull -ytick from the last create call.
+    set lastCreate [lindex $createCall end]
+    set ytickIdx [lsearch -exact $lastCreate "-ytick"]
+    set ytick [lindex $lastCreate [expr {$ytickIdx + 1}]]
+
+    set titleText [::scid_test::widgets::getText .ecograph.title]
+
+    set htextText [lindex [lindex $::eco_test::htextCalls 0] 1]
+
+    if {[lsearch -exact $::eco_test::winfoCalls {height .ecograph.pane.graph.c}] == -1} {
+        error "Expected update to query the graph canvas height via winfo"
+    }
+    if {[lsearch -exact $::eco_test::winfoCalls {width .ecograph.pane.graph.c}] == -1} {
+        error "Expected update to query the graph canvas width via winfo"
+    }
+
+    list \
+        $::windows::eco::count \
+        $ytick \
+        $titleText \
+        [expr {[string first "SUMMARY" $htextText] >= 0}] \
+        [llength $::eco_test::scBaseCalls]
+} -cleanup {
+    ::eco_test::cleanup
+} -result {5 250 {ECOFrequency AllSections} 1 7}
+
+
+cleanupTests
