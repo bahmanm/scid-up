@@ -9,6 +9,19 @@ set plistWin 0
 
 set ::plist::sort Name
 
+################################################################################
+# ::plist::defaults
+#   Resets the player list search criteria to default values.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::plist::name`, `::plist::minGames`, `::plist::maxGames`,
+#     `::plist::minElo`, `::plist::maxElo`, and `::plist::size`.
+################################################################################
 proc ::plist::defaults {} {
   set ::plist::name ""
   set ::plist::minGames ""
@@ -25,6 +38,18 @@ trace add variable ::plist::maxElo write [list ::utils::validate::Integer [sc_in
 trace add variable ::plist::minGames write [list ::utils::validate::Integer 9999 0]
 trace add variable ::plist::maxGames write [list ::utils::validate::Integer 9999 0]
 
+################################################################################
+# ::plist::toggle
+#   Toggles the player list window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Closes `.plist` if it exists; otherwise opens it via `::plist::Open`.
+################################################################################
 proc ::plist::toggle {} {
   set w .plist
   if {[winfo exists $w]} {
@@ -34,6 +59,22 @@ proc ::plist::toggle {} {
   }
 }
 
+################################################################################
+# ::plist::Open
+#   Opens the player list window (if it is not already open) and populates it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.plist` and its widgets, binds event handlers, and focuses the
+#     search field.
+#   - Sets `::plistWin` to 1 while the window is open.
+#   - Registers an input-validation trace for `::plist::size`.
+#   - Runs an initial refresh via `::plist::refresh`.
+################################################################################
 proc ::plist::Open {} {
   set w .plist
   if {[winfo exists .plist]} { return }
@@ -120,6 +161,23 @@ proc ::plist::Open {} {
   ::plist::refresh
 }
 
+################################################################################
+# ::plist::refresh
+#   Rebuilds the player list display using the current search options.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates search history via `::utils::history::AddEntry`.
+#   - Queries player data via `sc_name plist ...`.
+#   - Clears and repopulates `.plist.t.text`, including tag configuration and
+#     per-row tag bindings (hover + click).
+#   - Displays any `sc_name` error message in the text widget.
+#   - Temporarily shows a busy cursor.
+################################################################################
 proc ::plist::refresh {} {
   set w .plist
   if {! [winfo exists $w]} { return }
@@ -184,6 +242,19 @@ proc ::plist::refresh {} {
   unbusyCursor .
 }
 
+################################################################################
+# ::plist::check
+#   Normalises the numeric range fields by swapping min/max when required.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - May swap `::plist::minGames`/`::plist::maxGames`.
+#   - May swap `::plist::minElo`/`::plist::maxElo`.
+################################################################################
 proc ::plist::check {} {
   if { $::plist::maxGames ne "" && $::plist::minGames > $::plist::maxGames} {
     set help $::plist::maxGames
@@ -197,10 +268,22 @@ proc ::plist::check {} {
   }
 }
 
+################################################################################
+# ::plist::getSearchOptions
+#   Builds the `sc_name plist` search options list from the current UI state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - A list of option/value pairs suitable for `sc_name plist`.
+# Side effects:
+#   - None.
+################################################################################
 proc ::plist::getSearchOptions {} {
-	set options {}
-	if {$::plist::name ne ""} {
-		lappend options "-name" $::plist::name
+		set options {}
+		if {$::plist::name ne ""} {
+			lappend options "-name" $::plist::name
 	}
 	if {$::plist::size ne ""} {
 		lappend options "-size" $::plist::size
