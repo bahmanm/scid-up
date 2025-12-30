@@ -13,8 +13,14 @@ namespace eval ::scid_test::widgets {
     #   state(.w,-maximum) = 100
     array set state {}
 
-    # Store appended text per widget (for text-like doubles).
-    array set text {}
+	# Store appended text per widget (for text-like doubles).
+	array set text {}
+
+	# Store `tag configure`/`tag config` calls per widget, indexed by ($path).
+	array set tagConfigureCalls {}
+
+	# Store `tag bind` calls per widget, indexed by ($path).
+	array set tagBindCalls {}
 }
 
 # Resets all widget doubles created via this helper.
@@ -23,6 +29,8 @@ proc ::scid_test::widgets::reset {} {
     variable steps
     variable state
     variable text
+    variable tagConfigureCalls
+    variable tagBindCalls
 
     foreach w $created {
         catch {rename $w ""}
@@ -33,6 +41,8 @@ proc ::scid_test::widgets::reset {} {
     array unset steps
     array unset state
     array unset text
+    array unset tagConfigureCalls
+    array unset tagBindCalls
 }
 
 # Defines a lightweight widget command double.
@@ -50,6 +60,18 @@ proc ::scid_test::widgets::defineWidget {path} {
     }
 
     interp alias {} $path {} ::scid_test::widgets::dispatch $path
+    lappend created $path
+    return $path
+}
+
+proc ::scid_test::widgets::defineTextWidget {path} {
+    variable created
+
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::scid_test::widgets::dispatchText $path
     lappend created $path
     return $path
 }
@@ -104,6 +126,37 @@ proc ::scid_test::widgets::dispatch {path subcmd args} {
     }
 }
 
+proc ::scid_test::widgets::dispatchText {path subcmd args} {
+    variable tagConfigureCalls
+    variable tagBindCalls
+
+    if {$subcmd ne "tag"} {
+        return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
+    }
+
+    set tagSubcmd [lindex $args 0]
+    switch -- $tagSubcmd {
+        configure -
+        config {
+            # tag (config|configure) <tagName> ?options...?
+            set tagName [lindex $args 1]
+            lappend tagConfigureCalls($path) [list $tagName {*}[lrange $args 2 end]]
+            return
+        }
+        bind {
+            # tag bind <tagName> <sequence> <script>
+            set tagName [lindex $args 1]
+            set sequence [lindex $args 2]
+            set script [lindex $args 3]
+            lappend tagBindCalls($path) [list $tagName $sequence $script]
+            return
+        }
+        default {
+            error "Widget $path tag $tagSubcmd not stubbed"
+        }
+    }
+}
+
 proc ::scid_test::widgets::setState {path opt val} {
     variable state
     set state($path,$opt) $val
@@ -128,6 +181,22 @@ proc ::scid_test::widgets::getText {path} {
         return ""
     }
     return $text($path)
+}
+
+proc ::scid_test::widgets::getTagConfigureCalls {path} {
+    variable tagConfigureCalls
+    if {![info exists tagConfigureCalls($path)]} {
+        return {}
+    }
+    return $tagConfigureCalls($path)
+}
+
+proc ::scid_test::widgets::getTagBindCalls {path} {
+    variable tagBindCalls
+    if {![info exists tagBindCalls($path)]} {
+        return {}
+    }
+    return $tagBindCalls($path)
 }
 
 proc ::scid_test::widgets::getSteps {path} {
