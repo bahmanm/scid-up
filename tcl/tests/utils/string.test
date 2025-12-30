@@ -1,0 +1,258 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+namespace eval ::utils::string {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils string.tcl]
+
+# ---- Tests ----
+
+test string-Surname-comma-1.0 {Surname strips everything after the first comma} -body {
+    # Arrange
+    set name "Carlsen, Magnus"
+
+    # Act
+    set surname [::utils::string::Surname $name]
+
+    # Assert
+    return $surname
+} -result "Carlsen"
+
+
+test string-Surname-no-comma-1.0 {Surname returns the input when no comma exists} -body {
+    # Arrange
+    set name "Magnus Carlsen"
+
+    # Act
+    set surname [::utils::string::Surname $name]
+
+    # Assert
+    return $surname
+} -result "Magnus Carlsen"
+
+
+test string-Surname-leading-comma-1.0 {Surname treats a leading comma as part of the name} -body {
+    # Arrange
+    set name ",Carlsen"
+
+    # Act
+    set surname [::utils::string::Surname $name]
+
+    # Assert
+    return $surname
+} -result ",Carlsen"
+
+
+test string-CityName-trailing-code-1.0 {CityName removes a trailing three-letter uppercase country code} -body {
+    # Arrange
+    set siteName "London ENG"
+
+    # Act
+    set city [::utils::string::CityName $siteName]
+
+    # Assert
+    return $city
+} -result "London"
+
+
+test string-CityName-strips-country-and-comma-1.0 {CityName removes trailing code then returns the Surname portion} -body {
+    # Arrange
+    set siteName "Paris, France FRA"
+
+    # Act
+    set city [::utils::string::CityName $siteName]
+
+    # Assert
+    return $city
+} -result "Paris"
+
+
+test string-CityName-trims-leading-spaces-1.0 {CityName trims whitespace after removing trailing code} -body {
+    # Arrange
+    set siteName "  Rome ITA"
+
+    # Act
+    set city [::utils::string::CityName $siteName]
+
+    # Assert
+    return $city
+} -result "Rome"
+
+
+test string-CityName-non-country-token-1.0 {CityName does not strip trailing tokens that are not 3-letter uppercase codes} -body {
+    # Arrange
+    set siteName "London Eng"
+
+    # Act
+    set city [::utils::string::CityName $siteName]
+
+    # Assert
+    return $city
+} -result "London Eng"
+
+
+test string-Capital-empty-1.0 {Capital returns an empty string for empty input} -body {
+    # Arrange
+    set input ""
+
+    # Act
+    set result [::utils::string::Capital $input]
+
+    # Assert
+    return $result
+} -result ""
+
+
+test string-Capital-first-letter-1.0 {Capital uppercases only the first character} -body {
+    # Arrange
+    set input "abc"
+
+    # Act
+    set result [::utils::string::Capital $input]
+
+    # Assert
+    return $result
+} -result "Abc"
+
+
+test string-PadLeft-pads-right-1.0 {PadLeft appends padding to the end of the string} -body {
+    # Arrange
+    set input "a"
+
+    # Act
+    set result [::utils::string::PadLeft $input 3]
+
+    # Assert
+    return $result
+} -result "a  "
+
+
+test string-PadLeft-custom-padchar-1.0 {PadLeft supports a custom pad character} -body {
+    # Arrange
+    set input "a"
+
+    # Act
+    set result [::utils::string::PadLeft $input 3 "0"]
+
+    # Assert
+    return $result
+} -result "a00"
+
+
+test string-PadLeft-shorter-or-equal-1.0 {PadLeft returns the original string when target length is shorter or equal} -body {
+    # Arrange
+    set input "abcd"
+
+    # Act
+    set shorter [::utils::string::PadLeft $input 3]
+    set equal [::utils::string::PadLeft $input 4]
+
+    # Assert
+    list $shorter $equal
+} -result {abcd abcd}
+
+
+test string-Pad-alias-1.0 {Pad is an alias for PadLeft} -body {
+    # Arrange
+    set input "a"
+
+    # Act
+    set result [::utils::string::Pad $input 3 "."]
+
+    # Assert
+    return $result
+} -result "a.."
+
+
+test string-PadRight-pads-left-1.0 {PadRight prefixes padding at the start of the string} -body {
+    # Arrange
+    set input "a"
+
+    # Act
+    set result [::utils::string::PadRight $input 3]
+
+    # Assert
+    return $result
+} -result "  a"
+
+
+test string-PadRight-custom-padchar-1.0 {PadRight supports a custom pad character} -body {
+    # Arrange
+    set input "a"
+
+    # Act
+    set result [::utils::string::PadRight $input 3 "0"]
+
+    # Assert
+    return $result
+} -result "00a"
+
+
+test string-PadRight-shorter-or-equal-1.0 {PadRight returns the original string when target length is shorter or equal} -body {
+    # Arrange
+    set input "abcd"
+
+    # Act
+    set shorter [::utils::string::PadRight $input 3]
+    set equal [::utils::string::PadRight $input 4]
+
+    # Assert
+    list $shorter $equal
+} -result {abcd abcd}
+
+
+test string-PadCenter-odd-length-1.0 {PadCenter alternates prefix/suffix padding (odd target length)} -body {
+    # Arrange
+    set input "a"
+
+    # Act
+    set result [::utils::string::PadCenter $input 3]
+
+    # Assert
+    return $result
+} -result " a "
+
+
+test string-PadCenter-even-length-1.0 {PadCenter alternates prefix/suffix padding (even target length)} -body {
+    # Arrange
+    set input "a"
+
+    # Act
+    set result [::utils::string::PadCenter $input 4]
+
+    # Assert
+    return $result
+} -result "  a "
+
+
+test string-PadCenter-custom-padchar-1.0 {PadCenter supports a custom pad character} -body {
+    # Arrange
+    set input "ab"
+
+    # Act
+    set result [::utils::string::PadCenter $input 5 "."]
+
+    # Assert
+    return $result
+} -result "..ab."
+
+
+test string-PadCenter-shorter-or-equal-1.0 {PadCenter returns the original string when target length is shorter or equal} -body {
+    # Arrange
+    set input "abcd"
+
+    # Act
+    set shorter [::utils::string::PadCenter $input 3]
+    set equal [::utils::string::PadCenter $input 4]
+
+    # Assert
+    list $shorter $equal
+} -result {abcd abcd}
+
+
+cleanupTests

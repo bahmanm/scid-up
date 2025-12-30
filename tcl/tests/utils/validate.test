@@ -1,0 +1,407 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+namespace eval ::utils::validate {}
+namespace eval ::validate {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils validate.tcl]
+
+namespace eval ::validate_test {
+    variable stubbedCommands {}
+
+    variable bellCalls {}
+}
+
+proc ::validate_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::validate_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::validate_test::setup {} {
+    ::validate_test::restoreStubs
+
+    # Arrange
+    set ::validate_test::bellCalls {}
+
+    ::validate_test::stubCommand bell {} {
+        lappend ::validate_test::bellCalls bell
+        return
+    }
+
+    ::validate_test::stubCommand sc_info {subcmd args} {
+        switch -- $subcmd {
+            validDate {
+                set value [lindex $args 0]
+                # Treat a small set as valid for deterministic tests.
+                expr {$value in {"" "2020.01.01" "1999.12.31"}}
+            }
+            default {
+                return ""
+            }
+        }
+    }
+}
+
+proc ::validate_test::cleanup {} {
+    ::validate_test::restoreStubs
+
+    unset -nocomplain ::x
+    unset -nocomplain ::x_old
+
+    unset -nocomplain ::arr
+    unset -nocomplain ::arr_old
+
+    unset -nocomplain ::dateVar
+    unset -nocomplain ::dateVar_old
+
+    unset -nocomplain ::resVar
+    unset -nocomplain ::resVar_old
+
+    unset -nocomplain ::alphaVar
+    unset -nocomplain ::alphaVar_old
+
+    unset -nocomplain ::reVar
+    unset -nocomplain ::reVar_old
+}
+
+# ---- Tests ----
+
+test validate-integer-empty-and-signs-1.0 {::validate::integer allows empty and "+"; and allows "-" when no minimum is enforced} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set emptyOk [::validate::integer ""]
+    set plusOk [::validate::integer "+"]
+    set minusOk [::validate::integer "-"]
+
+    # Assert
+    list $emptyOk $plusOk $minusOk
+} -cleanup {
+    ::validate_test::cleanup
+} -result {1 1 1}
+
+
+test validate-integer-max-blocks-1.0 {::validate::integer blocks values above max} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set ok [::validate::integer 5 "" 5]
+    set tooBig [::validate::integer 6 "" 5]
+
+    # Assert
+    list $ok $tooBig
+} -cleanup {
+    ::validate_test::cleanup
+} -result {1 0}
+
+
+test validate-integer-min-negative-clamps-1.0 {::validate::integer blocks values below a negative min} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set ok [::validate::integer -9 -10 ""]
+    set tooSmall [::validate::integer -20 -10 ""]
+
+    # Assert
+    list $ok $tooSmall
+} -cleanup {
+    ::validate_test::cleanup
+} -result {1 0}
+
+
+test validate-integer-nonnumeric-with-bounds-1.0 {::validate::integer rejects non-numeric intermediate input without error when bounds are provided} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set code [catch {::validate::integer "2a" 0 10} res]
+
+    # Assert
+    list $code $res
+} -cleanup {
+    ::validate_test::cleanup
+} -result {0 0}
+
+
+test utils-validate-Integer-accepts-and-stores-old-1.0 {::utils::validate::Integer accepts valid input and updates the old value} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set x 3
+
+    # Act
+    ::utils::validate::Integer 10 0 x "" write
+
+    # Assert
+    list $x $x_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {3 3 {}}
+
+
+test utils-validate-Integer-rejects-non-digit-1.0 {::utils::validate::Integer rejects non-numeric input and rings bell} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set x_old 2
+    set x "2a"
+
+    # Act
+    ::utils::validate::Integer 10 0 x "" write
+
+    # Assert
+    list $x $x_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {2 2 bell}
+
+
+test utils-validate-Integer-rejects-too-large-1.0 {::utils::validate::Integer rejects values above maxValue and rings bell} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set x_old 2
+    set x 11
+
+    # Act
+    ::utils::validate::Integer 10 0 x "" write
+
+    # Assert
+    list $x $x_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {2 2 bell}
+
+
+test utils-validate-Integer-allows-question-marks-1.0 {::utils::validate::Integer accepts "?" placeholders when enabled} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set x "???"
+
+    # Act
+    ::utils::validate::Integer 10 1 x "" write
+
+    # Assert
+    list $x $x_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {??? ??? {}}
+
+
+test utils-validate-Integer-array-element-1.0 {::utils::validate::Integer supports validating array elements} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set arr_old(0) 7
+    set arr(0) 12
+
+    # Act
+    ::utils::validate::Integer 10 0 arr 0 write
+
+    # Assert
+    list $arr(0) $arr_old(0) $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {7 7 bell}
+
+
+test utils-validate-Date-valid-1.0 {::utils::validate::Date accepts a valid date and updates the old value} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set dateVar "2020.01.01"
+
+    # Act
+    ::utils::validate::Date dateVar "" write
+
+    # Assert
+    list $dateVar $dateVar_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {2020.01.01 2020.01.01 {}}
+
+
+test utils-validate-Date-invalid-reverts-1.0 {::utils::validate::Date rejects an invalid date by reverting and ringing bell} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set dateVar_old "1999.12.31"
+    set dateVar "nope"
+
+    # Act
+    ::utils::validate::Date dateVar "" write
+
+    # Assert
+    list $dateVar $dateVar_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {1999.12.31 1999.12.31 bell}
+
+
+test utils-validate-Result-valid-1.0 {::utils::validate::Result accepts standard result tokens} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set resVar "="
+
+    # Act
+    ::utils::validate::Result resVar "" write
+
+    # Assert
+    list $resVar $resVar_old
+} -cleanup {
+    ::validate_test::cleanup
+} -result {= =}
+
+
+test utils-validate-Result-invalid-reverts-1.0 {::utils::validate::Result rejects invalid tokens} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set resVar_old "1"
+    set resVar "|"
+
+    # Act
+    ::utils::validate::Result resVar "" write
+
+    # Assert
+    list $resVar $resVar_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {1 1 bell}
+
+
+test utils-validate-Result-rejects-backslash-1.0 {::utils::validate::Result rejects a literal backslash} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set resVar_old "1"
+    set resVar "\\"
+
+    # Act
+    ::utils::validate::Result resVar "" write
+
+    # Assert
+    list $resVar $resVar_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {1 1 bell}
+
+
+test utils-validate-Alpha-valid-1.0 {::utils::validate::Alpha accepts letters only} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set alphaVar "Abc"
+
+    # Act
+    ::utils::validate::Alpha alphaVar "" write
+
+    # Assert
+    list $alphaVar $alphaVar_old
+} -cleanup {
+    ::validate_test::cleanup
+} -result {Abc Abc}
+
+
+test utils-validate-Alpha-invalid-reverts-1.0 {::utils::validate::Alpha rejects non-letters} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set alphaVar_old "Abc"
+    set alphaVar "Ab1"
+
+    # Act
+    ::utils::validate::Alpha alphaVar "" write
+
+    # Assert
+    list $alphaVar $alphaVar_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {Abc Abc bell}
+
+
+test utils-validate-Regexp-valid-1.0 {::utils::validate::Regexp accepts values matching the expression} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set reVar "a"
+
+    # Act
+    ::utils::validate::Regexp {^[a-h]$} reVar "" write
+
+    # Assert
+    list $reVar $reVar_old
+} -cleanup {
+    ::validate_test::cleanup
+} -result {a a}
+
+
+test utils-validate-Regexp-invalid-reverts-1.0 {::utils::validate::Regexp rejects values not matching the expression} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set reVar_old "a"
+    set reVar "z"
+
+    # Act
+    ::utils::validate::Regexp {^[a-h]$} reVar "" write
+
+    # Assert
+    list $reVar $reVar_old $::validate_test::bellCalls
+} -cleanup {
+    ::validate_test::cleanup
+} -result {a a bell}
+
+
+test utils-validate-roundScale-1.0 {roundScale rounds down to the nearest multiple of tickinterval} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set ::v 0
+
+    # Act
+    ::utils::validate::roundScale ::v 5 12
+
+    # Assert
+    return $::v
+} -cleanup {
+    ::validate_test::cleanup
+} -result 10
+
+
+test utils-validate-floatScale-1.0 {floatScale rounds to 1 decimal using the tickinterval} -setup {
+    ::validate_test::setup
+} -body {
+    # Arrange
+    set ::v 0
+
+    # Act
+    ::utils::validate::floatScale ::v 0.1 5
+
+    # Assert
+    return $::v
+} -cleanup {
+    ::validate_test::cleanup
+} -result 5.0
+
+
+cleanupTests

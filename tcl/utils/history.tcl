@@ -18,11 +18,34 @@ if {! [info exists ::utils::history::listData]} {
 catch {source [scidConfigFile history]}
 
 
+################################################################################
+# ::utils::history::SetList
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+#   - list (list): Entries to store.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::history::listData($key)`.
+################################################################################
 proc ::utils::history::SetList {key list} {
   set ::utils::history::listData($key) $list
 }
 
 
+################################################################################
+# ::utils::history::GetList
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+# Returns:
+#   - (list): Stored entries for `key`, or `{}` when unset.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::history::GetList {key} {
   variable listData
   if {[info exists listData($key)]} {
@@ -32,12 +55,22 @@ proc ::utils::history::GetList {key} {
 }
 
 
-#  ::utils::history::AddEntry
-#
-#   Inserts an entry at the top of the list of the specified key and
-#   ensures that only one copy of the entry exists in the list.
-#   The list is then pruned to the limit size is necessary.
-#
+################################################################################
+# ::utils::history::AddEntry
+#   Adds an entry to the front of a history list (deduped and pruned).
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+#   - entry (string): Entry to add (ignored when empty).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::history::listData($key)`.
+#   - Calls `::utils::history::PruneList` when updating an existing list.
+#   - Calls `::utils::history::RefillCombobox`.
+#   - If a combobox widget is registered and exists, selects index 0.
+################################################################################
 proc ::utils::history::AddEntry {key entry} {
   variable listData
   # We do not add the empty string to a history list:
@@ -71,12 +104,37 @@ proc ::utils::history::AddEntry {key entry} {
 }
 
 
+################################################################################
+# ::utils::history::SetLimit
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+#   - length (int): Maximum number of entries to keep.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::history::listLength($key)`.
+#   - Calls `::utils::history::PruneList`.
+################################################################################
 proc ::utils::history::SetLimit {key length} {
   set ::utils::history::listLength($key) $length
   ::utils::history::PruneList $key
 }
 
 
+################################################################################
+# ::utils::history::GetLimit
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+# Returns:
+#   - (int): Maximum length for the list (`listLength($key)` or
+#     `defaultListLength`).
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::history::GetLimit {key} {
   variable listLength
   variable defaultListLength
@@ -87,6 +145,21 @@ proc ::utils::history::GetLimit {key} {
 }
 
 
+################################################################################
+# ::utils::history::PruneList
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+#   - length (int, optional): Maximum entries to keep. When negative (default),
+#     uses `::utils::history::GetLimit $key`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::history::listData($key)`.
+# Notes:
+#   - `length == 0` currently does not prune the list (due to `lrange 0 -1`).
+################################################################################
 proc ::utils::history::PruneList {key {length -1}} {
   variable listData
   if {! [info exists listData($key)]} { return }
@@ -98,10 +171,17 @@ proc ::utils::history::PruneList {key {length -1}} {
 
 
 
-# ::utils::history::SetCombobox
-#
-#   Returns the combobox widget associated with this history key.
-#
+################################################################################
+# ::utils::history::GetCombobox
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+# Returns:
+#   - (string): Registered combobox widget path, or `""` when none.
+# Side effects:
+#   - None.
+################################################################################
 proc ::utils::history::GetCombobox {key} {
   variable comboboxWidget
   if {[info exists comboboxWidget($key)]} {
@@ -111,24 +191,40 @@ proc ::utils::history::GetCombobox {key} {
 }
 
 
+################################################################################
 # ::utils::history::SetCombobox
-#
-#   Associates the specified widget (which must be a megawidget created
-#   with ::combobox::combobox, see contrib/combobox.tcl) with the specific
-#   history key. Whenever the list for this history key is modified, the
-#   combobox widget will be updated.
-#
+#   Associates a combobox widget with a history key.
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+#   - cbWidget (string): Combobox widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::history::comboboxWidget($key)`.
+#   - Calls `::utils::history::RefillCombobox`.
+################################################################################
 proc ::utils::history::SetCombobox {key cbWidget} {
   set ::utils::history::comboboxWidget($key) $cbWidget
   RefillCombobox $key
 }
 
 
-# ::utils::history::SetCombobox
-#
-#   Refills the history list of the combobox associated with the specified
-#   history key, if there is one.
-#
+################################################################################
+# ::utils::history::RefillCombobox
+#   Repopulates the associated combobox’s values from the current history list.
+# Visibility:
+#   Public.
+# Inputs:
+#   - key (string): History list key.
+# Returns:
+#   - None.
+# Side effects:
+#   - If a combobox is registered and exists, updates it via:
+#     - `$cbWidget delete 0 end`
+#     - `$cbWidget configure -values <entries>`
+################################################################################
 proc ::utils::history::RefillCombobox {key} {
   variable comboboxWidget
   
@@ -145,10 +241,22 @@ proc ::utils::history::RefillCombobox {key} {
 }
 
 
+################################################################################
 # ::utils::history::Save
-#   Saves the combobox history file, reporting any error in a message box
-#   if reportError is true.
-#
+#   Persists history lists to `[scidConfigFile history]`.
+# Visibility:
+#   Public.
+# Inputs:
+#   - reportError (bool/int, optional): When true, shows a warning message box
+#     if the history file cannot be opened for writing.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes `[scidConfigFile history]`.
+#   - May show a `tk_messageBox` warning when opening the file fails.
+# Notes:
+#   - This proc does not currently catch/report failures from `puts` or `close`.
+################################################################################
 proc ::utils::history::Save {{reportError 0}} {
   variable listData
   

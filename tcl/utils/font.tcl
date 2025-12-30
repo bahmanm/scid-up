@@ -5,10 +5,26 @@
 # at codearchive.com (I don't think there was an author listed for it) and
 # simplified it for use with Scid.
 
-# FontDialog:
-#   Creates a font dialog to select a font.
-#   Returns 1 if user chose a font, 0 otherwise.
-#
+################################################################################
+# FontDialog
+#   Shows a font selection dialog and previews changes on the given Tk font.
+# Visibility:
+#   Public.
+# Inputs:
+#   - font_name (string): Tk font name to preview/configure.
+#   - options (list, optional): When a 4-item list `{family size weight slant}`,
+#     uses these as the initial values instead of `font actual`.
+#   - fixedOnly (bool/int, optional): When true, limits the family list to fixed-
+#     width fonts.
+# Returns:
+#   - (list): `{family size weight slant}` when the user confirms.
+#   - (string): `""` when cancelled (or when the dialog already exists).
+# Side effects:
+#   - Creates and destroys the `.fontdialog` toplevel.
+#   - Updates global variables `fd_family`, `fd_style`, `fd_size`, `fd_close`.
+#   - Configures `font_name` during preview; restores it on cancel.
+#   - Calls `::updateFonts` to apply the changes.
+################################################################################
 proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   global fd_family fd_style fd_size fd_close
   global fd_strikeout fd_underline
@@ -189,6 +205,21 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
 }
 
 
+################################################################################
+# FontDialogFamily
+# Visibility:
+#   Internal.
+# Inputs:
+#   - listname (string): Treeview widget path containing font families.
+#   - font_name (string): Tk font name to preview/configure.
+#   - entrywidget (string): Entry widget path to update.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `entrywidget` with the selected family.
+#   - Calls `FontDialogRegen` to apply the selection.
+#   - Silently ignores errors (wrapped in `catch`).
+################################################################################
 proc FontDialogFamily { listname font_name entrywidget } {
   # Get selected text from list.
   catch {
@@ -205,6 +236,21 @@ proc FontDialogFamily { listname font_name entrywidget } {
 }
 
 
+################################################################################
+# FontDialogStyle
+# Visibility:
+#   Internal.
+# Inputs:
+#   - listname (string): Treeview widget path containing font styles.
+#   - font_name (string): Tk font name to preview/configure.
+#   - entrywidget (string): Entry widget path to update.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `entrywidget` with the selected style.
+#   - Calls `FontDialogRegen` to apply the selection.
+#   - Silently ignores errors (wrapped in `catch`).
+################################################################################
 proc FontDialogStyle { listname font_name entrywidget } {
   # Get selected text from list.
   catch {
@@ -221,6 +267,21 @@ proc FontDialogStyle { listname font_name entrywidget } {
 }
 
 
+################################################################################
+# FontDialogSize
+# Visibility:
+#   Internal.
+# Inputs:
+#   - listname (string): Treeview widget path containing font sizes.
+#   - font_name (string): Tk font name to preview/configure.
+#   - entrywidget (string): Entry widget path to update.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `entrywidget` with the selected size.
+#   - Calls `FontDialogRegen` to apply the selection.
+#   - Silently ignores errors (wrapped in `catch`).
+################################################################################
 proc FontDialogSize { listname font_name entrywidget } {
   # Get selected text from list.
   catch {
@@ -236,6 +297,18 @@ proc FontDialogSize { listname font_name entrywidget } {
   }
 }
 
+################################################################################
+# FontWeight
+# Visibility:
+#   Internal.
+# Inputs:
+#   - style (string): Font style (e.g. "Regular", "Bold", "Italic",
+#     "Bold Italic").
+# Returns:
+#   - (string): Tk weight name ("bold" or "normal").
+# Side effects:
+#   - None.
+################################################################################
 proc FontWeight {style} {
   if { $style == "Bold Italic" || $style == "Bold" } {
     return "bold"
@@ -243,6 +316,18 @@ proc FontWeight {style} {
   return "normal"
 }
 
+################################################################################
+# FontSlant
+# Visibility:
+#   Internal.
+# Inputs:
+#   - style (string): Font style (e.g. "Regular", "Bold", "Italic",
+#     "Bold Italic").
+# Returns:
+#   - (string): Tk slant name ("italic" or "roman").
+# Side effects:
+#   - None.
+################################################################################
 proc FontSlant {style} {
   if { $style == "Bold Italic" || $style == "Italic" } {
     return "italic"
@@ -250,7 +335,20 @@ proc FontSlant {style} {
   return "roman"
 }
 
-# FontDialogRegen: Regenerates font from attributes.
+################################################################################
+# FontDialogRegen
+#   Regenerates the preview font from the dialog’s current settings.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - font_name (string): Tk font name to preview/configure.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads globals `fd_family`, `fd_style`, `fd_size`.
+#   - Calls `font configure` on `font_name`.
+#   - Calls `::updateFonts` to apply the changes.
+################################################################################
 proc FontDialogRegen { font_name } {
   global fd_family fd_style fd_size
 

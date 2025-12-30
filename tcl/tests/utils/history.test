@@ -1,0 +1,364 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+namespace eval ::utils::history {}
+
+# Ensure the config file does not leak state across runs.
+catch {file delete -force [scidConfigFile history]}
+
+set ::scidVersion "test"
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils history.tcl]
+
+namespace eval ::history_test {
+    variable stubbedCommands {}
+
+    variable messageBoxCalls {}
+
+    # Widget paths that should be considered as existing by `winfo exists`.
+    variable existingWidgets {}
+
+    variable comboboxCalls
+    array set comboboxCalls {}
+}
+
+proc ::history_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::history_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::history_test::defineCombobox {path} {
+    variable comboboxCalls
+
+    if {[llength [info commands $path]]} {
+        error "Combobox command already exists: $path"
+    }
+
+    set comboboxCalls($path) {}
+    interp alias {} $path {} ::history_test::dispatchCombobox $path
+    return $path
+}
+
+proc ::history_test::dispatchCombobox {path subcmd args} {
+    variable comboboxCalls
+
+    lappend comboboxCalls($path) [list $subcmd {*}$args]
+
+    switch -- $subcmd {
+        delete -
+        configure -
+        current {
+            return
+        }
+        default {
+            error "Combobox $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::history_test::getComboboxCalls {path} {
+    variable comboboxCalls
+    if {![info exists comboboxCalls($path)]} {
+        return {}
+    }
+    return $comboboxCalls($path)
+}
+
+proc ::history_test::resetComboboxCalls {path} {
+    variable comboboxCalls
+    set comboboxCalls($path) {}
+}
+
+proc ::history_test::setup {} {
+    ::history_test::restoreStubs
+
+    # Arrange
+    set ::history_test::messageBoxCalls {}
+    set ::history_test::existingWidgets {}
+
+    # Keep history state deterministic per test.
+    set ::utils::history::defaultListLength 10
+    catch {array unset ::utils::history::listLength}
+    array set ::utils::history::listLength {}
+    catch {array unset ::utils::history::comboboxWidget}
+    array set ::utils::history::comboboxWidget {}
+    catch {array unset ::utils::history::listData}
+    array set ::utils::history::listData {}
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+
+    ::history_test::stubCommand tk_messageBox {args} {
+        set ::history_test::messageBoxCalls $args
+        if {[info exists ::scid_test::tk_messageBox_answer]} {
+            return $::scid_test::tk_messageBox_answer
+        }
+        return "ok"
+    }
+
+    ::history_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set path [lindex $args 0]
+                return [expr {[lsearch -exact $::history_test::existingWidgets $path] >= 0}]
+            }
+            default {
+                error "winfo $subcmd not stubbed in history tests"
+            }
+        }
+    }
+}
+
+proc ::history_test::cleanup {} {
+    ::history_test::restoreStubs
+
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+
+    foreach cmd [info commands .histcb*] {
+        catch {rename $cmd ""}
+    }
+
+    catch {file delete -force [scidConfigFile history]}
+    set ::history_test::existingWidgets {}
+}
+
+# ---- Tests ----
+
+test history-getList-missing-1.0 {GetList returns {} for unknown keys} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::history::GetList MissingKey
+
+    # Assert
+} -cleanup {
+    ::history_test::cleanup
+} -result {}
+
+
+test history-setList-getList-1.0 {SetList stores data retrievable by GetList} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+    set entries {Alice Bob}
+
+    # Act
+    ::utils::history::SetList $key $entries
+
+    # Assert
+    ::utils::history::GetList $key
+} -cleanup {
+    ::history_test::cleanup
+} -result {Alice Bob}
+
+
+test history-addEntry-ignores-empty-1.0 {AddEntry ignores empty entries} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+
+    # Act
+    ::utils::history::AddEntry $key ""
+
+    # Assert
+    expr {[llength [::utils::history::GetList $key]] == 0}
+} -cleanup {
+    ::history_test::cleanup
+} -result 1
+
+
+test history-addEntry-new-updates-combobox-1.0 {AddEntry inserts at head and updates combobox values/current} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+    set cb .histcb1
+    ::history_test::defineCombobox $cb
+
+    lappend ::history_test::existingWidgets $cb
+
+    ::utils::history::SetCombobox $key $cb
+    ::history_test::resetComboboxCalls $cb
+
+    # Act
+    ::utils::history::AddEntry $key Alice
+
+    # Assert
+    list [::utils::history::GetList $key] [::history_test::getComboboxCalls $cb]
+} -cleanup {
+    ::history_test::cleanup
+} -result {Alice {{delete 0 end} {configure -values Alice} {current 0}}}
+
+
+test history-addEntry-duplicate-at-head-noop-1.0 {AddEntry is a no-op when entry is already at head} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+    set cb .histcb2
+    ::history_test::defineCombobox $cb
+    lappend ::history_test::existingWidgets $cb
+
+    ::utils::history::SetCombobox $key $cb
+    ::utils::history::SetList $key {Alice Bob}
+    ::history_test::resetComboboxCalls $cb
+
+    # Act
+    ::utils::history::AddEntry $key Alice
+
+    # Assert
+    list [::utils::history::GetList $key] [::history_test::getComboboxCalls $cb]
+} -cleanup {
+    ::history_test::cleanup
+} -result {{Alice Bob} {}}
+
+
+test history-addEntry-dedupes-middle-1.0 {AddEntry removes an existing entry and re-inserts at head} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+    ::utils::history::SetList $key {Alice Bob Carol}
+
+    # Act
+    ::utils::history::AddEntry $key Bob
+
+    # Assert
+    ::utils::history::GetList $key
+} -cleanup {
+    ::history_test::cleanup
+} -result {Bob Alice Carol}
+
+
+test history-addEntry-prunes-to-limit-1.0 {AddEntry prunes the list to the configured limit} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+    ::utils::history::SetLimit $key 2
+    ::utils::history::SetList $key {Alice Bob}
+
+    # Act
+    ::utils::history::AddEntry $key Carol
+
+    # Assert
+    ::utils::history::GetList $key
+} -cleanup {
+    ::history_test::cleanup
+} -result {Carol Alice}
+
+
+test history-getLimit-default-1.0 {GetLimit returns default when no key-specific limit exists} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set ::utils::history::defaultListLength 42
+
+    # Act
+    ::utils::history::GetLimit Player
+
+    # Assert
+} -cleanup {
+    ::history_test::cleanup
+} -result 42
+
+
+test history-setLimit-prunes-existing-1.0 {SetLimit prunes an existing list} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+    ::utils::history::SetList $key {A B C}
+
+    # Act
+    ::utils::history::SetLimit $key 2
+
+    # Assert
+    list [::utils::history::GetLimit $key] [::utils::history::GetList $key]
+} -cleanup {
+    ::history_test::cleanup
+} -result {2 {A B}}
+
+
+test history-refillCombobox-nonexistent-widget-noop-1.0 {RefillCombobox is a no-op when the combobox does not exist} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set key Player
+    set cb .histcb3
+    ::utils::history::SetCombobox $key $cb
+
+    # Act
+    ::utils::history::AddEntry $key Alice
+
+    # Assert
+    # No error is success; the list is updated.
+    ::utils::history::GetList $key
+} -cleanup {
+    ::history_test::cleanup
+} -result {Alice}
+
+
+test history-save-writes-file-1.0 {Save writes listData to [scidConfigFile history]} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    ::utils::history::SetList Player {Alice Bob}
+    ::utils::history::SetList Event {Wijk aan Zee}
+
+    # Act
+    ::utils::history::Save 0
+
+    # Assert
+    set filename [scidConfigFile history]
+    set f [open $filename r]
+    set content [read $f]
+    close $f
+
+    list \
+        [string match {*# Scid test combobox history lists*} $content] \
+        [regexp {set ::utils::history::listData\(Event\) \{Wijk aan Zee\}} $content] \
+        [regexp {set ::utils::history::listData\(Player\) \{Alice Bob\}} $content]
+} -cleanup {
+    ::history_test::cleanup
+} -result {1 1 1}
+
+
+test history-save-open-fails-shows-message-1.0 {Save reports an error when it cannot open the history file for writing} -setup {
+    ::history_test::setup
+} -body {
+    # Arrange
+    set filename [scidConfigFile history]
+    catch {file delete -force $filename}
+    file mkdir $filename
+
+    # Act
+    ::utils::history::Save 1
+
+    # Assert
+    set msgIdx [lsearch -exact $::history_test::messageBoxCalls -message]
+    set msg ""
+    if {$msgIdx != -1 && ($msgIdx + 1) < [llength $::history_test::messageBoxCalls]} {
+        set msg [lindex $::history_test::messageBoxCalls [expr {$msgIdx + 1}]]
+    }
+    list [expr {$msgIdx != -1}] [string match "Unable to write file: $filename*" $msg]
+} -cleanup {
+    catch {file delete -force [scidConfigFile history]}
+    ::history_test::cleanup
+} -result {1 1}
+
+
+cleanupTests

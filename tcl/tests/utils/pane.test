@@ -1,0 +1,199 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+namespace eval ::utils::pane {}
+namespace eval ::ttk {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils pane.tcl]
+
+namespace eval ::pane_test {
+    variable stubbedCommands {}
+
+    variable frameCalls {}
+    variable placeCalls {}
+    variable bindCalls {}
+
+    variable winfoValues
+    array set winfoValues {}
+}
+
+proc ::pane_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::pane_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::pane_test::setup {} {
+    ::pane_test::restoreStubs
+
+    # Arrange
+    set ::pane_test::frameCalls {}
+    set ::pane_test::placeCalls {}
+    set ::pane_test::bindCalls {}
+
+    catch {array unset ::pane_test::winfoValues}
+    array set ::pane_test::winfoValues {}
+
+    catch {array unset ::utils::pane::_data}
+    array set ::utils::pane::_data {}
+
+    ::pane_test::stubCommand ::ttk::frame {path args} {
+        lappend ::pane_test::frameCalls [list $path {*}$args]
+        return $path
+    }
+
+    ::pane_test::stubCommand place {path args} {
+        lappend ::pane_test::placeCalls [list $path {*}$args]
+        return
+    }
+
+    ::pane_test::stubCommand bind {path sequence script} {
+        lappend ::pane_test::bindCalls [list $path $sequence $script]
+        return
+    }
+
+    ::pane_test::stubCommand winfo {subcmd path} {
+        set key "$subcmd,$path"
+        if {![info exists ::pane_test::winfoValues($key)]} {
+            error "winfo $subcmd $path not stubbed in pane tests"
+        }
+        return $::pane_test::winfoValues($key)
+    }
+}
+
+proc ::pane_test::cleanup {} {
+    ::pane_test::restoreStubs
+
+    catch {array unset ::pane_test::winfoValues}
+    array set ::pane_test::winfoValues {}
+
+    catch {array unset ::utils::pane::_data}
+    array set ::utils::pane::_data {}
+}
+
+proc ::pane_test::lastPlaceArgsFor {path} {
+    set last {}
+    foreach call $::pane_test::placeCalls {
+        if {[lindex $call 0] eq $path} {
+            set last $call
+        }
+    }
+    return $last
+}
+
+# ---- Tests ----
+
+test pane-create-vertical-1.0 {Create initialises vertical pane metadata and places children} -setup {
+    ::pane_test::setup
+} -body {
+    # Arrange
+    set win .p
+
+    # Act
+    ::utils::pane::Create $win one two 100 200 0.6 vert
+
+    # Assert
+    list \
+        $::utils::pane::_data($win,1) \
+        $::utils::pane::_data($win,2) \
+        $::utils::pane::_data($win,vertical) \
+        $::utils::pane::_data($win,drag) \
+        $::utils::pane::_data($win,min) \
+        $::utils::pane::_data($win,max) \
+        [::pane_test::lastPlaceArgsFor $win.pane_sash] \
+        [::pane_test::lastPlaceArgsFor $win.pane_grip] \
+        [::pane_test::lastPlaceArgsFor $win.one] \
+        [::pane_test::lastPlaceArgsFor $win.two]
+} -cleanup {
+    ::pane_test::cleanup
+} -result {one two 1 1 0.1 0.9 {.p.pane_sash -rely 0.6} {.p.pane_grip -rely 0.6} {.p.one -relheight 0.6} {.p.two -relheight 0.4}}
+
+
+test pane-create-horizontal-1.0 {Create initialises horizontal pane metadata and places children} -setup {
+    ::pane_test::setup
+} -body {
+    # Arrange
+    set win .p
+
+    # Act
+    ::utils::pane::Create $win left right 100 200 0.25 horizontal
+
+    # Assert
+    list \
+        $::utils::pane::_data($win,vertical) \
+        [::pane_test::lastPlaceArgsFor $win.pane_sash] \
+        [::pane_test::lastPlaceArgsFor $win.pane_grip] \
+        [::pane_test::lastPlaceArgsFor $win.left] \
+        [::pane_test::lastPlaceArgsFor $win.right]
+} -cleanup {
+    ::pane_test::cleanup
+} -result {0 {.p.pane_sash -relx 0.25} {.p.pane_grip -relx 0.25} {.p.left -relwidth 0.25} {.p.right -relwidth 0.75}}
+
+
+test pane-drag-clamps-to-range-1.0 {Drag clamps to min/max (vertical) and calls Divide when drag is enabled} -setup {
+    ::pane_test::setup
+} -body {
+    # Arrange
+    set win .p
+    ::utils::pane::Create $win one two 100 200 0.5 vert
+
+    set ::pane_test::placeCalls {}
+
+    set ::pane_test::winfoValues(rooty,$win) 0
+    set ::pane_test::winfoValues(height,$win) 100
+
+    ::utils::pane::SetRange $win 0.2 0.8
+
+    # Act
+    set frac [::utils::pane::Drag $win 10]
+
+    # Assert
+    list $frac [::pane_test::lastPlaceArgsFor $win.pane_sash] [::pane_test::lastPlaceArgsFor $win.one]
+} -cleanup {
+    ::pane_test::cleanup
+} -result {0.2 {.p.pane_sash -rely 0.2} {.p.one -relheight 0.2}}
+
+
+test pane-drag-disabled-only-moves-sash-1.0 {Drag moves only sash/grip when drag is disabled (vertical)} -setup {
+    ::pane_test::setup
+} -body {
+    # Arrange
+    set win .p
+    ::utils::pane::Create $win one two 100 200 0.5 vert
+
+    set ::pane_test::placeCalls {}
+
+    set ::pane_test::winfoValues(rooty,$win) 0
+    set ::pane_test::winfoValues(height,$win) 100
+
+    ::utils::pane::SetRange $win 0.1 0.9
+    ::utils::pane::SetDrag $win 0
+
+    # Act
+    set frac [::utils::pane::Drag $win 80]
+
+    # Assert
+    set placedPaths {}
+    foreach call $::pane_test::placeCalls {
+        lappend placedPaths [lindex $call 0]
+    }
+
+    list $frac \
+        [lsort -unique $placedPaths] \
+        [::pane_test::lastPlaceArgsFor $win.pane_sash] \
+        [::pane_test::lastPlaceArgsFor $win.pane_grip]
+} -cleanup {
+    ::pane_test::cleanup
+} -result {0.8 {.p.pane_grip .p.pane_sash} {.p.pane_sash -rely 0.8} {.p.pane_grip -rely 0.8}}
+
+
+cleanupTests
