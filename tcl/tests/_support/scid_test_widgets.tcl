@@ -39,6 +39,9 @@ namespace eval ::scid_test::widgets {
 
 	# Store `yview` calls per widget, indexed by ($path).
 	array set yviewCalls {}
+
+	# Store `index` calls per widget, indexed by ($path).
+	array set indexCalls {}
 }
 
 # Resets all widget doubles created via this helper.
@@ -55,6 +58,7 @@ proc ::scid_test::widgets::reset {} {
     variable tagNextRangeResults
     variable seeCalls
     variable yviewCalls
+    variable indexCalls
 
     foreach w $created {
         catch {rename $w ""}
@@ -73,6 +77,7 @@ proc ::scid_test::widgets::reset {} {
     array unset tagNextRangeResults
     array unset seeCalls
     array unset yviewCalls
+    array unset indexCalls
 }
 
 # Defines a lightweight widget command double.
@@ -215,6 +220,7 @@ proc ::scid_test::widgets::dispatchText {path subcmd args} {
     variable tagNextRangeResults
     variable seeCalls
     variable yviewCalls
+    variable indexCalls
 
     switch -- $subcmd {
         see {
@@ -226,6 +232,21 @@ proc ::scid_test::widgets::dispatchText {path subcmd args} {
             # yview moveto <fraction>
             lappend yviewCalls($path) [list {*}$args]
             return
+        }
+        index {
+            # index <index>
+            set index [lindex $args 0]
+            lappend indexCalls($path) $index
+
+            if {$index eq "end"} {
+                set content [::scid_test::widgets::getText $path]
+                set lines [expr {[llength [split $content "\n"]]}]
+                # `end` is one line past the last line's final character.
+                return "[expr {$lines + 1}].0"
+            }
+
+            # Return the index unchanged for simple cases.
+            return $index
         }
         tag {
             # Continue below.
@@ -371,6 +392,14 @@ proc ::scid_test::widgets::getYviewCalls {path} {
         return {}
     }
     return $yviewCalls($path)
+}
+
+proc ::scid_test::widgets::getIndexCalls {path} {
+    variable indexCalls
+    if {![info exists indexCalls($path)]} {
+        return {}
+    }
+    return $indexCalls($path)
 }
 
 proc ::scid_test::widgets::getSteps {path} {
