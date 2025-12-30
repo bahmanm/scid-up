@@ -3885,7 +3885,7 @@ sc_game_tags_set (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
                     Tcl_Obj* list = Tcl_NewStringObj(value, -1);
                     Tcl_IncrRefCount(list);
 
-                    decltype(Tcl_GetCharLength(nullptr)) objc; // size type changed with Tcl9
+                    decltype(Tcl_GetCharLength(nullptr)) objc; // size type changed (Tcl_Size)
                     Tcl_Obj** objv;
                     // Usage :: sc_game tags set -extra [ list "Annotator \"boob [sc_pos moveNumber]\"" ]
                     if (Tcl_ListObjGetElements(ti, list, &objc, &objv) != TCL_OK) {

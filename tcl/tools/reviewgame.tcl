@@ -612,6 +612,7 @@ proc ::reviewgame::sendToEngine {text} {
 #   - Cancels any pending `::reviewgame::stopAnalyze` timer.
 #   - If analysis is already active, sends UCI `exit` before restarting.
 #   - Schedules progress bar updates (`::reviewgame::updateProgressBar`).
+#     (`after` requires the delay to be an integer number of milliseconds.)
 #   - Updates `::analysis(fen$::reviewgame::engineSlot)`.
 #   - Sends UCI `position ...` and `go infinite` to the engine.
 #   - Schedules `::reviewgame::stopAnalyze` after `analysisTime` seconds.
@@ -621,8 +622,8 @@ proc ::reviewgame::startAnalyze { analysisTime { move "" } } {
   
   set pb $::reviewgame::window.finfo.pb
   set length [$pb cget -maximum]
-  set ::reviewgame::progressBarTimer  [expr ( $analysisTime * 1000 * $::reviewgame::progressBarStep ) / $length ]
-  after $::reviewgame::progressBarTimer ::reviewgame::updateProgressBar
+  set ::reviewgame::progressBarTimer [expr {max(1, int(($analysisTime * 1000.0 * $::reviewgame::progressBarStep) / $length))}]
+  after $::reviewgame::progressBarTimer [list ::reviewgame::updateProgressBar]
   
   # Check that the engine has not already had analyze mode started:
   if {$analysisEngine(analyzeMode)} {
@@ -644,7 +645,7 @@ proc ::reviewgame::startAnalyze { analysisTime { move "" } } {
   
   ::reviewgame::sendToEngine "position fen $::analysis(fen$engineSlot) $move"
   ::reviewgame::sendToEngine "go infinite"
-  after [expr 1000 * $analysisTime] "::reviewgame::stopAnalyze $move"
+  after [expr {int(1000.0 * $analysisTime)}] [list ::reviewgame::stopAnalyze $move]
 }
 ################################################################################
 # ::reviewgame::stopAnalyze
@@ -753,10 +754,11 @@ proc ::reviewgame::extendedTime {} {
 # Side effects:
 #   - Calls `$::reviewgame::window.finfo.pb step`.
 #   - Schedules itself via `after` using `::reviewgame::progressBarTimer`.
+#     (`after` requires the delay to be an integer number of milliseconds.)
 ################################################################################
 proc ::reviewgame::updateProgressBar {} {
   $::reviewgame::window.finfo.pb step $::reviewgame::progressBarStep
-  after $::reviewgame::progressBarTimer ::reviewgame::updateProgressBar
+  after $::reviewgame::progressBarTimer [list ::reviewgame::updateProgressBar]
 }
 ################################################################################
 # ::reviewgame::checkConsistency
