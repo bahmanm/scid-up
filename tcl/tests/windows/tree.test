@@ -1,0 +1,321 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::tree {}
+namespace eval ::tree::mask {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows tree.tcl]
+
+namespace eval ::tree_test {
+    variable stubbedCommands {}
+
+    variable refreshCalls 0
+}
+
+proc ::tree_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::tree_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::tree_test::setup {} {
+    ::tree_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::tree_test::refreshCalls 0
+
+    # Ensure deterministic thresholds for score highlighting tests.
+    set ::tree::scoreHighlight_MinGames 15
+    set ::tree::scoreHighlight_WhiteExpectedScoreBonus 3.8
+    set ::tree::scoreHighlight_Margin 3.0
+
+    # Reset mask state for each test.
+    catch {array unset ::tree::mask::mask}
+    catch {unset ::tree::mask::dirty}
+    catch {unset ::tree::mask::cacheFenIndex}
+
+    set ::tree::mask::defaultColor "White"
+    set ::tree::mask::emptyNag ""
+
+    # Default `sc_pos` stub state.
+    set ::scid_test::sc_pos_side "white"
+}
+
+proc ::tree_test::cleanup {} {
+    ::tree_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {array unset ::tree::mask::mask}
+    catch {unset ::tree::mask::dirty}
+    catch {unset ::tree::mask::cacheFenIndex}
+
+    catch {unset ::scid_test::sc_pos_side}
+}
+
+proc ::tree_test::makeTreeLine {ngames freq success eloavg perf} {
+    # Format a line matching the fixed-column parsing in ::tree::getLineValues.
+    return [format "1: e4     B00     %5d: %4.1f%%   %4.1f%%  %4d  %4d  2002   37%%" \
+        $ngames $freq $success $eloavg $perf]
+}
+
+# ---- Tests ----
+
+test tree-getLineValues-parses-fixed-columns-1.0 {getLineValues parses fixed-column output into numeric fields} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set line "1: e4     B00     37752: 47.1%   54.7%  2474  2513  2002   37%"
+
+    # Act
+    ::tree::getLineValues $line
+} -cleanup {
+    ::tree_test::cleanup
+} -result {37752 47.1 54.7 2474 2513}
+
+
+test tree-getLineValues-returns-empty-on-parse-failure-1.0 {getLineValues returns {} when the line cannot be parsed} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set line "not a tree line"
+
+    # Act
+    ::tree::getLineValues $line
+} -cleanup {
+    ::tree_test::cleanup
+} -result {}
+
+
+test tree-getLineValues-parses-ngames-spacing-edges-1.0 {getLineValues parses both small and large ngames values} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set lineSmall [::tree_test::makeTreeLine 9 1.2 53.8 2400 2450]
+    set lineLarge [::tree_test::makeTreeLine 99999 99.9 12.3 2800 2850]
+
+    # Act
+    set small [::tree::getLineValues $lineSmall]
+    set large [::tree::getLineValues $lineLarge]
+
+    # Assert
+    list $small $large
+} -cleanup {
+    ::tree_test::cleanup
+} -result {{9 1.2 53.8 2400 2450} {99999 99.9 12.3 2800 2850}}
+
+
+test tree-getColorScore-no-highlight-below-min-games-1.0 {getColorScore does not highlight when ngames is below the minimum} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set ::scid_test::sc_pos_side "white"
+    set line [::tree_test::makeTreeLine 10 10.0 60.0 2400 2500]
+
+    # Act
+    ::tree::getColorScore $line
+} -cleanup {
+    ::tree_test::cleanup
+} -result {}
+
+
+test tree-getColorScore-green-for-white-high-success-1.0 {getColorScore highlights green when White success is unusually high} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set ::scid_test::sc_pos_side "white"
+    set line [::tree_test::makeTreeLine 20 10.0 60.0 2400 2500]
+
+    # Act
+    ::tree::getColorScore $line
+} -cleanup {
+    ::tree_test::cleanup
+} -result {greenfg}
+
+
+test tree-getColorScore-red-for-white-low-success-1.0 {getColorScore highlights red when White success is unusually low} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set ::scid_test::sc_pos_side "white"
+    set line [::tree_test::makeTreeLine 20 10.0 40.0 2400 2500]
+
+    # Act
+    ::tree::getColorScore $line
+} -cleanup {
+    ::tree_test::cleanup
+} -result {redfg}
+
+
+test tree-getColorScore-green-for-black-low-white-success-1.0 {getColorScore highlights green when Black holds White success unusually low} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set ::scid_test::sc_pos_side "black"
+    set line [::tree_test::makeTreeLine 20 10.0 45.0 2400 2500]
+
+    # Act
+    ::tree::getColorScore $line
+} -cleanup {
+    ::tree_test::cleanup
+} -result {greenfg}
+
+
+test tree-getColorScore-red-for-black-high-white-success-1.0 {getColorScore highlights red when Black allows White success unusually high} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set ::scid_test::sc_pos_side "black"
+    set line [::tree_test::makeTreeLine 20 10.0 60.0 2400 2500]
+
+    # Act
+    ::tree::getColorScore $line
+} -cleanup {
+    ::tree_test::cleanup
+} -result {redfg}
+
+
+test tree-mask-toShortFen-drops-clocks-1.0 {toShortFen removes halfmove/fullmove counters from a FEN} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+    # Act
+    ::tree::mask::toShortFen $fen
+} -cleanup {
+    ::tree_test::cleanup
+} -result {rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -}
+
+
+test tree-mask-trimToFirstLine-returns-first-line-1.0 {trimToFirstLine returns only the first line of a multi-line string} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set s "first\nsecond\nthird"
+
+    # Act
+    ::tree::mask::trimToFirstLine $s
+} -cleanup {
+    ::tree_test::cleanup
+} -result {first}
+
+
+test tree-mask-moveExists-rejects-end-sentinel-1.0 {moveExists returns 0 for the [end] sentinel} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set fenKey "fen"
+    set ::tree::mask::cacheFenIndex $fenKey
+    array set ::tree::mask::mask [list $fenKey [list {} {}]]
+
+    # Act
+    ::tree::mask::moveExists {[end]}
+} -cleanup {
+    ::tree_test::cleanup
+} -result {0}
+
+
+test tree-mask-moveExists-detects-present-move-1.0 {moveExists returns 1 when the move exists for the current position} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set fenKey "fen"
+    set ::tree::mask::cacheFenIndex $fenKey
+    array set ::tree::mask::mask [list $fenKey [list [list [list e4 {} $::tree::mask::defaultColor {} {} {}]] {}]]
+
+    # Act
+    ::tree::mask::moveExists e4
+} -cleanup {
+    ::tree_test::cleanup
+} -result {1}
+
+
+test tree-mask-addToMask-adds-move-and-triggers-refresh-1.0 {addToMask adds a move for the current position and refreshes the tree} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set fenKey [::tree::mask::toShortFen "8/8/8/8/8/8/8/8 w - - 0 1"]
+    set ::tree::mask::cacheFenIndex $fenKey
+
+    ::tree_test::stubCommand ::tree::refresh {args} {
+        incr ::tree_test::refreshCalls
+        return
+    }
+
+    # Act
+    ::tree::mask::addToMask e4
+
+    # Assert
+    set pos $::tree::mask::mask($fenKey)
+    set moves [lindex $pos 0]
+    list \
+        $::tree_test::refreshCalls \
+        $::tree::mask::dirty \
+        [llength $moves] \
+        [lindex [lindex $moves 0] 0] \
+        [lindex [lindex $moves 0] 2]
+} -cleanup {
+    ::tree_test::cleanup
+} -result {1 1 1 e4 White}
+
+
+test tree-mask-removeFromMask-unsets-empty-position-1.0 {removeFromMask unsets a position when it becomes empty} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set fenKey [::tree::mask::toShortFen "8/8/8/8/8/8/8/8 w - - 0 1"]
+    set ::tree::mask::cacheFenIndex $fenKey
+    array set ::tree::mask::mask [list $fenKey [list [list [list e4 {} $::tree::mask::defaultColor {} {} {}]] ""]]
+
+    ::tree_test::stubCommand ::tree::refresh {args} {
+        incr ::tree_test::refreshCalls
+        return
+    }
+
+    # Act
+    ::tree::mask::removeFromMask e4
+
+    # Assert
+    list \
+        $::tree_test::refreshCalls \
+        [info exists ::tree::mask::mask($fenKey)]
+} -cleanup {
+    ::tree_test::cleanup
+} -result {1 0}
+
+
+test tree-mask-removeFromMask-keeps-position-with-comment-1.0 {removeFromMask keeps a position when a position comment remains} -setup {
+    ::tree_test::setup
+} -body {
+    # Arrange
+    set fenKey [::tree::mask::toShortFen "8/8/8/8/8/8/8/8 w - - 0 1"]
+    set ::tree::mask::cacheFenIndex $fenKey
+    array set ::tree::mask::mask [list $fenKey [list [list [list e4 {} $::tree::mask::defaultColor {} {} {}]] "pos-comment"]]
+
+    ::tree_test::stubCommand ::tree::refresh {args} {
+        incr ::tree_test::refreshCalls
+        return
+    }
+
+    # Act
+    ::tree::mask::removeFromMask e4
+
+    # Assert
+    list \
+        $::tree_test::refreshCalls \
+        [info exists ::tree::mask::mask($fenKey)] \
+        [lindex $::tree::mask::mask($fenKey) 1]
+} -cleanup {
+    ::tree_test::cleanup
+} -result {1 1 pos-comment}
+
+
+cleanupTests
