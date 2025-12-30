@@ -1,0 +1,500 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::tourney {}
+namespace eval ::utils {}
+namespace eval ::utils::date {}
+namespace eval ::utils::history {}
+namespace eval ::utils::string {}
+namespace eval ::utils::validate {}
+namespace eval ::game {}
+namespace eval ::crosstab {}
+namespace eval ::ERROR {}
+
+# `tourney.tcl` registers variable traces at load time; ensure the referenced
+# validation commands exist under `tclsh`.
+if {![llength [info commands ::utils::validate::Date]]} {
+    proc ::utils::validate::Date {args} { return }
+}
+if {![llength [info commands ::utils::validate::Integer]]} {
+    proc ::utils::validate::Integer {args} { return }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows tourney.tcl]
+
+namespace eval ::tourney_test {
+    variable stubbedCommands {}
+
+    variable destroyCalls {}
+    variable openCalls 0
+    variable tkMessageBoxCalls {}
+    variable updateBoardCalls {}
+    variable updateTitleCalls 0
+    variable crosstabCalls 0
+    variable historyCalls {}
+    variable busyCursorCalls {}
+    variable unbusyCursorCalls {}
+    variable scBaseCalls {}
+    variable scFilterCalls {}
+    variable errorMessageBoxCalls 0
+}
+
+proc ::tourney_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::tourney_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::tourney_test::setup {} {
+    ::tourney_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::tourney_test::destroyCalls {}
+    set ::tourney_test::openCalls 0
+    set ::tourney_test::tkMessageBoxCalls {}
+    set ::tourney_test::updateBoardCalls {}
+    set ::tourney_test::updateTitleCalls 0
+    set ::tourney_test::crosstabCalls 0
+    set ::tourney_test::historyCalls {}
+    set ::tourney_test::busyCursorCalls {}
+    set ::tourney_test::unbusyCursorCalls {}
+    set ::tourney_test::scBaseCalls {}
+    set ::tourney_test::scFilterCalls {}
+    set ::tourney_test::errorMessageBoxCalls 0
+
+    if {![info exists ::tr]} { array set ::tr {} }
+    array set ::tr {
+        TmtNone "No tournaments found"
+    }
+
+    if {![info exists ::MB3]} { set ::MB3 3 }
+
+    # Keep all tests deterministic by initialising the shared global state used
+    # by the module under test.
+    set ::tourney::start ""
+    set ::tourney::end ""
+    set ::tourney::minPlayers ""
+    set ::tourney::maxPlayers ""
+    set ::tourney::minGames ""
+    set ::tourney::maxGames ""
+    set ::tourney::minElo ""
+    set ::tourney::maxElo ""
+    set ::tourney::sort "Date"
+    set ::tourney::country ""
+    set ::tourney::site ""
+    set ::tourney::event ""
+    set ::tourney::player ""
+    set ::tourney::size 50
+
+    catch {unset ::tourney::_defaults}
+}
+
+proc ::tourney_test::cleanup {} {
+    ::tourney_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::curr_db}
+}
+
+# ---- Tests ----
+
+test tourney-defaults-resets-inputs-1.0 {defaults resets all user-input fields} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    set ::tourney::start "2020.01.01"
+    set ::tourney::end "2020.12.31"
+    set ::tourney::size 10
+    set ::tourney::minPlayers 4
+    set ::tourney::maxPlayers 8
+    set ::tourney::minGames 20
+    set ::tourney::maxGames 30
+    set ::tourney::minElo 1500
+    set ::tourney::maxElo 2600
+    set ::tourney::country "USA"
+    set ::tourney::site "London"
+    set ::tourney::event "Event"
+    set ::tourney::player "Player"
+
+    # Act
+    ::tourney::defaults
+
+    # Assert
+    list \
+        $::tourney::_defaults \
+        $::tourney::start \
+        $::tourney::end \
+        $::tourney::size \
+        $::tourney::minPlayers \
+        $::tourney::maxPlayers \
+        $::tourney::minGames \
+        $::tourney::maxGames \
+        $::tourney::minElo \
+        $::tourney::maxElo \
+        $::tourney::country \
+        $::tourney::site \
+        $::tourney::event \
+        $::tourney::player
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {1 {} {} 50 {} {} {} {} {} {} {} {} {} {}}
+
+
+test tourney-check-normalises-dates-and-country-1.0 {check normalises date and country fields} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    set ::tourney::start "2020"
+    set ::tourney::end "2020"
+    set ::tourney::country "  austria  "
+
+    # Act
+    ::tourney::check
+
+    # Assert
+    list $::tourney::start $::tourney::end $::tourney::country
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {2020.??.?? 2020.12.31 AUS}
+
+
+test tourney-check-clears-country-placeholder-1.0 {check clears the country placeholder "---"} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    set ::tourney::country "---"
+
+    # Act
+    ::tourney::check
+
+    # Assert
+    set ::tourney::country
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {}
+
+
+test tourney-check-swaps-invalid-min-max-ranges-1.0 {check swaps invalid min/max ranges when max is present} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    set ::tourney::minGames 10
+    set ::tourney::maxGames 5
+    set ::tourney::minElo 2000
+    set ::tourney::maxElo 1500
+    set ::tourney::minPlayers 20
+    set ::tourney::maxPlayers 2
+
+    # Act
+    ::tourney::check
+
+    # Assert
+    list \
+        $::tourney::minGames $::tourney::maxGames \
+        $::tourney::minElo $::tourney::maxElo \
+        $::tourney::minPlayers $::tourney::maxPlayers
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {5 10 1500 2000 2 20}
+
+
+test tourney-getSearchOptions-includes-conditional-options-1.0 {getSearchOptions includes only the configured search options} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    set ::tourney::size 100
+    set ::tourney::player "Carlsen"
+    set ::tourney::sort ""
+    set ::tourney::minPlayers 4
+    set ::tourney::maxPlayers ""
+    set ::tourney::minGames ""
+    set ::tourney::maxGames 12
+    set ::tourney::minElo 1800
+    set ::tourney::maxElo 2000
+
+    # Act
+    ::tourney::getSearchOptions
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {100 -player Carlsen -n_players {4 999} -n_games {1 12} -avgelo {1800 2000}}
+
+
+test tourney-toggle-destroys-existing-window-1.0 {toggle destroys the window when it is already open} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    ::tourney_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 1
+    }
+    ::tourney_test::stubCommand destroy {w} {
+        lappend ::tourney_test::destroyCalls $w
+        return
+    }
+    ::tourney_test::stubCommand ::tourney::Open {} {
+        incr ::tourney_test::openCalls
+        return
+    }
+
+    # Act
+    ::tourney::toggle
+
+    # Assert
+    list $::tourney_test::destroyCalls $::tourney_test::openCalls
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {.tourney 0}
+
+
+test tourney-toggle-opens-when-window-missing-1.0 {toggle opens the window when it is not open} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    ::tourney_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::tourney_test::stubCommand destroy {w} {
+        error "destroy should not be called when the window does not exist"
+    }
+    ::tourney_test::stubCommand ::tourney::Open {} {
+        incr ::tourney_test::openCalls
+        return
+    }
+
+    # Act
+    ::tourney::toggle
+
+    # Assert
+    set ::tourney_test::openCalls
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {1}
+
+
+test tourney-select-shows-message-box-on-load-error-1.0 {select shows a message box when loading the game fails} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    ::tourney_test::stubCommand ::game::Load {gnum} {
+        error "boom(load)"
+    }
+    ::tourney_test::stubCommand tk_messageBox {args} {
+        lappend ::tourney_test::tkMessageBoxCalls $args
+        return ok
+    }
+    ::tourney_test::stubCommand updateBoard {args} {
+        error "updateBoard should not run when game load fails"
+    }
+    ::tourney_test::stubCommand updateTitle {} {
+        error "updateTitle should not run when game load fails"
+    }
+    ::tourney_test::stubCommand ::crosstab::Open {} {
+        error "::crosstab::Open should not run when game load fails"
+    }
+
+    # Act
+    ::tourney::select 123
+
+    # Assert
+    list [llength $::tourney_test::tkMessageBoxCalls] [lindex [lindex $::tourney_test::tkMessageBoxCalls 0] end]
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {1 boom(load)}
+
+
+test tourney-select-loads-and-opens-crosstab-1.0 {select loads the game and updates the UI} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    ::tourney_test::stubCommand ::game::Load {gnum} { return }
+    ::tourney_test::stubCommand updateBoard {args} {
+        lappend ::tourney_test::updateBoardCalls [list {*}$args]
+        return
+    }
+    ::tourney_test::stubCommand updateTitle {} {
+        incr ::tourney_test::updateTitleCalls
+        return
+    }
+    ::tourney_test::stubCommand ::crosstab::Open {} {
+        incr ::tourney_test::crosstabCalls
+        return
+    }
+
+    # Act
+    ::tourney::select 7
+
+    # Assert
+    list $::tourney_test::updateBoardCalls $::tourney_test::updateTitleCalls $::tourney_test::crosstabCalls
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {-pgn 1 1}
+
+
+test tourney-refresh-noop-when-window-missing-1.0 {refresh returns immediately when the window does not exist} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    ::tourney_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::tourney_test::stubCommand sc_base {args} {
+        error "sc_base must not be called when the window does not exist"
+    }
+
+    # Act
+    ::tourney::refresh
+
+    # Assert
+    return ok
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {ok}
+
+
+test tourney-refresh-runs-filter-search-and-renders-results-1.0 {refresh searches tournaments and renders the results list} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    set ::tourney::start "2020"
+    set ::tourney::end "2020"
+    set ::tourney::size 1
+    set ::tourney::site "London"
+    set ::tourney::event "WCh"
+    set ::tourney::player "Carlsen"
+    set ::tourney::country "usa"
+    set ::tourney::sort ""
+
+    ::scid_test::widgets::defineTextWidget .tourney.t.text
+
+    ::tourney_test::stubCommand tr {key} { return $key }
+
+    ::tourney_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 1
+    }
+    ::tourney_test::stubCommand busyCursor {w} {
+        lappend ::tourney_test::busyCursorCalls $w
+        return
+    }
+    ::tourney_test::stubCommand unbusyCursor {w} {
+        lappend ::tourney_test::unbusyCursorCalls $w
+        return
+    }
+    ::tourney_test::stubCommand ::utils::history::AddEntry {varName value} {
+        lappend ::tourney_test::historyCalls [list $varName $value]
+        return
+    }
+    ::tourney_test::stubCommand ::utils::string::Surname {name} {
+        set parts [split $name " "]
+        return [lindex $parts end]
+    }
+    ::tourney_test::stubCommand sc_base {subcmd args} {
+        lappend ::tourney_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            current { return 2 }
+            tournaments {
+                # Return one tournament row with one example game.
+                return [list [list \
+                    "2020.01.01" "London" "World Championship" \
+                    2 14 2750 123 \
+                    "Magnus Carlsen" 2870 7 \
+                    "Fabiano Caruana" 2780 7 \
+                ]]
+            }
+            default { error "sc_base $subcmd not stubbed in this test" }
+        }
+    }
+    ::tourney_test::stubCommand sc_filter {subcmd args} {
+        lappend ::tourney_test::scFilterCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            new { return 99 }
+            search { return }
+            release { return }
+            default { error "sc_filter $subcmd not stubbed in this test" }
+        }
+    }
+    ::tourney_test::stubCommand ERROR::MessageBox {args} {
+        incr ::tourney_test::errorMessageBoxCalls
+        return
+    }
+
+    # Act
+    ::tourney::refresh
+
+    # Assert
+    set text [::scid_test::widgets::getText .tourney.t.text]
+    set tagBinds [::scid_test::widgets::getTagBindCalls .tourney.t.text]
+    list \
+        $::curr_db \
+        $::tourney_test::busyCursorCalls \
+        $::tourney_test::historyCalls \
+        $::tourney_test::scFilterCalls \
+        [string match "*2020.01.01*" $text] \
+        [string match "*World Championship*" $text] \
+        [::scid_test::widgets::getState .tourney.t.text -state] \
+        [expr {[lsearch -exact $tagBinds [list g1 "<ButtonPress-1>" [list ::tourney::select 123]]] != -1}] \
+        $::tourney_test::errorMessageBoxCalls
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {2 .tourney {{::tourney::site London} {::tourney::event WCh} {::tourney::player Carlsen}} {{new 2} {search 2 99 header -filter RESET -date {2020.??.?? 2020.12.31} -site London -sitecountry USA -event WCh} {release 2 99}} 1 1 disabled 1 0}
+
+
+test tourney-refresh-no-results-renders-placeholder-1.0 {refresh renders the no-results placeholder and disables the widget} -setup {
+    ::tourney_test::setup
+} -body {
+    # Arrange
+    set ::tourney::start "2020"
+    set ::tourney::end "2020"
+
+    ::scid_test::widgets::defineTextWidget .tourney.t.text
+
+    ::tourney_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 1
+    }
+    ::tourney_test::stubCommand busyCursor {w} { return }
+    ::tourney_test::stubCommand unbusyCursor {w} { return }
+    ::tourney_test::stubCommand ::utils::history::AddEntry {varName value} { return }
+    ::tourney_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return 2 }
+            tournaments { return {} }
+            default { error "sc_base $subcmd not stubbed in this test" }
+        }
+    }
+    ::tourney_test::stubCommand sc_filter {subcmd args} {
+        switch -- $subcmd {
+            new { return 99 }
+            search { return }
+            release { return }
+            default { error "sc_filter $subcmd not stubbed in this test" }
+        }
+    }
+    ::tourney_test::stubCommand ERROR::MessageBox {args} {
+        error "ERROR::MessageBox must not run when there is no error"
+    }
+
+    # Act
+    ::tourney::refresh
+
+    # Assert
+    set text [::scid_test::widgets::getText .tourney.t.text]
+    list \
+        [string match "*$::tr(TmtNone)*" $text] \
+        [::scid_test::widgets::getState .tourney.t.text -state]
+} -cleanup {
+    ::tourney_test::cleanup
+} -result {1 disabled}
+
+
+cleanupTests
