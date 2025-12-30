@@ -14,10 +14,26 @@ namespace eval ::utils::pane {}
 
 array set ::utils::pane::_data {}
 
-# Create
-#
-#   Create a paned window.
-#
+################################################################################
+# ::utils::pane::Create
+#   Creates a simple two-pane splitter widget.
+# Visibility:
+#   Public.
+# Inputs:
+#   - win (string): Container widget path.
+#   - pane1 (string): Name (suffix) of the first pane frame under `win`.
+#   - pane2 (string): Name (suffix) of the second pane frame under `win`.
+#   - width (int): Initial width in pixels.
+#   - height (int): Initial height in pixels.
+#   - ratio (double, optional): Initial split ratio (default 0.5).
+#   - orient (string, optional): Orientation (`vert` or `horiz*`).
+# Returns:
+#   - (string): The created widget path (`win`).
+# Side effects:
+#   - Creates the frames `$win`, `$win.$pane1`, `$win.$pane2`, and the sash/grip.
+#   - Binds mouse events on the sash/grip to update the split.
+#   - Updates `::utils::pane::_data($win,*)`.
+################################################################################
 proc ::utils::pane::Create {win pane1 pane2 width height {ratio 0.5} {orient vert}} {
   variable _data
   set _data($win,1) $pane1
@@ -74,30 +90,102 @@ proc ::utils::pane::Create {win pane1 pane2 width height {ratio 0.5} {orient ver
   return $win
 }
 
+################################################################################
+# ::utils::pane::SetDrag
+# Visibility:
+#   Public.
+# Inputs:
+#   - win (string): Paned window widget path.
+#   - bool (bool/int): When true, dragging live-resizes the panes.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::pane::_data($win,drag)`.
+################################################################################
 proc ::utils::pane::SetDrag {win bool} {
   set ::utils::pane::_data($win,drag) $bool
 }
 
+################################################################################
+# ::utils::pane::SetRange
+# Visibility:
+#   Public.
+# Inputs:
+#   - win (string): Paned window widget path.
+#   - min (double): Minimum split fraction.
+#   - max (double): Maximum split fraction.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::utils::pane::_data($win,min)` and `_data($win,max)`.
+################################################################################
 proc ::utils::pane::SetRange {win min max} {
   set ::utils::pane::_data($win,min) $min
   set ::utils::pane::_data($win,max) $max
 }
 
+################################################################################
+# ::utils::pane::Enter
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Paned window widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - None (highlighting is currently disabled).
+################################################################################
 proc ::utils::pane::Enter {win} {
 #  $win.pane_sash configure -background yellow
 #  $win.pane_grip configure -background yellow
 }
 
+################################################################################
+# ::utils::pane::Leave
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Paned window widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - None (highlighting is currently disabled).
+################################################################################
 proc ::utils::pane::Leave {win} {
 #  $win.pane_sash configure -background black
 #  $win.pane_grip configure -background black
 }
 
+################################################################################
+# ::utils::pane::Grab
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Paned window widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - None (highlighting is currently disabled).
+################################################################################
 proc ::utils::pane::Grab {win} {
 #  $win.pane_sash configure -background red
 #  $win.pane_grip configure -background red
 }
 
+################################################################################
+# ::utils::pane::Drag
+#   Updates the split fraction during a drag gesture.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Paned window widget path.
+#   - y (int): Root-window coordinate (Y for vertical panes, X for horizontal).
+# Returns:
+#   - (double): The clamped split fraction.
+# Side effects:
+#   - Updates sash/grip placement.
+#   - When `::_data($win,drag)` is true, calls `::utils::pane::Divide`.
+################################################################################
 proc ::utils::pane::Drag {win y} {
   variable _data
   set vertical $_data($win,vertical)
@@ -126,6 +214,19 @@ proc ::utils::pane::Drag {win y} {
   return $frac
 }
 
+################################################################################
+# ::utils::pane::Drop
+#   Finalises a drag gesture and applies the split to the panes.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Paned window widget path.
+#   - y (int): Root-window coordinate (Y for vertical panes, X for horizontal).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::utils::pane::Drag` and then `::utils::pane::Divide`.
+################################################################################
 proc ::utils::pane::Drop {win y} {
   set frac [::utils::pane::Drag $win $y]
   ::utils::pane::Divide $win $frac
@@ -133,6 +234,19 @@ proc ::utils::pane::Drop {win y} {
 #  $win.pane_grip configure -background gray
 }
 
+################################################################################
+# ::utils::pane::Divide
+#   Applies a split fraction to the sash, grip, and pane sizes.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - win (string): Paned window widget path.
+#   - frac (double): Split fraction (typically clamped by `::utils::pane::Drag`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates pane sizing via `place`.
+################################################################################
 proc ::utils::pane::Divide {win frac} {
   if {$::utils::pane::_data($win,vertical)} {
     place $win.pane_sash -rely $frac

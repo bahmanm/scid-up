@@ -1,0 +1,244 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+namespace eval ::utils::date {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils date.tcl]
+
+namespace eval ::date_test {
+    variable stubbedCommands {}
+    variable selectCalls {}
+}
+
+proc ::date_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::date_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::date_test::setup {} {
+    ::date_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::date_test::selectCalls {}
+
+    ::date_test::stubCommand ::utils::date::_select {win date} {
+        lappend ::date_test::selectCalls $date
+
+        if {[catch {set time [clock scan $date]} err]} {
+            return -code error $err
+        }
+
+        # Tcl's `clock scan` can normalise out-of-range dates (e.g. treating
+        # "2025-2-31" as a March date). Ensure invalid day-of-month inputs raise
+        # so callers can reliably fall back.
+        set parts [split $date "-"]
+        if {[llength $parts] != 3} {
+            return -code error "Unsupported date format: $date"
+        }
+        lassign $parts expectedYear expectedMonth expectedDay
+
+        set expectedMonth [string trimleft $expectedMonth 0]
+        set expectedDay [string trimleft $expectedDay 0]
+
+        set actualYear [clock format $time -format "%Y"]
+        set actualMonth [string trimleft [clock format $time -format "%m"] 0]
+        set actualDay [string trimleft [clock format $time -format "%d"] 0]
+
+        if {$actualYear ne $expectedYear || $actualMonth ne $expectedMonth || $actualDay ne $expectedDay} {
+            return -code error "Invalid date: $date"
+        }
+
+        set ::utils::date::_time $time
+        set ::utils::date::_selected [clock format $time -format "%Y-%m-%d"]
+        return
+    }
+}
+
+proc ::date_test::cleanup {} {
+    ::date_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::utils::date::_time
+    unset -nocomplain ::utils::date::_selected
+}
+
+# ---- Tests ----
+
+test date-today-all-format-1.0 {today returns yyyy.mm.dd} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::date::today
+
+    # Assert
+} -cleanup {
+    ::date_test::cleanup
+} -match regexp -result {^\d{4}\.\d{2}\.\d{2}$}
+
+
+test date-today-year-format-1.0 {today year returns yyyy} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::date::today year
+
+    # Assert
+} -cleanup {
+    ::date_test::cleanup
+} -match regexp -result {^\d{4}$}
+
+
+test date-today-month-format-1.0 {today month returns mm} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::date::today month
+
+    # Assert
+} -cleanup {
+    ::date_test::cleanup
+} -match regexp -result {^\d{2}$}
+
+
+test date-today-day-format-1.0 {today day returns dd} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::date::today day
+
+    # Assert
+} -cleanup {
+    ::date_test::cleanup
+} -match regexp -result {^\d{2}$}
+
+
+test date-today-invalid-type-1.0 {today errors on unknown type} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::date::today banana
+
+    # Assert
+} -cleanup {
+    ::date_test::cleanup
+} -returnCodes error -result {Unrecognised parameter: banana}
+
+
+test date-layout-feb-non-leap-1.0 {_layout yields 28 days for February 2025} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+    set time [clock scan "2025-02-01"]
+
+    # Act
+    set layout [::utils::date::_layout $time]
+
+    # Assert
+    list [llength $layout] [lindex $layout 1] [lindex $layout end-2]
+} -cleanup {
+    ::date_test::cleanup
+} -result {112 2025-02-01 2025-02-28}
+
+
+test date-layout-feb-leap-1.0 {_layout yields 29 days for February 2024} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+    set time [clock scan "2024-02-01"]
+
+    # Act
+    set layout [::utils::date::_layout $time]
+
+    # Assert
+    list [llength $layout] [lindex $layout 1] [lindex $layout end-2]
+} -cleanup {
+    ::date_test::cleanup
+} -result {116 2024-02-01 2024-02-29}
+
+
+test date-day-forward-1.0 {_day selects date +1 day} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+    set ::utils::date::_time [clock scan "2025-03-15 12:00:00"]
+
+    # Act
+    ::utils::date::_day .dateChooser +1
+
+    # Assert
+    return $::date_test::selectCalls
+} -cleanup {
+    ::date_test::cleanup
+} -result {2025-3-16}
+
+
+test date-day-back-one-week-1.0 {_day selects date -7 days} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+    set ::utils::date::_time [clock scan "2025-03-15 12:00:00"]
+
+    # Act
+    ::utils::date::_day .dateChooser -7
+
+    # Assert
+    return $::date_test::selectCalls
+} -cleanup {
+    ::date_test::cleanup
+} -result {2025-3-8}
+
+
+test date-month-forward-preserves-day-1.0 {_month selects the same day when it exists in the target month} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+    set ::utils::date::_time [clock scan "2025-01-15 12:00:00"]
+
+    # Act
+    ::utils::date::_month .dateChooser +1
+
+    # Assert
+    return $::date_test::selectCalls
+} -cleanup {
+    ::date_test::cleanup
+} -result {2025-2-15}
+
+
+test date-month-forward-falls-back-to-28-1.0 {_month falls back to day 28 when the target day is invalid} -setup {
+    ::date_test::setup
+} -body {
+    # Arrange
+    set ::utils::date::_time [clock scan "2025-01-31 12:00:00"]
+
+    # Act
+    ::utils::date::_month .dateChooser +1
+
+    # Assert
+    return $::date_test::selectCalls
+} -cleanup {
+    ::date_test::cleanup
+} -result {2025-2-31 2025-2-28}
+
+
+cleanupTests

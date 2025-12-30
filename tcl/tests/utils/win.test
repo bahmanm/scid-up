@@ -1,0 +1,788 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::win {}
+namespace eval ::docking {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils win.tcl]
+
+namespace eval ::win_test {
+    variable stubbedCommands {}
+
+    variable existingWidgets {}
+
+    # winfo stubbing state
+    array set children {}
+    array set classes {}
+    array set parent {}
+    array set toplevel {}
+
+    # bindtags state
+    array set bindtags {}
+
+    # wm state
+    variable wmCalls {}
+    array set wmState {}
+    array set wmGeometry {}
+    array set wmTitle {}
+
+    # after scheduling
+    variable afterCalls {}
+
+    # docking stubs
+    variable dockingCalls {}
+
+    # destroy recording
+    variable destroyed {}
+
+    # notebook stubs
+    variable notebookCalls {}
+    array set notebookTabs {}
+    array set notebookTabOptions {}
+    array set notebookSelected {}
+}
+
+proc ::win_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::win_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::win_test::resetState {} {
+    set ::win_test::existingWidgets {}
+
+    catch {array unset ::win_test::children}
+    array set ::win_test::children {}
+
+    catch {array unset ::win_test::classes}
+    array set ::win_test::classes {}
+
+    catch {array unset ::win_test::parent}
+    array set ::win_test::parent {}
+
+    catch {array unset ::win_test::toplevel}
+    array set ::win_test::toplevel {}
+
+    catch {array unset ::win_test::bindtags}
+    array set ::win_test::bindtags {}
+
+    set ::win_test::wmCalls {}
+    catch {array unset ::win_test::wmState}
+    array set ::win_test::wmState {}
+
+    catch {array unset ::win_test::wmGeometry}
+    array set ::win_test::wmGeometry {}
+
+    catch {array unset ::win_test::wmTitle}
+    array set ::win_test::wmTitle {}
+
+    set ::win_test::afterCalls {}
+    set ::win_test::dockingCalls {}
+    set ::win_test::destroyed {}
+
+    set ::win_test::notebookCalls {}
+    catch {array unset ::win_test::notebookTabs}
+    array set ::win_test::notebookTabs {}
+
+    catch {array unset ::win_test::notebookTabOptions}
+    array set ::win_test::notebookTabOptions {}
+
+    catch {array unset ::win_test::notebookSelected}
+    array set ::win_test::notebookSelected {}
+
+    # Keep global docking/win state deterministic per test.
+    catch {array unset ::docking::tbs}
+    array set ::docking::tbs {}
+    catch {array unset ::docking::notebook_name}
+    array set ::docking::notebook_name {}
+    set ::docking::prev_nb {}
+
+    catch {array unset ::winGeometry}
+
+    catch {unset ::docking::layout_dest_notebook}
+
+    catch {unset ::windowsDock}
+    set ::windowsDock 0
+
+    if {![info exists ::windowsOS]} { set ::windowsOS 0 }
+    if {![info exists ::macOS]} { set ::macOS 0 }
+}
+
+proc ::win_test::defineNotebook {path {tabs {}}} {
+    if {[llength [info commands $path]]} {
+        error "Notebook command already exists: $path"
+    }
+
+    interp alias {} $path {} ::win_test::dispatchNotebook $path
+
+    set ::win_test::notebookTabs($path) $tabs
+    lappend ::win_test::existingWidgets $path
+    set ::win_test::classes($path) "TNotebook"
+
+    return $path
+}
+
+proc ::win_test::dispatchNotebook {path subcmd args} {
+    lappend ::win_test::notebookCalls [list $path $subcmd {*}$args]
+
+    switch -- $subcmd {
+        tabs {
+            if {![info exists ::win_test::notebookTabs($path)]} {
+                return {}
+            }
+            return $::win_test::notebookTabs($path)
+        }
+        tab {
+            set tabPath [lindex $args 0]
+            set options [lrange $args 1 end]
+            set ::win_test::notebookTabOptions($path,$tabPath) $options
+            return
+        }
+        select {
+            set tabPath [lindex $args 0]
+            set ::win_test::notebookSelected($path) $tabPath
+            return
+        }
+        forget {
+            set tabPath [lindex $args 0]
+            set tabs $::win_test::notebookTabs($path)
+            set idx [lsearch -exact $tabs $tabPath]
+            if {$idx >= 0} {
+                set ::win_test::notebookTabs($path) [lreplace $tabs $idx $idx]
+            }
+            return
+        }
+        default {
+            error "Notebook $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::win_test::defineWindow {path {class "Frame"}} {
+    ::scid_test::widgets::defineWidget $path
+    lappend ::win_test::existingWidgets $path
+    set ::win_test::classes($path) $class
+    return $path
+}
+
+proc ::win_test::setChildren {path childrenList} {
+    set ::win_test::children($path) $childrenList
+}
+
+proc ::win_test::setParent {path parentPath} {
+    set ::win_test::parent($path) $parentPath
+}
+
+proc ::win_test::setToplevel {path toplevelPath} {
+    set ::win_test::toplevel($path) $toplevelPath
+}
+
+proc ::win_test::setup {} {
+    ::win_test::restoreStubs
+    ::scid_test::widgets::reset
+    ::win_test::resetState
+
+    ::win_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set path [lindex $args 0]
+                return [expr {[lsearch -exact $::win_test::existingWidgets $path] >= 0}]
+            }
+            children {
+                set path [lindex $args 0]
+                if {![info exists ::win_test::children($path)]} {
+                    return {}
+                }
+                return $::win_test::children($path)
+            }
+            class {
+                set path [lindex $args 0]
+                if {![info exists ::win_test::classes($path)]} {
+                    return ""
+                }
+                return $::win_test::classes($path)
+            }
+            parent {
+                set path [lindex $args 0]
+                if {![info exists ::win_test::parent($path)]} {
+                    return ""
+                }
+                return $::win_test::parent($path)
+            }
+            toplevel {
+                set path [lindex $args 0]
+                if {[info exists ::win_test::toplevel($path)]} {
+                    return $::win_test::toplevel($path)
+                }
+                return $path
+            }
+            default {
+                error "winfo $subcmd not stubbed in win tests"
+            }
+        }
+    }
+
+    ::win_test::stubCommand bindtags {path args} {
+        if {[llength $args] == 0} {
+            if {[info exists ::win_test::bindtags($path)]} {
+                return $::win_test::bindtags($path)
+            }
+            return {}
+        }
+        if {[llength $args] != 1} {
+            error "bindtags expects 1 arg when setting, got: $args"
+        }
+        set ::win_test::bindtags($path) [lindex $args 0]
+        return
+    }
+
+    ::win_test::stubCommand wm {subcmd w args} {
+        lappend ::win_test::wmCalls [list $subcmd $w {*}$args]
+        switch -- $subcmd {
+            state {
+                if {[info exists ::win_test::wmState($w)]} {
+                    return $::win_test::wmState($w)
+                }
+                return "normal"
+            }
+            geometry {
+                if {[llength $args] == 0} {
+                    if {![info exists ::win_test::wmGeometry($w)]} {
+                        set ::win_test::wmGeometry($w) ""
+                    }
+                    return $::win_test::wmGeometry($w)
+                }
+                set ::win_test::wmGeometry($w) [lindex $args 0]
+                return
+            }
+            title {
+                set ::win_test::wmTitle($w) [lindex $args 0]
+                return
+            }
+            protocol -
+            manage -
+            deiconify -
+            attributes {
+                return
+            }
+            default {
+                error "wm $subcmd not stubbed in win tests"
+            }
+        }
+    }
+
+    ::win_test::stubCommand update {args} { return }
+
+    ::win_test::stubCommand after {args} {
+        lappend ::win_test::afterCalls $args
+        return "after-id"
+    }
+
+    ::win_test::stubCommand frame {path args} {
+        ::win_test::defineWindow $path "Frame"
+        return $path
+    }
+
+    ::win_test::stubCommand destroy {path} {
+        lappend ::win_test::destroyed $path
+        set idx [lsearch -exact $::win_test::existingWidgets $path]
+        if {$idx >= 0} {
+            set ::win_test::existingWidgets [lreplace $::win_test::existingWidgets $idx $idx]
+        }
+        catch {rename $path ""}
+        return
+    }
+
+    ::win_test::stubCommand toplevel {path args} {
+        ::win_test::defineWindow $path "Toplevel"
+        return $path
+    }
+
+    ::win_test::stubCommand applyThemeColor_background {w} { return }
+
+    ::win_test::stubCommand raise {w} {
+        lappend ::win_test::dockingCalls [list raise $w]
+        return
+    }
+
+    # Docking operations used by the ::win layer.
+    ::win_test::stubCommand ::docking::choose_notebook {wnd} {
+        return ".nb"
+    }
+
+    ::win_test::stubCommand ::docking::insert_tab {wnd nb where options} {
+        lappend ::win_test::dockingCalls [list insert_tab $wnd $nb $where $options]
+        # Also keep the notebook tabs list consistent for helper procs.
+        if {[llength [info commands $nb]] == 0} {
+            ::win_test::defineNotebook $nb {}
+        }
+        if {![info exists ::win_test::notebookTabs($nb)]} {
+            set ::win_test::notebookTabs($nb) {}
+        }
+        lappend ::win_test::notebookTabs($nb) $wnd
+        return
+    }
+
+    ::win_test::stubCommand ::docking::remove_tab {wnd nb} {
+        lappend ::win_test::dockingCalls [list remove_tab $wnd $nb]
+        if {[llength [info commands $nb]]} {
+            $nb forget $wnd
+        }
+        return [dict create -text "TabTitle"]
+    }
+}
+
+proc ::win_test::cleanup {} {
+    ::win_test::restoreStubs
+    ::scid_test::widgets::reset
+    ::win_test::resetState
+
+    foreach cmd [info commands .nb*] {
+        catch {rename $cmd ""}
+    }
+}
+
+# ---- Tests ----
+
+test win-createWindow-already-exists-1.0 {createWindow returns 0 when the window already exists} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    lappend ::win_test::existingWidgets .w
+
+    ::win_test::stubCommand frame {path args} {
+        error "frame should not be called when winfo exists is true"
+    }
+
+    # Act
+    ::win::createWindow .w "Title" "100x100+1+2"
+
+    # Assert
+} -cleanup {
+    ::win_test::cleanup
+} -result 0
+
+
+test win-createWindow-initialises-default-geometry-1.0 {createWindow initialises winGeometry only when unset} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    ::win_test::stubCommand ::win::manageWindow {wnd title} {
+        lappend ::win_test::dockingCalls [list manageWindow $wnd $title]
+        return
+    }
+
+    # Act
+    set created [::win::createWindow .w "MyTitle" "120x80+3+4"]
+
+    # Assert
+    list $created $::winGeometry(.w) $::win_test::dockingCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {1 120x80+3+4 {{manageWindow .w MyTitle}}}
+
+
+test win-createWindow-does-not-overwrite-geometry-1.0 {createWindow preserves an existing stored geometry} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::winGeometry(.w) "old"
+    ::win_test::stubCommand ::win::manageWindow {wnd title} { return }
+
+    # Act
+    ::win::createWindow .w "Title" "new"
+
+    # Assert
+    set ::winGeometry(.w)
+} -cleanup {
+    ::win_test::cleanup
+} -result old
+
+
+test win-manageWindow-docked-inserts-tab-1.0 {manageWindow inserts a docked tab when windowsDock is true} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::windowsDock 1
+    set ::win::menu_(.w) .m
+    set ::docking::notebook_name(.w) .nb
+
+    # Act
+    ::win::manageWindow .w "Scid: Title"
+
+    # Assert
+    list [info exists ::win::menu_(.w)] [info exists ::docking::notebook_name(.w)] $::win_test::dockingCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {0 0 {{insert_tab .w .nb end {-text {Scid: Title} -image tb_close -compound left}}}}
+
+
+test win-manageWindow-undocked-calls-undock-1.0 {manageWindow undocks when windowsDock is false} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::windowsDock 0
+    ::win_test::stubCommand ::win::undockWindow {wnd srctab {title ""}} {
+        lappend ::win_test::dockingCalls [list undockWindow $wnd $srctab $title]
+        return
+    }
+
+    # Act
+    ::win::manageWindow .w "Title"
+
+    # Assert
+    set ::win_test::dockingCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {{undockWindow .w {} Title}}
+
+
+test win-manageWindow-layoutDestNotebook-undocked-1.0 {manageWindow undocks when layout_dest_notebook is "undocked"} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::docking::layout_dest_notebook "undocked"
+
+    ::win_test::stubCommand ::docking::insert_tab {args} {
+        error "insert_tab should not be called when layout_dest_notebook is undocked"
+    }
+
+    ::win_test::stubCommand ::win::undockWindow {wnd srctab {title ""}} {
+        lappend ::win_test::dockingCalls [list undockWindow $wnd $srctab $title]
+        return
+    }
+
+    # Act
+    ::win::manageWindow .w "Title"
+
+    # Assert
+    set ::win_test::dockingCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {{undockWindow .w {} Title}}
+
+
+test win-manageWindow-layoutDestNotebook-docked-1.0 {manageWindow docks into the specific layout_dest_notebook when set} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::docking::layout_dest_notebook .nb2
+
+    ::win_test::stubCommand ::docking::choose_notebook {wnd} {
+        error "choose_notebook should not be called when layout_dest_notebook is set"
+    }
+
+    # Act
+    ::win::manageWindow .w "Title"
+
+    # Assert
+    set ::win_test::dockingCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {{insert_tab .w .nb2 end {-text Title -image tb_close -compound left}}}
+
+
+test win-save-restore-geometry-normal-1.0 {saveWinGeometry stores geometry and restoreWinGeometry applies it} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::win_test::wmState(.w) "normal"
+    set ::win_test::wmGeometry(.w) "200x300+1+2"
+
+    # Act
+    ::win::saveWinGeometry .w
+    set restored [::win::restoreWinGeometry .w]
+
+    # Assert
+    list $::winGeometry(.w) $restored [expr {[lsearch -exact $::win_test::wmCalls [list geometry .w 200x300+1+2]] >= 0}]
+} -cleanup {
+    ::win_test::cleanup
+} -result {200x300+1+2 1 1}
+
+
+test win-save-restore-geometry-zoomed-windows-1.0 {restoreWinGeometry uses wm state zoomed on Windows/macOS} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::win_test::wmState(.w) "zoomed"
+    set ::windowsOS 1
+    set ::macOS 0
+
+    # Act
+    ::win::saveWinGeometry .w
+    ::win::restoreWinGeometry .w
+
+    # Assert
+    list $::winGeometry(.w) \
+        [expr {[lsearch -exact $::win_test::wmCalls [list state .w]] >= 0}] \
+        [expr {[lsearch -exact $::win_test::wmCalls [list state .w zoomed]] >= 0}]
+} -cleanup {
+    ::win_test::cleanup
+} -result {zoomed 1 1}
+
+
+test win-save-restore-geometry-zoomed-x11-1.0 {restoreWinGeometry uses wm attributes -zoomed on X11} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::win_test::wmState(.w) "zoomed"
+    set ::windowsOS 0
+    set ::macOS 0
+
+    # Act
+    ::win::saveWinGeometry .w
+    ::win::restoreWinGeometry .w
+
+    # Assert
+    list $::winGeometry(.w) [expr {[lsearch -exact $::win_test::wmCalls [list attributes .w -zoomed]] >= 0}]
+} -cleanup {
+    ::win_test::cleanup
+} -result {zoomed 1}
+
+
+test win-getMenu-fdock-unadultered-name-1.0 {getMenu returns stored menu and strips the fdock prefix} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    lappend ::win_test::existingWidgets .fdockfoo
+    set ::win_test::classes(.fdockfoo) "Frame"
+    set ::win::menu_(.fdockfoo) .m
+
+    # Act
+    ::win::getMenu .fdockfoo
+
+    # Assert
+} -cleanup {
+    ::win_test::cleanup
+} -result {.m .foo}
+
+
+test win-setTitle-docked-trims-scid-prefix-1.0 {setTitle trims "Scid: " for docked tabs} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    ::win_test::defineNotebook .nb {.w}
+    set ::docking::tbs(.nb) .pw
+
+    # Act
+    ::setTitle .w "Scid: Hello"
+
+    # Assert
+    list $::win_test::notebookCalls $::win_test::notebookTabOptions(.nb,.w)
+} -cleanup {
+    ::win_test::cleanup
+} -result {{{.nb tabs} {.nb tab .w -text Hello}} {-text Hello}}
+
+
+test win-setTitle-undocked-uses-wm-title-1.0 {setTitle sets the window title when undocked} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::setTitle .w "Hello"
+
+    # Assert
+    list $::win_test::wmTitle(.w) [expr {[lsearch -exact $::win_test::wmCalls [list title .w Hello]] >= 0}]
+} -cleanup {
+    ::win_test::cleanup
+} -result {Hello 1}
+
+
+test win-toggleDocked-noop-for-main-and-nonframe-1.0 {toggleDocked does nothing for .main or non-Frame widgets} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    lappend ::win_test::existingWidgets .main
+    set ::win_test::classes(.main) "Frame"
+
+    lappend ::win_test::existingWidgets .w
+    set ::win_test::classes(.w) "Label"
+
+    ::win_test::stubCommand ::win::dockWindow {wnd} { error "dockWindow should not be called" }
+    ::win_test::stubCommand ::win::undockWindow {wnd srctab {title ""}} { error "undockWindow should not be called" }
+
+    # Act
+    ::win::toggleDocked .main
+    ::win::toggleDocked .w
+
+    # Assert
+    return 1
+} -cleanup {
+    ::win_test::cleanup
+} -result 1
+
+
+test win-toggleDocked-docked-undocks-1.0 {toggleDocked undocks when the window is docked} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    ::win_test::defineNotebook .nb {.w}
+    set ::docking::tbs(.nb) .pw
+
+    lappend ::win_test::existingWidgets .w
+    set ::win_test::classes(.w) "Frame"
+
+    ::win_test::stubCommand ::win::undockWindow {wnd srctab {title ""}} {
+        lappend ::win_test::dockingCalls [list undock $wnd $srctab]
+        return
+    }
+
+    # Act
+    ::win::toggleDocked .w
+
+    # Assert
+    set ::win_test::dockingCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {{undock .w .nb}}
+
+
+test win-toggleDocked-undocked-docks-1.0 {toggleDocked docks when the window is undocked} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    lappend ::win_test::existingWidgets .w
+    set ::win_test::classes(.w) "Frame"
+
+    ::win_test::stubCommand ::win::dockWindow {wnd} {
+        lappend ::win_test::dockingCalls [list dock $wnd]
+        return
+    }
+
+    # Act
+    ::win::toggleDocked .w
+
+    # Assert
+    set ::win_test::dockingCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {{dock .w}}
+
+
+test win-closeWindow-docked-removes-tab-1.0 {closeWindow removes a docked tab and records previous notebook} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    ::win_test::defineNotebook .nb {.w}
+    set ::docking::tbs(.nb) .pw
+
+    lappend ::win_test::existingWidgets .w
+    set ::win_test::classes(.w) "Frame"
+
+    ::win_test::stubCommand ::win::saveWinGeometry {w} {
+        error "saveWinGeometry should not be called for docked windows"
+    }
+
+    # Act
+    ::win::closeWindow .w
+
+    # Assert
+    list $::win_test::dockingCalls $::docking::prev_nb $::win_test::destroyed
+} -cleanup {
+    ::win_test::cleanup
+} -result {{{remove_tab .w .nb}} {{.nb .w}} .w}
+
+
+test win-closeWindow-undocked-saves-geometry-1.0 {closeWindow saves geometry when undocked} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    lappend ::win_test::existingWidgets .w
+    set ::win_test::classes(.w) "Frame"
+
+    ::win_test::stubCommand ::win::saveWinGeometry {w} {
+        set ::winGeometry($w) "saved"
+        return
+    }
+
+    # Act
+    ::win::closeWindow .w
+
+    # Assert
+    list $::winGeometry(.w) $::win_test::destroyed
+} -cleanup {
+    ::win_test::cleanup
+} -result {saved .w}
+
+
+test win-getWindows-collects-undocked-and-docked-1.0 {getWindows returns all open undocked and docked windows} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    set ::docking::notebook_name(.u1) .nb
+    set ::docking::notebook_name(.u2) .nb
+
+    lappend ::win_test::existingWidgets .u1
+    lappend ::win_test::existingWidgets .u2
+
+    ::win_test::defineNotebook .nb {.d1 .d2}
+    set ::docking::tbs(.nb) .pw
+
+    # Act
+    set res [::win::getWindows]
+
+    # Assert
+    lsort $res
+} -cleanup {
+    ::win_test::cleanup
+} -result {.d1 .d2 .u1 .u2}
+
+
+test win-undockWindow-schedules-restore-1.0 {undockWindow schedules geometry restoration and records notebook source} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    ::win_test::defineWindow .w "Frame"
+
+    ::win_test::setChildren .w {.w.c1}
+    ::win_test::defineWindow .w.c1 "Label"
+
+    ::win_test::stubCommand ::win::restoreWinGeometry {w} {
+        lappend ::win_test::dockingCalls [list restoreWinGeometry $w]
+        return 1
+    }
+
+    # Also ensure getMenu returns a menu so undockWindow hits the HACK path.
+    set ::win::menu_(.w) .m
+
+    # Act
+    ::win::undockWindow .w .nb
+
+    # Assert
+    list $::docking::notebook_name(.w) $::win_test::afterCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {.nb {{idle after 1 {::win::restoreWinGeometry .w}}}}
+
+
+test win-undockWindow-with-srctab-rewrites-title-1.0 {undockWindow removes the tab and rewrites the title from the tab text} -setup {
+    ::win_test::setup
+} -body {
+    # Arrange
+    ::win_test::defineWindow .w "Frame"
+
+    ::win_test::setChildren .w {}
+
+    ::win_test::defineNotebook .nb {.w}
+    set ::docking::tbs(.nb) .pw
+
+    # Act
+    ::win::undockWindow .w .nb "Ignored"
+
+    # Assert
+    list $::win_test::wmTitle(.w) $::win_test::dockingCalls $::docking::notebook_name(.w) $::win_test::afterCalls
+} -cleanup {
+    ::win_test::cleanup
+} -result {{Scid: TabTitle} {{remove_tab .w .nb}} .nb {{idle after 1 {::win::restoreWinGeometry .w}}}}
+
+
+cleanupTests

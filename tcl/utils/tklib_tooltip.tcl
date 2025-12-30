@@ -134,6 +134,23 @@ namespace eval ::tooltip {
     bind Tooltip <Any-Button>	[namespace code hide]
 }
 
+################################################################################
+# ::tooltip::tooltip
+#   Entry point for configuring and querying tooltips (balloon help).
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Subcommand name (e.g. `delay`, `fade`, `configure`, `clear`) or
+#     a widget path to register/query.
+#   - args (list): Subcommand-specific arguments.
+# Returns:
+#   - Varies by subcommand. For widget registration/query, returns the currently
+#     registered tooltip details, if any.
+# Side effects:
+#   - Updates `::tooltip::G` configuration and/or `::tooltip::tooltip` registry.
+#   - May schedule or cancel `after` callbacks.
+#   - May hide any currently displayed tooltip.
+################################################################################
 proc ::tooltip::tooltip {w args} {
     variable tooltip
     variable G
@@ -182,6 +199,24 @@ proc ::tooltip::tooltip {w args} {
     }
 }
 
+################################################################################
+# ::tooltip::register
+#   Registers a tooltip for a widget, or for a widget sub-element.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Widget path.
+#   - args (list): Switches and values describing the tooltip target and
+#     content (e.g. `-index`, `-items`, `-tab`, `-tag`, `-image`, `-info`),
+#     followed by the tooltip text.
+# Returns:
+#   - (string): Tooltip registry key (e.g. `$w` or `$w,<item>`).
+# Side effects:
+#   - Updates the `::tooltip::tooltip` registry.
+#   - May mutate widget bindtags/bindings to enable tooltip behaviour.
+#   - When a message is empty, calls `::tooltip::clear $w` (this clears only the
+#     exact `$w` key; sub-element registrations like `$w,<item>` are not removed).
+################################################################################
 proc ::tooltip::register {w args} {
     variable tooltip
     set key [lindex $args 0]
@@ -312,6 +347,19 @@ proc ::tooltip::register {w args} {
     }
 }
 
+################################################################################
+# ::tooltip::createToplevel
+#   Creates the tooltip toplevel window if it does not exist.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `::tooltip::G(TOPLEVEL)` and its child widgets.
+#   - Configures window manager attributes (override-redirect/topmost/alpha).
+################################################################################
 proc ::tooltip::createToplevel {} {
     variable G
 
@@ -335,6 +383,20 @@ proc ::tooltip::createToplevel {} {
     grid $b.f.info  -sticky w
 }
 
+################################################################################
+# ::tooltip::configure
+#   Configures tooltip appearance (foreground/background/font).
+# Visibility:
+#   Internal.
+# Inputs:
+#   - args (list): Optional option/value pairs. When empty, returns the current
+#     values. When passed a single option, returns that option’s current value.
+# Returns:
+#   - (list|string): Configuration information, per `tooltip configure`.
+# Side effects:
+#   - Ensures the tooltip toplevel exists.
+#   - Updates widget configuration and the Tk option database.
+################################################################################
 proc ::tooltip::configure {args} {
     set len [llength $args]
     if {$len >= 2 && ($len % 2) != 0} {
@@ -408,6 +470,22 @@ proc ::tooltip::configure {args} {
     }
 }
 
+################################################################################
+# ::tooltip::clear
+#   Unregisters tooltips for widgets matching a pattern.
+# Visibility:
+#   Public.
+# Inputs:
+#   - pattern (string, optional): Pattern for matching registered tooltip keys;
+#     defaults to `.*`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Removes matching entries from the `::tooltip::tooltip` registry.
+#   - Removes the `Tooltip` bindtag from matching widgets when present (only
+#     when the matched key is a widget path).
+#   - May hide a currently displayed tooltip.
+################################################################################
 proc ::tooltip::clear {{pattern .*}} {
     variable tooltip
     # cache the current widget at pointer
@@ -429,6 +507,22 @@ proc ::tooltip::clear {{pattern .*}} {
     }
 }
 
+################################################################################
+# ::tooltip::show
+#   Displays the tooltip toplevel near a widget.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Widget path.
+#   - msg (list): Tooltip details `{text image infoText}`.
+#   - i (string|int, optional): Placement hint (`cursor`), or a menu index.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/configures/deiconifies `::tooltip::G(TOPLEVEL)`.
+#   - Calls `update idletasks` and sets window geometry.
+#   - Cancels any pending fade callback.
+################################################################################
 proc ::tooltip::show {w msg {i {}}} {
     if {![winfo exists $w]} { return }
 
@@ -516,6 +610,19 @@ proc ::tooltip::show {w msg {i {}}} {
     }
 }
 
+################################################################################
+# ::tooltip::menuMotion
+#   Handles `<<MenuSelect>>` events to show tooltips for menu entries.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Menu widget path (event source).
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels any pending tooltip display and schedules a new one.
+#   - Updates `::tooltip::G(LAST)`.
+################################################################################
 proc ::tooltip::menuMotion {w} {
     variable G
 
@@ -544,6 +651,20 @@ proc ::tooltip::menuMotion {w} {
     }
 }
 
+################################################################################
+# ::tooltip::hide
+#   Cancels any pending tooltip display and withdraws the tooltip toplevel.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - fadeOk (bool/int, optional): When true and fading is enabled, performs a
+#     fade-out instead of an immediate withdraw.
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels `after` callbacks in `::tooltip::G(AFTERID)` / `::tooltip::G(FADEID)`.
+#   - Withdraws (or fades) `::tooltip::G(TOPLEVEL)`.
+################################################################################
 proc ::tooltip::hide {{fadeOk 0}} {
     variable G
 
@@ -556,6 +677,20 @@ proc ::tooltip::hide {{fadeOk 0}} {
     }
 }
 
+################################################################################
+# ::tooltip::fade
+#   Gradually reduces the tooltip window alpha and withdraws it.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Tooltip toplevel path.
+#   - step (double): Alpha decrement applied per tick.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `wm attributes -alpha` and schedules itself via `after`.
+#   - Updates `::tooltip::G(FADEID)`.
+################################################################################
 proc ::tooltip::fade {w step} {
     if {[catch {
 	wm attributes $w -alpha
@@ -569,6 +704,21 @@ proc ::tooltip::fade {w step} {
     }
 }
 
+################################################################################
+# ::tooltip::wname
+#   Gets or sets the tooltip toplevel widget name.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string, optional): New toplevel path. When provided and differs from
+#     the current `::tooltip::G(TOPLEVEL)`, replaces the tooltip window.
+# Returns:
+#   - (string): Current tooltip toplevel path.
+# Side effects:
+#   - When changing the toplevel, hides and destroys the previous one (destroy
+#     may error if the previous toplevel does not exist).
+#   - Updates `::tooltip::G(TOPLEVEL)`.
+################################################################################
 proc ::tooltip::wname {{w {}}} {
     variable G
     if {[llength [info level 0]] > 1} {
@@ -582,6 +732,21 @@ proc ::tooltip::wname {{w {}}} {
     return $G(TOPLEVEL)
 }
 
+################################################################################
+# ::tooltip::listitemTip
+#   Schedules a tooltip display for a listbox/treeview item under the pointer.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Listbox/treeview widget path.
+#   - x (int): Pointer x coordinate (widget-relative).
+#   - y (int): Pointer y coordinate (widget-relative).
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets `::tooltip::G(LAST)` to `-1`.
+#   - Schedules a delayed `::tooltip::show` via `after`.
+################################################################################
 proc ::tooltip::listitemTip {w x y} {
     variable tooltip
     variable G
@@ -607,6 +772,22 @@ proc ::tooltip::listitemTip {w x y} {
 }
 
 # Handle the lack of <Enter>/<Leave> between listbox/treeview items using <Motion>
+################################################################################
+# ::tooltip::listitemMotion
+#   Handles pointer motion for listbox/treeview items (enter/leave emulation).
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Listbox/treeview widget path.
+#   - x (int): Pointer x coordinate (widget-relative).
+#   - y (int): Pointer y coordinate (widget-relative).
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels and reschedules delayed tooltip display when the current item
+#     changes.
+#   - Withdraws the tooltip toplevel when moving between items.
+################################################################################
 proc ::tooltip::listitemMotion {w x y} {
     variable tooltip
     variable G
@@ -635,6 +816,19 @@ proc ::tooltip::listitemMotion {w x y} {
 }
 
 # Initialize tooltip events for listbox/treeview widgets
+################################################################################
+# ::tooltip::enableListbox
+#   Enables tooltip bindings for listbox and ttk::treeview widgets.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Widget path.
+#   - args (list): Unused (kept for caller symmetry).
+# Returns:
+#   - None.
+# Side effects:
+#   - Adds <Enter>/<Motion>/<Leave> and key/button bindings to the widget.
+################################################################################
 proc ::tooltip::enableListbox {w args} {
     if {[string match *listitemTip* [bind $w <Enter>]]} { return }
     bind $w <Enter> +[namespace code [list listitemTip %W %x %y]]
@@ -644,6 +838,19 @@ proc ::tooltip::enableListbox {w args} {
     bind $w <Any-Button> +[namespace code hide]
 }
 
+################################################################################
+# ::tooltip::canvasitemTip
+#   Schedules a tooltip display for the current canvas item.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Canvas widget path.
+#   - args (list): Unused (kept for caller symmetry).
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules a delayed `::tooltip::show` via `after`.
+################################################################################
 proc ::tooltip::canvasitemTip {w args} {
     variable tooltip
     variable G
@@ -656,6 +863,19 @@ proc ::tooltip::canvasitemTip {w args} {
     }
 }
 
+################################################################################
+# ::tooltip::enableCanvas
+#   Enables tooltip bindings for canvas items.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Canvas widget path.
+#   - args (list): Unused (kept for caller symmetry).
+# Returns:
+#   - None.
+# Side effects:
+#   - Binds tooltip events for all canvas items.
+################################################################################
 proc ::tooltip::enableCanvas {w args} {
     if {[string match *canvasitemTip* [$w bind all <Enter>]]} { return }
     $w bind all <Enter> +[namespace code [list canvasitemTip $w]]
@@ -664,6 +884,20 @@ proc ::tooltip::enableCanvas {w args} {
     $w bind all <Any-Button> +[namespace code hide]
 }
 
+################################################################################
+# ::tooltip::notebooktabTip
+#   Schedules a tooltip display for the current ttk::notebook tab.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Notebook widget path.
+#   - x (int): Pointer x coordinate (widget-relative).
+#   - y (int): Pointer y coordinate (widget-relative).
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules a delayed `::tooltip::show` via `after`.
+################################################################################
 proc ::tooltip::notebooktabTip {w x y} {
     variable tooltip
     variable G
@@ -678,6 +912,22 @@ proc ::tooltip::notebooktabTip {w x y} {
 }
 
 # Handle the lack of <Enter>/<Leave> between ttk::notebook items using <Motion>
+################################################################################
+# ::tooltip::notebooktabMotion
+#   Handles pointer motion for ttk::notebook tabs (enter/leave emulation).
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Notebook widget path.
+#   - x (int): Pointer x coordinate (widget-relative).
+#   - y (int): Pointer y coordinate (widget-relative).
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels and reschedules delayed tooltip display when the current tab
+#     changes.
+#   - Withdraws the tooltip toplevel when moving between tabs.
+################################################################################
 proc ::tooltip::notebooktabMotion {w x y} {
     variable tooltip
     variable G
@@ -697,6 +947,19 @@ proc ::tooltip::notebooktabMotion {w x y} {
 }
 
 # Initialize tooltip events for ttk::notebook widgets
+################################################################################
+# ::tooltip::enableNotebook
+#   Enables tooltip bindings for ttk::notebook tabs.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Notebook widget path.
+#   - args (list): Unused (kept for caller symmetry).
+# Returns:
+#   - None.
+# Side effects:
+#   - Adds <Enter>/<Motion>/<Leave> and key/button bindings to the widget.
+################################################################################
 proc ::tooltip::enableNotebook {w args} {
     if {[string match *notebooktabTip* [bind $w <Enter>]]} { return }
     bind $w <Enter> +[namespace code [list notebooktabTip %W %x %y]]
@@ -706,6 +969,21 @@ proc ::tooltip::enableNotebook {w args} {
     bind $w <Any-Button> +[namespace code hide]
 }
 
+################################################################################
+# ::tooltip::tagTip
+#   Schedules a tooltip for a text tag under the pointer.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Text widget path.
+#   - tag (string): Tag name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules a delayed `::tooltip::show` via `after`.
+#   - Temporarily clears the tag <Enter> binding (restored by
+#     `::tooltip::conditionally-hide`).
+################################################################################
 proc ::tooltip::tagTip {w tag} {
     variable tooltip
     variable G
@@ -719,6 +997,20 @@ proc ::tooltip::tagTip {w tag} {
     }
 }
 
+################################################################################
+# ::tooltip::enableTag
+#   Enables tooltip bindings for a text tag.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Text widget path.
+#   - tag (string): Tag name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Adds tag bindings for <Enter>/<Leave> and key/button events.
+#   - Stores the tag <Enter> binding in `::tooltip::G(enterBinding,...)`.
+################################################################################
 proc ::tooltip::enableTag {w tag} {
     variable G
     if {[string match *tagTip* [$w tag bind $tag]]} { return }
@@ -732,6 +1024,20 @@ proc ::tooltip::enableTag {w tag} {
     set G(enterBinding,$w,$tag) [$w tag bind $tag <Enter>]
 }
 
+################################################################################
+# ::tooltip::conditionally-hide
+#   Hides the tooltip unless the pointer is within the tooltip window.
+# Visibility:
+#   Internal.
+# Inputs:
+#   - w (string): Text widget path.
+#   - tag (string): Tag name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Restores the tag <Enter> binding saved by `::tooltip::enableTag`.
+#   - Calls `::tooltip::hide 1` when the pointer is not inside the tooltip.
+################################################################################
 proc ::tooltip::conditionally-hide {w tag} {
     variable G
     # re-enable the 'Enter' binding. it is saved by `enableTag`, and cleared by `tagTip`.

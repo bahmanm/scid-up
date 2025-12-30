@@ -1,0 +1,246 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils font.tcl]
+
+namespace eval ::font_test {
+    variable stubbedCommands {}
+
+    variable fontCalls {}
+    variable updateFontsCalls {}
+}
+
+proc ::font_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::font_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::font_test::setup {} {
+    ::font_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::font_test::fontCalls {}
+    set ::font_test::updateFontsCalls {}
+
+    ::font_test::stubCommand ::updateFonts {fontName} {
+        lappend ::font_test::updateFontsCalls $fontName
+        return
+    }
+
+    ::font_test::stubCommand font {subcmd args} {
+        switch -- $subcmd {
+            configure {
+                lappend ::font_test::fontCalls [list configure {*}$args]
+                return
+            }
+            default {
+                error "font $subcmd not stubbed in font tests"
+            }
+        }
+    }
+}
+
+proc ::font_test::cleanup {} {
+    ::font_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::fd_family
+    unset -nocomplain ::fd_style
+    unset -nocomplain ::fd_size
+}
+
+# ---- Tests ----
+
+test font-FontWeight-regular-1.0 {FontWeight maps Regular to normal weight} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Regular"
+
+    # Act
+    set weight [FontWeight $style]
+
+    # Assert
+    return $weight
+} -cleanup {
+    ::font_test::cleanup
+} -result normal
+
+
+test font-FontWeight-bold-1.0 {FontWeight maps Bold to bold weight} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Bold"
+
+    # Act
+    set weight [FontWeight $style]
+
+    # Assert
+    return $weight
+} -cleanup {
+    ::font_test::cleanup
+} -result bold
+
+
+test font-FontWeight-italic-1.0 {FontWeight maps Italic to normal weight} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Italic"
+
+    # Act
+    set weight [FontWeight $style]
+
+    # Assert
+    return $weight
+} -cleanup {
+    ::font_test::cleanup
+} -result normal
+
+
+test font-FontWeight-bold-italic-1.0 {FontWeight maps Bold Italic to bold weight} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Bold Italic"
+
+    # Act
+    set weight [FontWeight $style]
+
+    # Assert
+    return $weight
+} -cleanup {
+    ::font_test::cleanup
+} -result bold
+
+
+test font-FontSlant-regular-1.0 {FontSlant maps Regular to roman slant} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Regular"
+
+    # Act
+    set slant [FontSlant $style]
+
+    # Assert
+    return $slant
+} -cleanup {
+    ::font_test::cleanup
+} -result roman
+
+
+test font-FontSlant-italic-1.0 {FontSlant maps Italic to italic slant} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Italic"
+
+    # Act
+    set slant [FontSlant $style]
+
+    # Assert
+    return $slant
+} -cleanup {
+    ::font_test::cleanup
+} -result italic
+
+
+test font-FontSlant-bold-italic-1.0 {FontSlant maps Bold Italic to italic slant} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Bold Italic"
+
+    # Act
+    set slant [FontSlant $style]
+
+    # Assert
+    return $slant
+} -cleanup {
+    ::font_test::cleanup
+} -result italic
+
+
+test font-FontWeight-unknown-style-1.0 {FontWeight defaults to normal weight for unknown styles} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Condensed"
+
+    # Act
+    set weight [FontWeight $style]
+
+    # Assert
+    return $weight
+} -cleanup {
+    ::font_test::cleanup
+} -result normal
+
+
+test font-FontSlant-unknown-style-1.0 {FontSlant defaults to roman slant for unknown styles} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set style "Condensed"
+
+    # Act
+    set slant [FontSlant $style]
+
+    # Assert
+    return $slant
+} -cleanup {
+    ::font_test::cleanup
+} -result roman
+
+
+test font-FontDialogRegen-regular-1.0 {FontDialogRegen configures font from fd_* globals (Regular)} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set ::fd_family "Arial"
+    set ::fd_style "Regular"
+    set ::fd_size 12
+
+    # Act
+    FontDialogRegen myFont
+
+    # Assert
+    list [llength $::font_test::fontCalls] [lindex $::font_test::fontCalls 0] $::font_test::updateFontsCalls
+} -cleanup {
+    ::font_test::cleanup
+} -result {1 {configure myFont -family Arial -size 12 -slant roman -weight normal} myFont}
+
+
+test font-FontDialogRegen-bold-italic-1.0 {FontDialogRegen configures font from fd_* globals (Bold Italic)} -setup {
+    ::font_test::setup
+} -body {
+    # Arrange
+    set ::fd_family "Courier"
+    set ::fd_style "Bold Italic"
+    set ::fd_size 10
+
+    # Act
+    FontDialogRegen myFont
+
+    # Assert
+    list [llength $::font_test::fontCalls] [lindex $::font_test::fontCalls 0] $::font_test::updateFontsCalls
+} -cleanup {
+    ::font_test::cleanup
+} -result {1 {configure myFont -family Courier -size 10 -slant italic -weight bold} myFont}
+
+
+cleanupTests

@@ -17,7 +17,23 @@
 
 namespace eval ::win {}
 
-# Creates a docked/undocked window.
+################################################################################
+# ::win::createWindow
+#   Creates a managed tool window and docks or undocks it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Window path (e.g. `.pgnWin`).
+#   - title (string): Window title / tab label.
+#   - default_geometry (string, optional): Default geometry to remember for `w`
+#     when no stored geometry exists.
+# Returns:
+#   - (int): 1 if the window was created; otherwise 0 when it already exists.
+# Side effects:
+#   - Creates `frame $w`.
+#   - May initialise `::winGeometry($w)`.
+#   - Delegates to `::win::manageWindow`.
+################################################################################
 proc ::win::createWindow { {w} {title} {default_geometry ""} } {
 	if { [winfo exists $w] } {
 		return 0
@@ -35,8 +51,21 @@ proc ::win::createWindow { {w} {title} {default_geometry ""} } {
 	return 1
 }
 
-# Close a window, independently of its docked state.
-# If the window is undocked the window geometry is saved.
+################################################################################
+# ::win::closeWindow
+#   Closes a tool window, regardless of whether it is docked.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `w` is docked, removes it from its notebook and records its previous
+#     notebook in `::docking::prev_nb`.
+#   - If `w` is undocked, calls `::win::saveWinGeometry`.
+#   - Destroys the widget via `destroy`.
+################################################################################
 proc ::win::closeWindow {w} {
 	lassign [::win::isDocked $w] docked_nb w
 	if {$docked_nb ne ""} {
@@ -49,7 +78,18 @@ proc ::win::closeWindow {w} {
 	destroy $w
 }
 
-# Returns a list containing the names of the opened windows:
+################################################################################
+# ::win::getWindows
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - (list): Window paths for all open tool windows (both undocked toplevel
+#     windows and docked notebook tabs).
+# Side effects:
+#   - None.
+################################################################################
 proc ::win::getWindows {} {
 	set res {}
 	foreach undocked [array names ::docking::notebook_name] {
@@ -65,9 +105,22 @@ proc ::win::getWindows {} {
 	return $res
 }
 
-# if undocked window : sets the title of the toplevel window.
-# if docked : sets the name of the tab.
-# TODO: ::win::setTitle
+################################################################################
+# ::setTitle
+#   Sets the title for a window, handling both docked and undocked states.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Window path.
+#   - title (string): Title to apply.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `w` is docked, updates the containing notebook tab label.
+#   - If `w` is undocked, updates the toplevel title via `wm title`.
+# Notes:
+#   - In docked mode, a leading "Scid: " prefix is trimmed to save space.
+################################################################################
 proc setTitle { w title } {
 	lassign [::win::isDocked $w] docked_nb w
 	if {$docked_nb ne ""} {
@@ -81,9 +134,20 @@ proc setTitle { w title } {
 	}
 }
 
-# Return a list containing the name of the menu (or "" if a menu do not exists)
-# and the unadultered window's name (no fdock)
-# param w: the window's name (with or without fdock)
+################################################################################
+# ::win::getMenu
+#   Returns the menu associated with a tool window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Window path, possibly including the `.fdock` prefix.
+# Returns:
+#   - (list): A 2-item list `{menu window}` where `menu` is the stored menu path
+#     (or "" when unset) and `window` is the unadulterated window path (without
+#     `.fdock`).
+# Side effects:
+#   - None.
+################################################################################
 proc ::win::getMenu {w} {
 	lassign [::win::isDocked $w] docked_nb wnd
 	if {[string equal -length 6 $wnd ".fdock"]} {
@@ -95,10 +159,21 @@ proc ::win::getMenu {w} {
 	return [list "" $w]
 }
 
-# if undocked window : sets the menu of the toplevel window.
-# if docked : displays a menu icon in the tab.
-# param w: the window's name (without fdock)
-# TODO: ::win::setMenu
+################################################################################
+# ::setMenu
+#   Sets the menu for a window, handling both docked and undocked states.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Window path (without `.fdock`).
+#   - m (string): Menu widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `w` is docked, adds a menu icon to the notebook tab.
+#   - If `w` is undocked, configures the toplevel `-menu` option.
+#   - Updates `::win::menu_($wnd)` for lookup by `::win::getMenu`.
+################################################################################
 proc setMenu {w m} {
 	lassign [::win::isDocked $w] docked_nb wnd
 	if {$docked_nb ne ""} {
@@ -109,7 +184,18 @@ proc setMenu {w m} {
 	set ::win::menu_($wnd) $m
 }
 
-# Save the geometry of an undocked toplevel window.
+################################################################################
+# ::win::saveWinGeometry
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - When `w` is undocked, stores its geometry (or the sentinel "zoomed") in
+#     `::winGeometry($w)`.
+################################################################################
 proc ::win::saveWinGeometry {w} {
 	lassign [::win::isDocked $w] docked_nb w
 	if {$docked_nb eq ""} {
@@ -122,8 +208,19 @@ proc ::win::saveWinGeometry {w} {
 	}
 }
 
-# Restore the geometry of an undocked toplevel window.
-# return true if a stored geometry was available.
+################################################################################
+# ::win::restoreWinGeometry
+#   Restores a previously stored geometry for an undocked window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Window path.
+# Returns:
+#   - (int): 1 if a stored geometry was applied; otherwise 0.
+# Side effects:
+#   - Updates the window geometry via `wm geometry` or applies the "zoomed"
+#     state via `wm state` / `wm attributes`.
+################################################################################
 proc ::win::restoreWinGeometry {w} {
 	if {[info exists ::winGeometry($w)]} {
 		if {$::winGeometry($w) == "zoomed"} {
@@ -140,9 +237,20 @@ proc ::win::restoreWinGeometry {w} {
 	return 0
 }
 
-# Return a list containing:
-# - the name of the notebook containing the window ("" if undocked)
-# - the name of the top parent window
+################################################################################
+# ::win::isDocked
+#   Determines whether a window is docked into a notebook.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path (may be a descendant widget).
+# Returns:
+#   - (list): A 2-item list `{notebook window}` where `notebook` is the
+#     containing notebook path (or "" if undocked) and `window` is the top-level
+#     window container used by the docking framework (possibly `.fdock...`).
+# Side effects:
+#   - None.
+################################################################################
 proc ::win::isDocked {wnd} {
 	# Get the window at the top of the hierarchy (not the toplevel)
 	regexp {[.]\w*} "$wnd" wnd
@@ -153,7 +261,28 @@ proc ::win::isDocked {wnd} {
 	return [list $docked_nb $wnd]
 }
 
-# Undock a toplevel window
+################################################################################
+# ::win::undockWindow
+#   Undocks a window (removing it from a notebook when needed) and manages it as
+#   a toplevel.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path.
+#   - srctab (string): Source notebook path, or "" if the window is not being
+#     removed from a notebook.
+#   - title (string, optional): Window title to set when undocking. When `srctab`
+#     is non-empty, the title is derived from the tab text.
+# Returns:
+#   - None.
+# Side effects:
+#   - May call `::docking::remove_tab`.
+#   - Converts `wnd` into a toplevel via `wm manage`, sets its title and close
+#     protocol.
+#   - Restores any window menu via `::setMenu`.
+#   - Records the source notebook in `::docking::notebook_name($wnd)`.
+#   - Schedules `::win::restoreWinGeometry` via `after idle after 1`.
+################################################################################
 proc ::win::undockWindow { wnd srctab {title ""} } {
 	# The default widgets' bindtags is an empty list that's dynamically
 	# resolved to window's name, window's class, window's toplevel and all.
@@ -193,7 +322,21 @@ proc ::win::undockWindow { wnd srctab {title ""} } {
 	after idle after 1 "::win::restoreWinGeometry $wnd"
 }
 
-# Dock a toplevel window
+################################################################################
+# ::win::dockWindow
+#   Docks an undocked toplevel window into a notebook.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Saves the current window geometry via `::win::saveWinGeometry`.
+#   - Removes the window from the window manager via `wm forget`.
+#   - Inserts the window as a notebook tab via `::docking::insert_tab`.
+#   - Restores any associated menu via `::setMenu`.
+################################################################################
 proc ::win::dockWindow {wnd} {
 	::win::saveWinGeometry $wnd
 	# in docked mode trim down title to spare space
@@ -219,8 +362,21 @@ proc ::win::dockWindow {wnd} {
 	if {$menu ne ""} { ::setMenu $wmenu $menu }
 }
 
-# Toggle the docked/undocked status of a window
-# param wnd: the (child) widget
+################################################################################
+# ::win::toggleDocked
+#   Toggles a window between docked and undocked states.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path (may be a descendant widget).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::win::dockWindow` or `::win::undockWindow` depending on the
+#     current docking state.
+# Notes:
+#   - The main board window (`.main`) is not docked/undocked here.
+################################################################################
 proc ::win::toggleDocked {wnd} {
 	lassign [::win::isDocked $wnd] docked_nb wnd
 
@@ -236,6 +392,21 @@ proc ::win::toggleDocked {wnd} {
 	}
 }
 
+################################################################################
+# ::win::manageWindow
+#   Applies the current docking policy when creating a tool window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path.
+#   - title (string): Window title / tab label.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears any previously stored menu and notebook association for `wnd`.
+#   - Inserts `wnd` into a notebook when docking is enabled, otherwise undocks it.
+#   - When restoring a saved layout, obeys `::docking::layout_dest_notebook`.
+################################################################################
 proc ::win::manageWindow {wnd title} {
 	unset -nocomplain ::win::menu_($wnd)
 	unset -nocomplain ::docking::notebook_name($wnd)
@@ -257,15 +428,37 @@ proc ::win::manageWindow {wnd title} {
 	}
 }
 
-# createDialog
-#   Standard initialize a toplevel window with unique attributes
-#   y is used for windows with menu. They do not need a border on the top and call with y=0
+################################################################################
+# ::win::createDialog
+#   Creates a standard Scid dialog toplevel and applies theme styling.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (string): Toplevel window path.
+#   - y (int, optional): Vertical padding. Use `0` for windows that have a menu.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `toplevel $w` with padding and calls `::applyThemeColor_background`.
+################################################################################
 proc ::win::createDialog {w {y 10}} {
 	toplevel $w -padx 10 -pady $y
 	::applyThemeColor_background $w
 }
 
-# Make sure that a window is visible
+################################################################################
+# ::win::makeVisible
+#   Ensures that a window is visible, selecting its tab when docked.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Selects the appropriate notebook tab when `wnd` is docked.
+#   - Raises and deiconifies the containing toplevel.
+################################################################################
 proc ::win::makeVisible { wnd } {
 	lassign [::win::isDocked $wnd] wnd_nb wnd_top
 	if {$wnd_nb ne ""} {
@@ -293,7 +486,17 @@ namespace eval docking {
 }
 
 ################################################################################
-# find notebook, corresponding to path
+# ::docking::find_tbn
+#   Finds the notebook that currently contains the given tab.
+# Visibility:
+#   Private.
+# Inputs:
+#   - path (string): Window path.
+# Returns:
+#   - (string): Notebook widget path containing `path`, or "" if none.
+# Side effects:
+#   - None.
+################################################################################
 proc ::docking::find_tbn {path} {
   foreach tb [array names ::docking::tbs] {
     if {[lsearch -exact [$tb tabs] $path]>=0} {
@@ -304,7 +507,19 @@ proc ::docking::find_tbn {path} {
 }
 
 ################################################################################
-# always keep .pw paned window
+# ::docking::_cleanup_tabs
+#   Removes empty notebooks and prunes empty paned windows (but keeps `.pw`).
+# Visibility:
+#   Private.
+# Inputs:
+#   - srctab (string): Notebook widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys `srctab` when it has no tabs.
+#   - Updates `::docking::tbs`.
+#   - May destroy empty paned windows up the hierarchy until reaching `.pw`.
+################################################################################
 proc ::docking::_cleanup_tabs {srctab} {
   variable tbs
 
@@ -376,7 +591,21 @@ proc ::docking::_cleanup_tabs {srctab} {
 # 1       2       4        0        0       0       0,9      5900
 # 1       2       4        0        0       0       0,5      5500
 # 1       2       4        0        0       0       0,1      5100
-# Improving the matrix and recalculating can improve the select algorithm
+################################################################################
+# ::docking::choose_notebook
+#   Chooses a destination notebook for docking a window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - path (string): Window path being docked.
+# Returns:
+#   - (string): Notebook widget path.
+# Side effects:
+#   - None.
+# Notes:
+#   - Prefers the most recently used destination in `::docking::prev_nb` when it
+#     still exists; otherwise uses a heuristic score over the available notebooks.
+################################################################################
 proc ::docking::choose_notebook { path } {
     lassign [lsearch -index 1 -inline $::docking::prev_nb $path] prev_dest
     if {[winfo exists $prev_dest]} { return $prev_dest }
@@ -428,14 +657,40 @@ proc ::docking::choose_notebook { path } {
     return $dsttab
 }
 
-# Insert a window into a notebook
+################################################################################
+# ::docking::insert_tab
+#   Inserts a window as a tab in a notebook and selects it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path.
+#   - dest_noteb (string): Destination notebook widget path.
+#   - dest_pos (string|int, optional): Notebook insert position (default: "end").
+#   - options (list, optional): Tab options to pass to `ttk::notebook insert`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Inserts and selects the tab and raises the window.
+################################################################################
 proc ::docking::insert_tab {wnd dest_noteb {dest_pos "end"} {options ""}} {
 	$dest_noteb insert $dest_pos $wnd {*}$options
 	$dest_noteb select $wnd
 	raise $wnd
 }
 
-# Remove a window from a notebook
+################################################################################
+# ::docking::remove_tab
+#   Removes a window tab from a notebook.
+# Visibility:
+#   Public.
+# Inputs:
+#   - wnd (string): Window path.
+#   - src_noteb (string): Source notebook widget path.
+# Returns:
+#   - (dict): The tab options (as returned by `ttk::notebook tab $wnd`).
+# Side effects:
+#   - Removes the tab and may clean up empty notebooks/panes.
+################################################################################
 proc ::docking::remove_tab {wnd src_noteb} {
 	set options [$src_noteb tab $wnd]
 	$src_noteb forget $wnd
@@ -443,6 +698,17 @@ proc ::docking::remove_tab {wnd src_noteb} {
 	return $options
 }
 
+################################################################################
+# ::docking::generate_unique_path_
+# Visibility:
+#   Private.
+# Inputs:
+#   - prefix (string): Widget path prefix.
+# Returns:
+#   - (string): A widget path of the form "${prefix}<n>" that does not exist.
+# Side effects:
+#   - None.
+################################################################################
 proc ::docking::generate_unique_path_ { prefix } {
 	set tmp 0
 	while {[winfo exists $prefix$tmp]} {
@@ -451,7 +717,25 @@ proc ::docking::generate_unique_path_ { prefix } {
 	return "$prefix$tmp"
 }
 
-# Move a window between two different notebooks
+################################################################################
+# ::docking::move_tab_
+#   Moves a window tab between notebooks (and may split panes).
+# Visibility:
+#   Private.
+# Inputs:
+#   - wnd (string): Window path.
+#   - src_noteb (string): Source notebook widget path.
+#   - dest_noteb (string): Destination notebook widget path, or a direction
+#     anchor (`n`, `s`, `e`, `w`) to create a new adjacent notebook.
+#   - dest_pos (string|int, optional): Insert position (default: "end").
+# Returns:
+#   - None.
+# Side effects:
+#   - Removes the tab from the source notebook and inserts it into the
+#     destination.
+#   - May create a new notebook and/or paned window to satisfy the requested
+#     direction anchor.
+################################################################################
 proc ::docking::move_tab_ {wnd src_noteb dest_noteb {dest_pos "end"} } {
 	set options [::docking::remove_tab $wnd $src_noteb]
 	if {[string length $dest_noteb] == 1} {
@@ -467,8 +751,20 @@ proc ::docking::move_tab_ {wnd src_noteb dest_noteb {dest_pos "end"} } {
 	::docking::insert_tab $wnd $dest_noteb $dest_pos $options
 }
 
-# Given a notebook, orient its paned window so that a new notebook can be added
-# in the wanted direction. Return the idx of the notebook.
+################################################################################
+# ::docking::orient_pw_
+#   Ensures that the paned window containing a notebook has the correct
+#   orientation for adding a neighbouring notebook.
+# Visibility:
+#   Private.
+# Inputs:
+#   - tbn (string): Notebook widget path.
+#   - anchor (string): Direction anchor (`n`, `s`, `e`, `w`).
+# Returns:
+#   - (int): The index of `tbn` within its (possibly newly created) paned window.
+# Side effects:
+#   - May create a new `ttk::panedwindow` and reparent the notebook.
+################################################################################
 proc ::docking::orient_pw_ {tbn anchor} {
 	variable tbs
 
@@ -496,7 +792,19 @@ proc ::docking::orient_pw_ {tbn anchor} {
 	return $idx
 }
 
-# Insert a new pane into a paned window
+################################################################################
+# ::docking::insert_pane_
+# Visibility:
+#   Private.
+# Inputs:
+#   - pw (string): Paned window widget path.
+#   - idx (string|int): Insert position (or "end").
+#   - wnd (string): Pane widget path to insert.
+# Returns:
+#   - None.
+# Side effects:
+#   - Inserts a new pane into `pw` with weight 1.
+################################################################################
 proc ::docking::insert_pane_ {pw idx wnd} {
 	if {$idx ne "end" && $idx >= [llength [$pw panes]]} {
 		set idx "end"
@@ -504,13 +812,37 @@ proc ::docking::insert_pane_ {pw idx wnd} {
 	$pw insert $idx $wnd -weight 1
 }
 
-# Insert a notebook into a paned window
+################################################################################
+# ::docking::insert_notebook_
+# Visibility:
+#   Private.
+# Inputs:
+#   - pw (string): Paned window widget path.
+#   - idx (string|int): Insert position (or "end").
+#   - noteb (string): Notebook widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Inserts `noteb` into `pw` and records its parent in `::docking::tbs`.
+################################################################################
 proc ::docking::insert_notebook_ {pw idx noteb} {
 	::docking::insert_pane_ $pw $idx $noteb
 	set ::docking::tbs($noteb) $pw
 }
 
-# Create a new notebook
+################################################################################
+# ::docking::create_notebook_
+#   Creates a new dockable notebook and wires up its drag/click bindings.
+# Visibility:
+#   Private.
+# Inputs:
+#   - path (string): Notebook widget path.
+# Returns:
+#   - (string): The created notebook widget path.
+# Side effects:
+#   - Creates `ttk::notebook $path`.
+#   - Installs bindings used for tab drag, close and context menu actions.
+################################################################################
 proc ::docking::create_notebook_ {path} {
 	set noteb [ttk::notebook $path -width 1 -height 1]
 	bind $noteb <B1-Motion> {
@@ -541,8 +873,21 @@ proc ::docking::create_notebook_ {path} {
 	return $noteb
 }
 
-# Given the x y coords relative to a notebook, returns a list containing the
-# index of the tab (or "") and true if the point given is over the tab's image.
+################################################################################
+# ::docking::identify_tab_
+#   Identifies which tab is under a point in a notebook.
+# Visibility:
+#   Private.
+# Inputs:
+#   - noteb (string): Notebook widget path.
+#   - localX (int): X coordinate relative to the notebook.
+#   - localY (int): Y coordinate relative to the notebook.
+# Returns:
+#   - (list): A 2-item list `{tab isIcon}` where `tab` is the tab index (or "")
+#     and `isIcon` is true when the point is over the tab image.
+# Side effects:
+#   - None.
+################################################################################
 proc ::docking::identify_tab_ {noteb localX localY} {
 	set isIcon 0
 	set tab [$noteb identify tab $localX $localY]
@@ -559,7 +904,21 @@ proc ::docking::identify_tab_ {noteb localX localY} {
 	return [list $tab $isIcon]
 }
 
-# Relocate tabs in response to drag events.
+################################################################################
+# ::docking::manage_motion_
+#   Handles drag-to-relocate events for notebook tabs.
+# Visibility:
+#   Private.
+# Inputs:
+#   - src_noteb (string): Source notebook widget path.
+#   - x (int): Root X coordinate.
+#   - y (int): Root Y coordinate.
+# Returns:
+#   - None.
+# Side effects:
+#   - May reorder tabs within a notebook, move a tab between notebooks, or undock
+#     a window.
+################################################################################
 proc ::docking::manage_motion_ {src_noteb x y} {
 	lassign $::docking::motion_ src_tab
 	unset ::docking::motion_
@@ -587,8 +946,22 @@ proc ::docking::manage_motion_ {src_noteb x y} {
 	}
 }
 
-# Special handling of a left click on a tab's icon: show an associated menu
-# if it exists, otherwise close the window.
+################################################################################
+# ::docking::manage_click_
+#   Handles a left-click on a tab icon (menu or close).
+# Visibility:
+#   Private.
+# Inputs:
+#   - noteb (string): Notebook widget path.
+#   - x (int): Root X coordinate.
+#   - y (int): Root Y coordinate.
+#   - localX (int): X coordinate relative to the notebook.
+#   - localY (int): Y coordinate relative to the notebook.
+# Returns:
+#   - None.
+# Side effects:
+#   - Pops up the window menu (if present) or closes the window.
+################################################################################
 proc ::docking::manage_click_ {noteb x y localX localY} {
 	lassign [::docking::identify_tab_ $noteb $localX $localY] tab isIcon
 	if {$tab eq "" || ! $isIcon} { return }
@@ -602,7 +975,23 @@ proc ::docking::manage_click_ {noteb x y localX localY} {
 	}
 }
 
-# Right click on a tab label: show a windows management menu.
+################################################################################
+# ::docking::manage_rightclick_
+#   Handles right-click on a tab label by showing a window management menu.
+# Visibility:
+#   Private.
+# Inputs:
+#   - noteb (string): Notebook widget path.
+#   - x (int): Root X coordinate.
+#   - y (int): Root Y coordinate.
+#   - localX (int): X coordinate relative to the notebook.
+#   - localY (int): Y coordinate relative to the notebook.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/destroys `.ctxtMenu` and displays it via `tk_popup`.
+#   - Selects the clicked tab.
+################################################################################
 proc ::docking::manage_rightclick_ {noteb x y localX localY} {
 	lassign [::docking::identify_tab_ $noteb $localX $localY] tab isIcon
 	if {$tab eq "" || $isIcon} { return }
@@ -639,9 +1028,20 @@ proc ::docking::manage_rightclick_ {noteb x y localX localY} {
 ################################################################################
 
 ################################################################################
+# ::docking::layout_save
+#   Saves the current docking layout into an in-memory slot.
+# Visibility:
+#   Public.
+# Inputs:
+#   - slot (string): Layout slot name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::docking::layout_list($slot)` with window geometry, paned-window
+#     structure, and the list of currently undocked windows.
+################################################################################
 # saves layout (bail out if some windows cannot be restored)
 proc ::docking::layout_save { slot } {
-
   # on Windows the geometry is false if the window was maximized (x and y offsets are the ones before the maximization)
   set geometry [wm geometry .]
   set ::docking::layout_list($slot) [list [list "MainWindowGeometry" $geometry] ]
@@ -661,6 +1061,17 @@ proc ::docking::layout_save { slot } {
     }
   }
 }
+################################################################################
+# ::docking::layout_save_pw
+#   Serialises a paned window and its nested notebooks for layout persistence.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pw (string): Paned window widget path.
+# Returns:
+#   - (list): A serialised representation of `pw` and its panes.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::docking::layout_save_pw {pw} {
   set ret {}
@@ -694,7 +1105,18 @@ proc ::docking::layout_save_pw {pw} {
 }
 
 ################################################################################
-# restores paned windows and internal notebooks
+# ::docking::layout_restore_pw
+#   Recreates paned windows and notebooks from saved layout data.
+# Visibility:
+#   Private.
+# Inputs:
+#   - data (list): Serialised layout data (as produced by `layout_save_pw`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `ttk::panedwindow` and `ttk::notebook` widgets.
+#   - Populates `::docking::restore_wnds` and `::docking::restore_sashpos`.
+################################################################################
 proc ::docking::layout_restore_pw { data } {
   foreach elt $data {
     lassign $elt type pathName
@@ -728,6 +1150,18 @@ proc ::docking::layout_restore_pw { data } {
   }
 }
 
+################################################################################
+# ::docking::create_window
+#   Creates (opens) a window given its path name during layout restore.
+# Visibility:
+#   Private.
+# Inputs:
+#   - wnd (string): Window path to create.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls the appropriate window-open routine based on `wnd`.
+################################################################################
 proc ::docking::create_window {wnd} {
       switch -regexp -matchvar regmatch -- $wnd {
       "\.(fdock)?main"                { ::docking::insert_tab .main $::docking::layout_dest_notebook end [list -text $::tr(Board) -compound none] }
@@ -748,6 +1182,20 @@ proc ::docking::create_window {wnd} {
       }
 }
 
+################################################################################
+# ::docking::layout_restore
+#   Restores a previously saved docking layout.
+# Visibility:
+#   Public.
+# Inputs:
+#   - slot (string): Layout slot name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Closes existing tool windows and destroys current layout widgets.
+#   - Recreates paned windows/notebooks, restores window geometry and sash
+#     positions, and reopens windows recorded in the layout.
+################################################################################
 proc ::docking::layout_restore { slot } {
   # if no layout recorded, retry with the last used
   if { $::docking::layout_list($slot) == {} } {

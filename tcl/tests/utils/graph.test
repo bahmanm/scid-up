@@ -1,0 +1,207 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+namespace eval ::utils::graph {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils graph.tcl]
+
+namespace eval ::graph_test {}
+
+proc ::graph_test::setup {} {
+    # Arrange
+    set ::utils::graph::_graphs {}
+    catch {array unset ::utils::graph::_data}
+    array set ::utils::graph::_data {}
+}
+
+proc ::graph_test::cleanup {} {
+    # Keep the suite hermetic.
+    set ::utils::graph::_graphs {}
+    catch {array unset ::utils::graph::_data}
+    array set ::utils::graph::_data {}
+}
+
+# ---- Tests ----
+
+test graph-create-isgraph-1.0 {create registers a graph name} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set graph [::utils::graph::create g1]
+
+    # Assert
+    list $graph [::utils::graph::isgraph g1]
+} -cleanup {
+    ::graph_test::cleanup
+} -result {g1 1}
+
+
+test graph-data-odd-coords-errors-1.0 {data rejects odd-length coords} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+    ::utils::graph::create g1
+
+    # Act
+    ::utils::graph::data g1 d1 -coords {1 2 3}
+
+    # Assert
+} -cleanup {
+    ::graph_test::cleanup
+} -returnCodes error -match glob -result {*coordinates list must have an even length*}
+
+
+test graph-cget-computes-range-1.0 {cget axmin/axmax/aymin/aymax computes ranges from data} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+    ::utils::graph::create g1 -xtick 5 -ytick 10
+    ::utils::graph::data g1 d1 -coords {1 2 9 22}
+
+    # Act
+    set axmin [::utils::graph::cget g1 axmin]
+    set axmax [::utils::graph::cget g1 axmax]
+    set aymin [::utils::graph::cget g1 aymin]
+    set aymax [::utils::graph::cget g1 aymax]
+
+    # Assert
+    list $axmin $axmax $aymin $aymax
+} -cleanup {
+    ::graph_test::cleanup
+} -result {0.0 10.0 0.0 30.0}
+
+
+test graph-rescale-and-maps-1.0 {rescale sets factors and map/unmap are consistent} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+    ::utils::graph::create g1
+    ::utils::graph::configure g1 -xmin 0 -xmax 10 -ymin 0 -ymax 10
+
+    # Act
+    ::utils::graph::set_range g1
+    ::utils::graph::rescale g1
+
+    set x0 [::utils::graph::xmap g1 0]
+    set x10 [::utils::graph::xmap g1 10]
+    set y0 [::utils::graph::ymap g1 0]
+    set y10 [::utils::graph::ymap g1 10]
+
+    set x0u [::utils::graph::xunmap g1 $x0]
+    set y0u [::utils::graph::yunmap g1 $y0]
+
+    # Assert
+    list $x0 $x10 $y0 $y10 [expr {abs($x0u - 0.0) < 0.0001}] [expr {abs($y0u - 0.0) < 0.0001}]
+} -cleanup {
+    ::graph_test::cleanup
+} -result {50 450 330 30 1 1}
+
+
+test graph-scale-data-1.0 {scale_data maps graph coordinates to canvas units} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+    ::utils::graph::create g1
+    ::utils::graph::configure g1 -xmin 0 -xmax 10 -ymin 0 -ymax 10
+    ::utils::graph::set_range g1
+    ::utils::graph::rescale g1
+
+    # Act
+    ::utils::graph::scale_data g1 {0 0 10 10}
+
+    # Assert
+} -cleanup {
+    ::graph_test::cleanup
+} -result {50 330 450 30}
+
+
+test graph-round-near-int-1.0 {round returns integer when within 0.1} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::graph::round 2.05
+
+    # Assert
+} -cleanup {
+    ::graph_test::cleanup
+} -result 2
+
+
+test graph-round-to-1dp-1.0 {round returns one decimal place when not near integer} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    ::utils::graph::round 2.15
+
+    # Assert
+} -cleanup {
+    ::graph_test::cleanup
+} -result 2.2
+
+
+test graph-ymap-empty-errors-1.0 {ymap errors on empty y} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+    ::utils::graph::create g1
+    ::utils::graph::configure g1 -xmin 0 -xmax 10 -ymin 0 -ymax 10
+    ::utils::graph::set_range g1
+    ::utils::graph::rescale g1
+
+    # Act
+    ::utils::graph::ymap g1 ""
+
+    # Assert
+} -cleanup {
+    ::graph_test::cleanup
+} -returnCodes error -result {y is empty}
+
+
+test graph-delete-removes-1.0 {delete unregisters a graph name} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+    ::utils::graph::create gdel
+    set before [::utils::graph::isgraph gdel]
+
+    # Act
+    ::utils::graph::delete gdel
+
+    # Assert
+    list $before [::utils::graph::isgraph gdel]
+} -cleanup {
+    ::graph_test::cleanup
+} -result {1 0}
+
+
+test graph-point-visible-1.0 {point_visible uses canvas-unit boundaries (xtop/ytop/width/height)} -setup {
+    ::graph_test::setup
+} -body {
+    # Arrange
+    ::utils::graph::create g1 -xtop 50 -ytop 30 -width 100 -height 50
+
+    # Act
+    set inside [::utils::graph::point_visible g1 50 30]
+    set left [::utils::graph::point_visible g1 49 30]
+    set right [::utils::graph::point_visible g1 151 30]
+    set below [::utils::graph::point_visible g1 50 81]
+
+    # Assert
+    list $inside $left $right $below
+} -cleanup {
+    ::graph_test::cleanup
+} -result {1 0 0 0}
+
+
+cleanupTests
