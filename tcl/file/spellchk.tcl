@@ -147,7 +147,10 @@ proc startScanning {} {
     .spellcheckWin.buttons.ambig  configure -state disabled
     .spellcheckWin.buttons.ok     configure -state disabled
     .spellcheckWin.buttons.cancel configure -text "Stop"
-    bind .spellcheckWin <Alt-s> ".spellcheckWin.buttons.cancel invoke; break"
+    bind .spellcheckWin <Alt-s> [list apply {{} {
+        .spellcheckWin.buttons.cancel invoke
+        return -code break
+    } ::}]
     if {$spellcheckType == "Player"} {
         .spellcheckWin.buttons.surnames configure -state disabled
     }
@@ -180,7 +183,10 @@ proc stopScanning {} {
     .spellcheckWin.buttons.ambig  configure -state enabled
     .spellcheckWin.buttons.ok     configure -state enabled
     .spellcheckWin.buttons.cancel configure -text $::tr(Cancel)
-    bind .spellcheckWin <Alt-c> ".spellcheckWin.buttons.cancel invoke; break"
+    bind .spellcheckWin <Alt-c> [list apply {{} {
+        .spellcheckWin.buttons.cancel invoke
+        return -code break
+    } ::}]
     if {$spellcheckType == "Player"} {
         .spellcheckWin.buttons.surnames configure -state enabled
     }
@@ -307,7 +313,7 @@ proc openSpellCheckWin {type {parent .}} {
     wm minsize $w 0 15
 
     bind $w <F1> { helpWindow Maintenance }
-    bind $w <Configure> "recordWinSize $w"
+    bind $w <Configure> [list recordWinSize $w]
 
     # Prepare the text pad
     #
@@ -391,7 +397,10 @@ proc openSpellCheckWin {type {parent .}} {
         updateBoard -pgn
         ::windows::gamelist::Refresh
     }
-    bind $w <Alt-m> "$f.ok invoke; break"
+    bind $w <Alt-m> [list apply {{f} {
+        ${f}.ok invoke
+        return -code break
+    } ::} $f]
 
     # The cancel button operates in an either/or context
     # While some process is running, it simply stops it
@@ -405,7 +414,10 @@ proc openSpellCheckWin {type {parent .}} {
             destroy .spellcheckWin
         }
     }
-    bind $w <Alt-c> "$f.cancel invoke; break"
+    bind $w <Alt-c> [list apply {{f} {
+        ${f}.cancel invoke
+        return -code break
+    } ::} $f]
     pack $f.cancel $f.ok -side right -padx 5 -fill x
 
 
@@ -413,4 +425,3 @@ proc openSpellCheckWin {type {parent .}} {
     #
     updateSpellCheckWin $type
 }
-

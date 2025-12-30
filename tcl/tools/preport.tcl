@@ -187,7 +187,7 @@ proc ::preport::makeReportWin {args} {
     toplevel $w
     wm withdraw $w
     wm title $w "Scid: [tr ToolsPlayerReport]"
-    bind $w <Visibility> "raiseWin $w"
+    bind $w <Visibility> [list raiseWin $w]
 
     pack [ttk::frame $w.b] -side bottom -fill x
     set ::preport::_interrupt 0
@@ -290,13 +290,13 @@ proc ::preport::makeReportWin {args} {
         -command {helpWindow Index}
 
     bind $w <F1> {helpWindow Reports Player}
-    bind $w <Escape> "$w.b.close invoke"
-    bind $w <Up> "$w.text yview scroll -1 units"
-    bind $w <Down> "$w.text yview scroll 1 units"
-    bind $w <Prior> "$w.text yview scroll -1 pages"
-    bind $w <Next> "$w.text yview scroll 1 pages"
-    bind $w <Key-Home> "$w.text yview moveto 0"
-    bind $w <Key-End> "$w.text yview moveto 0.99"
+    bind $w <Escape> [list ${w}.b.close invoke]
+    bind $w <Up> [list ${w}.text yview scroll -1 units]
+    bind $w <Down> [list ${w}.text yview scroll 1 units]
+    bind $w <Prior> [list ${w}.text yview scroll -1 pages]
+    bind $w <Next> [list ${w}.text yview scroll 1 pages]
+    bind $w <Key-Home> [list ${w}.text yview moveto 0]
+    bind $w <Key-End> [list ${w}.text yview moveto 0.99]
 
     autoscrollText y $w.scroll $w.text Treeview
     $w.text configure -height 30 -width 85 -font font_Small -state normal -wrap word
@@ -404,7 +404,7 @@ proc ::preport::setOptions {} {
   array set ::preport::backup [array get ::preport]
   wm resizable $w 0 0
   wm title $w  "Scid: [tr ToolsPlayerReport]: [tr Options]"
-  bind $w <Escape> "$w.b.cancel invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
 }
 
 

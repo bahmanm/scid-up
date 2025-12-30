@@ -559,8 +559,8 @@ proc changeBaseType {baseNum} {
 
   bind $w <Home> { selectBaseType 0 }
   bind $w <End> { selectBaseType [expr [llength $::windows::switcher::base_types] - 1] }
-  bind $w <Escape> "$w.b.cancel invoke"
-  bind $w <Return> "$w.b.set invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
+  bind $w <Return> [list ${w}.b.set invoke]
 
   focus $w.t
   grab $w
@@ -644,7 +644,9 @@ proc ::windows::switcher::Open {{w .baseWin}} {
   }
 
   ::windows::switcher::Create $w
-  bind $w <Destroy> "+ if {\[string equal $w %W\]} {set ::baseWin 0}"
+  bind $w <Destroy> [list +apply {{w} {
+    if {[string equal $w %W]} {set ::baseWin 0}
+  } ::} $w]
   bind $w <F1> { helpWindow Switcher }
 }
 
@@ -677,16 +679,18 @@ proc ::windows::switcher::Create {{w}} {
 
     menu $f.menu -tearoff 0
     foreach win {"" .img .name .ngames} {
-      bind $f$win <ButtonPress-$::MB3> "::windows::switcher::popupmenu $w $f %X %Y $i"
+      bind $f$win <ButtonPress-$::MB3> [list ::windows::switcher::popupmenu $w $f %X %Y $i]
     }
   }
   bind $w <<NotifyFilter>> [list apply {{w} {
     lassign %d dbase filter
     if {$filter eq "dbfilter"} { ::windows::switcher::Update_ $w }
   }} $w]
-  bind $w <Configure> "+if {\"%W\" eq \"$w\"} {
-    ::windows::switcher::Update_ %W
-  }"
+  bind $w <Configure> [list +apply {{w} {
+    if {[string equal %W $w]} {
+      ::windows::switcher::Update_ %W
+    }
+  } ::} $w]
   bind $w <Destroy> { set idx [lsearch $::windows::switcher::wins %W]; set ::windows::switcher::wins [lreplace $::windows::switcher::wins $idx $idx] }
   lappend ::windows::switcher::wins $w
 

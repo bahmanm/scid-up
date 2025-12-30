@@ -408,8 +408,11 @@ proc ::enginelist::choose {} {
     # The list of choices:
     pack $w.list -side top -fill y -expand 1
     pack $w.buttons -side top -fill x -pady { 5 0 }
-    bind $w.list.list <Double-ButtonRelease-1> "$w.buttons.ok invoke; break"
-    bind $w.list.list <ButtonRelease-1> "engine.singleclick_ %W %x %y"
+    bind $w.list.list <Double-ButtonRelease-1> [list apply {{w} {
+        ${w}.buttons.ok invoke
+        return -code break
+    } ::} $w]
+    bind $w.list.list <ButtonRelease-1> [list engine.singleclick_ %W %x %y]
     
     set f $w.buttons
     dialogbutton $f.add -text $::tr(EngineNew...) -command {::enginelist::edit -1}
@@ -435,8 +438,11 @@ proc ::enginelist::choose {} {
     focus $w.list.list
     wm protocol $w WM_DELETE_WINDOW "destroy $w"
     bind $w <F1> { helpWindow Analysis List }
-    bind $w <Escape> "destroy $w"
-    bind $w.list.list <Return> "$w.buttons.ok invoke; break"
+    bind $w <Escape> [list destroy $w]
+    bind $w.list.list <Return> [list apply {{w} {
+        ${w}.buttons.ok invoke
+        return -code break
+    } ::} $w]
     set engines(selection) ""
     catch {grab $w}
     tkwait window $w
@@ -667,8 +673,12 @@ proc ::enginelist::edit {index} {
     ttk::label $f.required -font font_Small -text $::tr(EngineRequired)
     pack $f.required -side left
     
-    bind $w <Return> "$f.ok invoke"
-    bind $w <Escape> "destroy $w; raise .enginelist; focus .enginelist"
+    bind $w <Return> [list ${f}.ok invoke]
+    bind $w <Escape> [list apply {{w} {
+        destroy $w
+        raise .enginelist
+        focus .enginelist
+    } ::} $w]
     bind $w <F1> { helpWindow Analysis List }
     focus $w.f.eName
     wm resizable $w 1 0
@@ -2102,7 +2112,7 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     pack $w.text -side top -fill both
     pack $w.hist -side top -expand 1 -fill both
     
-    bind $w.hist.text <ButtonPress-$::MB3> "toggleMovesDisplay $n"
+    bind $w.hist.text <ButtonPress-$::MB3> [list toggleMovesDisplay $n]
     $w.text tag configure blue -foreground DodgerBlue3
     $w.text tag configure bold -font font_Bold
     $w.text tag configure small -font font_Small
@@ -2114,9 +2124,11 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
             by moving backward or forward or making a new move.)" small
     }
     $w.text configure -state disabled
-    bind $w <Destroy> "if {\[string equal $w %W\]} { destroyAnalysisWin $n }"
-    bind $w <Escape> "focus .; destroy $w"
-    bind $w <Key-a> "$w.b1.bStartStop invoke"
+    bind $w <Destroy> [list apply {{w n} {
+        if {[string equal $w %W]} { destroyAnalysisWin $n }
+    } ::} $w $n]
+    bind $w <Escape> [list apply {{w} { focus .; destroy $w } ::} $w]
+    bind $w <Key-a> [list ${w}.b1.bStartStop invoke]
     wm minsize $w 25 0
     ::createToplevelFinalize $w
 
@@ -2965,7 +2977,7 @@ proc toggleAnalysisBoard {n} {
         setWinSize .analysisWin$n
         .analysisWin$n.b1.showboard state !pressed
     } else {
-        bind .analysisWin$n <Configure> ""
+        bind .analysisWin$n <Configure> {}
         set analysis(showBoard$n) 1
         pack .analysisWin$n.bd -side right -before .analysisWin$n.b1 -padx 4 -pady 4 -anchor n
         update

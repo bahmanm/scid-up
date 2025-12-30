@@ -43,10 +43,10 @@ proc ::tree::make { { baseNumber -1 } {locked 0} } {
   set tree(order$baseNumber) "frequency"
   set tree(allgames$baseNumber) 1
 
-  bind $w <Destroy> "::tree::closeTree $baseNumber"
+  bind $w <Destroy> [list ::tree::closeTree $baseNumber]
 
   # Bind left button to close ctxt menu:
-  bind $w <ButtonPress-1> "::tree::hideCtxtMenu $baseNumber"
+  bind $w <ButtonPress-1> [list ::tree::hideCtxtMenu $baseNumber]
 
   menu $w.menu
   ::setMenu $w $w.menu
@@ -785,7 +785,7 @@ proc ::tree::best { baseNumber } {
   } else {
     .treeWin$baseNumber.buttons.best state pressed
     ::windows::gamelist::OpenTreeBest $::tree(base$baseNumber) $w
-    bind $w <Destroy> "+.treeWin$baseNumber.buttons.best state !pressed"
+    bind $w <Destroy> [list +.treeWin$baseNumber.buttons.best state !pressed]
   }
 }
 
@@ -812,7 +812,7 @@ proc ::tree::graph { baseNumber {bpress 0}} {
   if {! [winfo exists $w]} {
     toplevel $w
     setWinLocation $w
-    bind $w <Escape> "destroy $w"
+    bind $w <Escape> [list destroy $w]
     bind $w <F1> {helpWindow Tree Graph}
 
     menu $w.menu
@@ -828,8 +828,8 @@ proc ::tree::graph { baseNumber {bpress 0}} {
     pack $w.c -side top -fill both -expand yes
     $w.c create text 25 10 -tag text -justify center -width 1 -font font_Regular -anchor n
     update
-    bind $w <Configure> "::tree::graphRedraw $baseNumber"
-    bind $w.c <Button-1> "::tree::graph $baseNumber"
+    bind $w <Configure> [list ::tree::graphRedraw $baseNumber]
+    bind $w.c <Button-1> [list ::tree::graph $baseNumber]
     ::setTitle $w "Scid: Tree Graph $baseNumber: [file tail [sc_base filename $baseNumber]]"
     # wm minsize $w 300 200
     ::tree::configGraphMenus "" $baseNumber
@@ -1956,9 +1956,9 @@ proc ::tree::mask::searchMask { baseNumber } {
   setWinLocation $w
   setWinSize $w
 
-  bind $w.f2.text <ButtonPress-1> " ::tree::mask::searchClick %x %y %W $baseNumber "
+  bind $w.f2.text <ButtonPress-1> [list ::tree::mask::searchClick %x %y %W $baseNumber]
   bind $w <Escape> { destroy  .searchmask }
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
 
 }
 ################################################################################

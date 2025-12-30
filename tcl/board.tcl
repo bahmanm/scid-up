@@ -247,7 +247,11 @@ proc chooseBoardColors { w {choice -1}} {
     $c create rectangle 0 [expr {20 + $i}] [expr 20 - $i] $psize -tag lite
     $c create rectangle [expr {20 + $i}] 0 $psize [expr {20 - $i}] -tag lite
     pack $b $c -side left -padx 1
-    bind $c <Button-1> "set ::borderwidth $i; ::board::border .main.board $i; updateBoard"
+    bind $c <Button-1> [list apply {{i} {
+        set ::borderwidth $i
+        ::board::border .main.board $i
+        updateBoard
+    } ::} $i]
   }
 
   # Coords option:
@@ -302,10 +306,10 @@ proc chooseBoardColors { w {choice -1}} {
     ttk::label $f.wdark -image wp$psize -background [lindex $list 2]
     ttk::button $f.select -text [expr {$count + 1}] \
         -command [list updateBoardColors $w $count]
-    bind $f.blite <1> "$f.select invoke"
-    bind $f.bdark <1> "$f.select invoke"
-    bind $f.wlite <1> "$f.select invoke"
-    bind $f.wdark <1> "$f.select invoke"
+    bind $f.blite <1> [list ${f}.select invoke]
+    bind $f.bdark <1> [list ${f}.select invoke]
+    bind $f.wlite <1> [list ${f}.select invoke]
+    bind $f.wdark <1> [list ${f}.select invoke]
     grid $f.blite -row 0 -column 0 -sticky e
     grid $f.bdark -row 0 -column 1 -sticky w
     grid $f.wlite -row 1 -column 1 -sticky w
@@ -333,7 +337,7 @@ proc chooseBoardColors { w {choice -1}} {
     $f.c create image 0 $psize -image wp$psize -anchor nw
     $f.c create image $psize $psize -image bp$psize -anchor nw
     ttk::button $f.select -text [expr {$count + 1}] -command [list chooseBoardTextures $count]
-    bind $f.c <1> "chooseBoardTextures $count"
+    bind $f.c <1> [list chooseBoardTextures $count]
     pack $f.c $f.select -side top
 
     incr count

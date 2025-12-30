@@ -539,12 +539,15 @@ proc showVars {} {
     $w.lbVar focus 0
     $w.lbVar selection set 0
 
-    bind $w <Configure> "recordWinSize $w"
-    bind $w <Escape> "destroy $w"
-    bind $w <Left> "destroy $w"
-    bind $w <Right> "::move::EnterVar \[$w.lbVar selection\]; destroy $w"
-    bind $w <Return> "event generate $w <Right>"
-    bind $w <ButtonRelease-1> "event generate $w <Right>"
+    bind $w <Configure> [list recordWinSize $w]
+    bind $w <Escape> [list destroy $w]
+    bind $w <Left> [list destroy $w]
+    bind $w <Right> [list apply {{w} {
+        ::move::EnterVar [${w}.lbVar selection]
+        destroy $w
+    } ::} $w]
+    bind $w <Return> [list event generate $w <Right>]
+    bind $w <ButtonRelease-1> [list event generate $w <Right>]
 
     tkwait visibility $w
     ::tk::SetFocusGrab $w $w.lbVar
@@ -821,8 +824,8 @@ proc getPromoPiece {} {
     ttk::button $w.bb -image ${col}b45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 4]
     ttk::button $w.bn -image ${col}n45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 5]
     pack $w.bq $w.br $w.bb $w.bn -side left
-    bind $w <Escape> "set ::result 2 ; destroy $w"
-    bind $w <Return> "set ::result 2 ; destroy $w"
+    bind $w <Escape> [list apply {{w} { set ::result 2; destroy $w } ::} $w]
+    bind $w <Return> [list apply {{w} { set ::result 2; destroy $w } ::} $w]
     update
     catch { grab $w }
     tkwait window $w
@@ -1334,7 +1337,7 @@ proc CreateMainBoard { {w} } {
   bind $w <BackSpace> moveEntry_Backspace
   bind $w <Delete> moveEntry_Backspace
   bind $w <space> moveEntry_Complete
-  bind $w <ButtonRelease> "focus $w"
+  bind $w <ButtonRelease> [list focus $w]
   bind $w <Configure> {+::resizeMainBoard }
 
   bindMouseWheel $w "main_mousewheelHandler"
@@ -1367,8 +1370,8 @@ proc CreateGameInfo {} {
   # Set up player photos:
   ttk::label .main.photoW -image photoW -anchor ne
   ttk::label .main.photoB -image photoB -anchor ne
-  bind .main.photoW <ButtonPress-1> "togglePhotosSize"
-  bind .main.photoB <ButtonPress-1> "togglePhotosSize"
+  bind .main.photoW <ButtonPress-1> [list togglePhotosSize]
+  bind .main.photoB <ButtonPress-1> [list togglePhotosSize]
 
   # Right-mouse button menu for gameInfo frame:
   menu .main.gameInfo.menu -tearoff 0

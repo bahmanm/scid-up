@@ -131,7 +131,7 @@ proc ::optable::makeReportWin {args} {
     toplevel $w -background [ttk::style lookup . -background]
     wm withdraw $w
     wm title $w "Scid: Generating Report"
-    bind $w <Visibility> "raiseWin $w"
+    bind $w <Visibility> [list raiseWin $w]
 
     pack [ttk::frame $w.b] -side bottom -fill x
     set ::optable::_interrupt 0
@@ -231,13 +231,13 @@ proc ::optable::makeReportWin {args} {
     ::optable::updateFavoritesMenu
 
     bind $w <F1> {helpWindow Reports Opening}
-    bind $w <Escape> "$w.b.close invoke"
-    bind $w <Up> "$w.text yview scroll -1 units"
-    bind $w <Down> "$w.text yview scroll 1 units"
-    bind $w <Prior> "$w.text yview scroll -1 pages"
-    bind $w <Next> "$w.text yview scroll 1 pages"
-    bind $w <Key-Home> "$w.text yview moveto 0"
-    bind $w <Key-End> "$w.text yview moveto 0.99"
+    bind $w <Escape> [list ${w}.b.close invoke]
+    bind $w <Up> [list ${w}.text yview scroll -1 units]
+    bind $w <Down> [list ${w}.text yview scroll 1 units]
+    bind $w <Prior> [list ${w}.text yview scroll -1 pages]
+    bind $w <Next> [list ${w}.text yview scroll 1 pages]
+    bind $w <Key-Home> [list ${w}.text yview moveto 0]
+    bind $w <Key-End> [list ${w}.text yview moveto 0.99]
 
     # TODO: Is it really ok for the text to not be a child of the frame (grid propagate)?
     autoscrollText y $w.scroll $w.text Treeview
@@ -476,7 +476,7 @@ proc ::optable::setOptions {} {
   array set ::optable::backup [array get ::optable]
   wm resizable $w 0 0
   wm title $w  "Scid: [tr ToolsOpReport]: [tr OprepFileOptions]"
-  bind $w <Escape> "$w.b.cancel invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
 }
 
 ################################################################################
@@ -1864,7 +1864,7 @@ proc ::optable::reportFavoritesOK {} {
   toplevel $w
   wm withdraw $w
   wm title $w "Scid: Generating Reports"
-  bind $w <Visibility> "raiseWin $w"
+  bind $w <Visibility> [list raiseWin $w]
   pack [ttk::label $w.t -width 40 -text "Generating reports. Please wait..." -font font_Bold] -side top -pady 5
   pack [ttk::label $w.report] -side top -pady 5
   wm deiconify $w

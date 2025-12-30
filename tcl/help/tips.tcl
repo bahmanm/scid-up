@@ -21,13 +21,13 @@ proc ::tip::show {{n -1}} {
     pack $w.b.start -side left -padx 2
     packdlgbuttons $w.b.close $w.b.next $w.b.prev
 
-    bind $w <Up> "$w.text yview scroll -1 units"
-    bind $w <Down> "$w.text yview scroll 1 units"
-    bind $w <Prior> "$w.text yview scroll -1 pages"
-    bind $w <Next> "$w.text yview scroll 1 pages"
-    bind $w <Key-Home> "$w.text yview moveto 0"
-    bind $w <Key-End> "$w.text yview moveto 0.99"
-    bind $w <Escape> "$w.b.close invoke"
+	    bind $w <Up> [list ${w}.text yview scroll -1 units]
+	    bind $w <Down> [list ${w}.text yview scroll 1 units]
+	    bind $w <Prior> [list ${w}.text yview scroll -1 pages]
+	    bind $w <Next> [list ${w}.text yview scroll 1 pages]
+	    bind $w <Key-Home> [list ${w}.text yview moveto 0]
+	    bind $w <Key-End> [list ${w}.text yview moveto 0.99]
+	    bind $w <Escape> [list ${w}.b.close invoke]
     raiseWin $w
     focus $w
   }

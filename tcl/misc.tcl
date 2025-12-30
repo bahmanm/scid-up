@@ -38,14 +38,26 @@ proc vwaitTimed { var {delay 0} {warn "warnuser"} } {
 proc bindMouseWheel {bindtag callback} {
     switch -- [tk windowingsystem] {
 	x11 {
-	    bind $bindtag <ButtonPress-4> "$callback -1; break"
-	    bind $bindtag <ButtonPress-5> "$callback +1; break"
+	    bind $bindtag <ButtonPress-4> [list apply {{callback} {
+	        {*}$callback -1
+	        return -code break
+	    } ::} $callback]
+	    bind $bindtag <ButtonPress-5> [list apply {{callback} {
+	        {*}$callback +1
+	        return -code break
+	    } ::} $callback]
 	}
 	win32 {
-	    bind $bindtag <<MWheel>> "[append callback { [expr {-(%d/120)}]}]; break"
+	    bind $bindtag <<MWheel>> [list apply {{callback} {
+	        {*}$callback [expr {-(%d/120)}]
+	        return -code break
+	    } ::} $callback]
 	}
 	aqua {
-	    bind $bindtag <MouseWheel> "[append callback { [expr {-(%D)}]} ]; break"
+	    bind $bindtag <MouseWheel> [list apply {{callback} {
+	        {*}$callback [expr {-(%D)}]
+	        return -code break
+	    } ::} $callback]
 	}
     }
 }
@@ -532,7 +544,7 @@ namespace eval gameclock {
         set y [expr { ($size/2 - (($size-15)/2)*cos($a) ) }]
         $data(id$n) create text $x $y -text $i -tag clock$n
       }
-      bind $data(id$n) <Button-1> "::gameclock::toggleClock $n"
+      bind $data(id$n) <Button-1> [list ::gameclock::toggleClock $n]
     }
     set data(fg$n) "black"
     set data(running$n) 0

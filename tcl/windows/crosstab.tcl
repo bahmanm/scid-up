@@ -232,7 +232,7 @@ proc ::crosstab::Open {} {
   pack $w.f -side top -fill both -expand true
 
   # Take input focus even if -state is disabled
-  bind $w.f.text <ButtonPress-1> "focus %W"
+  bind $w.f.text <ButtonPress-1> [list focus %W]
 
   ::crosstab::Refresh
 }

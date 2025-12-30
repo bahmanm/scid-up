@@ -705,8 +705,8 @@ namespace eval uci {
         pack $w.fopt -expand 1 -fill both
         addHorizontalRule $w
         pack $w.fbuttons -expand 1 -fill both
-        bind $w <Return> "$w.fbuttons.save invoke"
-        bind $w <Escape> "destroy .uciConfigWin"
+        bind $w <Return> [list ${w}.fbuttons.save invoke]
+        bind $w <Escape> [list destroy .uciConfigWin]
         catch {grab .uciConfigWin}
     }
 ################################################################################

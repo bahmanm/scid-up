@@ -437,10 +437,10 @@ proc playerInfo {{player ""}} {
     $w.text configure -font font_Regular -wrap none -state normal
     ttk::label $w.photo
     pack $w.frame -side top -fill both -expand yes
-    bind $w <Escape> "focus .; destroy $w"
+	    bind $w <Escape> [list apply {{w} { focus .; destroy $w } ::} $w]
     ::htext::init $w.text
     ::htext::updateRate $w.text 0
-    bind $w <Escape> "focus .; destroy $w"
+	    bind $w <Escape> [list apply {{w} { focus .; destroy $w } ::} $w]
     bind $w <F1> {helpWindow PInfo}
     ::createToplevelFinalize $w
   }

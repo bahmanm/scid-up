@@ -36,7 +36,7 @@ namespace eval novag {
       ::novag::send [.novag.f.bottom.input get]
       .novag.f.bottom.input delete 0 end
     }
-    bind $w.f.bottom.input <Return> " $w.f.bottom.send invoke "
+    bind $w.f.bottom.input <Return> [list ${w}.f.bottom.send invoke]
     bind $w <Destroy> { catch ::novag::disconnect }
     bind $w <F1> { helpWindow Novag}
     ::createToplevelFinalize $w

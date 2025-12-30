@@ -279,7 +279,7 @@ proc configureFilterGraph {} {
   pack $w.buttons -anchor e
   packdlgbuttons $w.buttons.close $w.buttons.update $w.buttons.standard
   focus $w.filternew.iFilterMinYear
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
 }
 
 #####################
@@ -1015,8 +1015,8 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
       ::utils::graph::configure ratings -logy 10
       ::utils::graph::redraw ratings
     }
-    bind $w.c <Button-1> "::tools::graphs::rating::Refresh"
-    bind $w.c <Button-$::MB3> "::tools::graphs::rating::Refresh"
+    bind $w.c <Button-1> [list ::tools::graphs::rating::Refresh]
+    bind $w.c <Button-$::MB3> [list ::tools::graphs::rating::Refresh]
     wm title $w "Scid: [tr ToolsRating]"
     ::tools::graphs::rating::ConfigMenus
   }

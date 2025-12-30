@@ -289,9 +289,9 @@ proc ::enginecfg::updateConfigFrame {id configFrame msgInfoConfig} {
 # the configFrame is destroyed.
 proc ::enginecfg::autoSaveConfig {id configFrame {autosave false}} {
     if {$autosave} {
-        bind $configFrame.text <Destroy> "
-            ::enginecfg::save \[ set ::enginecfg::engConfig_$id \]
-        "
+        bind $configFrame.text <Destroy> [list apply {{id} {
+            ::enginecfg::save [set ::enginecfg::engConfig_$id]
+        } ::} $id]
     } else {
         bind $configFrame.text <Destroy> {}
     }
@@ -393,18 +393,18 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     bind $w.name <Return> [bind $w.name <FocusOut>]
 
     apply $fn_create_entry $w cmd "\n[tr EngineCmd]" $cmd
-    bind $w.cmd <FocusOut> "::enginecfg::onSubmitParam $id cmd \[ %W get \]"
+    bind $w.cmd <FocusOut> [list apply {{id} { ::enginecfg::onSubmitParam $id cmd [%W get] } ::} $id]
     bind $w.cmd <Return> [bind $w.cmd <FocusOut>]
     ttk::button $w.cmdbtn -style Pad0.Small.TButton -text ... \
         -command [list ::enginecfg::onSubmitParam $id cmd {} 1]
     $w window create end -window $w.cmdbtn -pady 2 -padx 2
 
     apply $fn_create_entry $w args "\n[tr EngineArgs]" $args
-    bind $w.args <FocusOut> "::enginecfg::onSubmitParam $id args \[ %W get \]"
+    bind $w.args <FocusOut> [list apply {{id} { ::enginecfg::onSubmitParam $id args [%W get] } ::} $id]
     bind $w.args <Return> [bind $w.args <FocusOut>]
 
     apply $fn_create_entry $w wdir "\n[tr EngineDir]" $wdir
-    bind $w.wdir <FocusOut> "::enginecfg::onSubmitParam $id wdir \[ %W get \]"
+    bind $w.wdir <FocusOut> [list apply {{id} { ::enginecfg::onSubmitParam $id wdir [%W get] } ::} $id]
     bind $w.wdir <Return> [bind $w.wdir <FocusOut>]
     ttk::button $w.wdirbtn -style Pad0.Small.TButton -text ... \
         -command [list ::enginecfg::onSubmitParam $id wdir {} 2]
@@ -415,9 +415,9 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
 
     $w insert end "\n[tr EngineNotation]:\t"
     ttk::combobox $w.notation -state readonly -width 12 -values [list engine SAN "English SAN" figurine]
-    bind $w.notation <<ComboboxSelected>> "
-        ::enginecfg::onChangeLayout $id notation \[ $w.notation current \]
-    "
+    bind $w.notation <<ComboboxSelected>> [list apply {{id} {
+        ::enginecfg::onChangeLayout $id notation [%W current]
+    } ::} $id]
     $w window create end -window $w.notation -pady 2
     $w.notation current [expr { $notation < 0 ? 0 - $notation : $notation }]
     ::enginecfg::onChangeLayout $id notation $notation
@@ -471,10 +471,12 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     $w insert end "  port: "
     ttk::entry $w.netport -width 6 -validate key -validatecommand { string is integer %P }
     $w window create end -window $w.netport -pady 2
-    bind $w.netd <<ComboboxSelected>> "::enginecfg::onSubmitNetd $id $w"
-    bind $w.netport <FocusOut> "if {\"readonly\" ni \[$w.netport state\]} {
-        ::enginecfg::onSubmitNetd $id $w
-    }"
+    bind $w.netd <<ComboboxSelected>> [list ::enginecfg::onSubmitNetd $id $w]
+    bind $w.netport <FocusOut> [list apply {{id w} {
+        if {"readonly" ni [%W state]} {
+            ::enginecfg::onSubmitNetd $id $w
+        }
+    } ::} $id $w]
     bind $w.netport <Return> [bind $w.netport <FocusOut>]
     if {$netport eq ""} {
         $w.netd set "off"
@@ -543,7 +545,7 @@ proc ::enginecfg::createOptionWidgets {id configFrame options} {
                 }
                 # Special vars like %W cannot be used in <FocusOut> because the
                 # other events are forwarded to it
-                bind $w.value$i <FocusOut> "::enginecfg::setOptionFromWidget $id $i $w.value$i"
+                bind $w.value$i <FocusOut> [list ::enginecfg::setOptionFromWidget $id $i $w.value$i]
                 bind $w.value$i <Return> [bind $w.value$i <FocusOut>]
             }
             $w window create end -window $w.value$i -pady 2

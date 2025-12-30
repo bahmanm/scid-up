@@ -127,7 +127,9 @@ proc ::reviewgame::start {} {
   
   set ::reviewgame::boardFlipped [::board::isFlipped .main.board]
   
-  bind $w <Destroy> "if {\[string equal $w %W\]} {::reviewgame::endTraining}"
+  bind $w <Destroy> [list apply {{w} {
+    if {[string equal $w %W]} {::reviewgame::endTraining}
+  } ::} $w]
   bind $w <F1> { helpWindow ReviewGame }
   ::createToplevelFinalize $w
   set ::reviewgame::movesLikePlayer 0

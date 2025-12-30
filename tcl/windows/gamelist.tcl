@@ -457,7 +457,9 @@ proc ::windows::gamelist::createWin_ { {w} {base} {filter} } {
 				::windows::gamelist::updateStats_ $w
 		}
 	}} $w]
-	bind $w <Control-l> "::windows::gamelist::Open \$::gamelistBase($w)"
+		bind $w <Control-l> [list apply {{w} {
+			::windows::gamelist::Open $::gamelistBase($w)
+		} ::} $w]
 	lappend ::windows::gamelist::wins $w
 	::windows::gamelist::Refresh 1 $w
 }
@@ -777,18 +779,18 @@ proc glist.create {{w} {layout} {reset_layout false}} {
   $w.glist tag configure fsmall -font font_Small
   $w.glist tag configure deleted -foreground #a5a2ac
   menu $w.glist.header_menu
-  menu $w.glist.header_menu.addcol
-  menu $w.glist.game_menu
-  if {$::windowsOS} {
-    bind $w.glist <App> "glist.popupmenu_ %W %x %y %X %Y $layout"
-  } else {
-    bind $w.glist <Menu> "glist.popupmenu_ %W %x %y %X %Y $layout"
-  }
-  bind $w.glist <ButtonPress-1> "glist.press_ %W %x %y"
-  bind $w.glist <2> "glist.popupmenu_ %W %x %y %X %Y $layout"
-  bind $w.glist <3> "glist.popupmenu_ %W %x %y %X %Y $layout"
-  bind $w.glist <ButtonRelease-1> "glist.release_ %W %x %y %s $layout"
-  bind $w.glist <Double-ButtonRelease-1> "glist.doubleclick_ %W %x %y $layout"
+	  menu $w.glist.header_menu.addcol
+	  menu $w.glist.game_menu
+	  if {$::windowsOS} {
+	    bind $w.glist <App> [list glist.popupmenu_ %W %x %y %X %Y $layout]
+	  } else {
+	    bind $w.glist <Menu> [list glist.popupmenu_ %W %x %y %X %Y $layout]
+	  }
+	  bind $w.glist <ButtonPress-1> [list glist.press_ %W %x %y]
+	  bind $w.glist <2> [list glist.popupmenu_ %W %x %y %X %Y $layout]
+	  bind $w.glist <3> [list glist.popupmenu_ %W %x %y %X %Y $layout]
+	  bind $w.glist <ButtonRelease-1> [list glist.release_ %W %x %y %s $layout]
+	  bind $w.glist <Double-ButtonRelease-1> [list glist.doubleclick_ %W %x %y $layout]
   bind $w.glist <KeyPress-Up> {glist.movesel_ %W prev -1 0; break}
   bind $w.glist <KeyPress-Down> {glist.movesel_ %W next +1 end; break}
   bind $w.glist <KeyPress-Right> {continue}
@@ -822,7 +824,7 @@ proc glist.create {{w} {layout} {reset_layout false}} {
     }
     break
   }
-  bind $w.glist <Destroy> "glist.destroy_ $w.glist"
+	  bind $w.glist <Destroy> [list glist.destroy_ %W]
 
   set i 0
   foreach col $::glist_Headers {
@@ -839,7 +841,9 @@ proc glist.create {{w} {layout} {reset_layout false}} {
   $w.glist configure -yscrollcommand [list glist.yscroll_ $w.glist]
   $w.ybar configure -command [list glist.ybar_ $w.glist]
   bindMouseWheel $w.glist "glist.ybar_ $w.glist"
-  bind $w.glist <$::COMMAND-f> "event generate $w <<FindBarShow>>"
+	  bind $w.glist <$::COMMAND-f> [list apply {{w} {
+	    event generate $w <<FindBarShow>>
+	  } ::} $w]
 
   # Find widget
   ttk::frame $w.find
@@ -869,10 +873,18 @@ proc glist.create {{w} {layout} {reset_layout false}} {
       after cancel [list glist.findgame_ $w 0]
       after idle [list glist.findgame_ $w 0]
     }} $w]
-  bind $w.find.text <Escape> "glist.showfindbar_ $w.glist $layout 0"
-  bind $w.find.text <Return> "$w.find.filter invoke"
-  bind $w.find.text <KeyPress-Down> "$w.find.b1_text invoke; break"
-  bind $w.find.text <KeyPress-Up> "$w.find.b2_text invoke; break"
+	  bind $w.find.text <Escape> [list apply {{w layout} {
+	    glist.showfindbar_ ${w}.glist $layout 0
+	  } ::} $w $layout]
+	  bind $w.find.text <Return> [list ${w}.find.filter invoke]
+	  bind $w.find.text <KeyPress-Down> [list apply {{w} {
+	    ${w}.find.b1_text invoke
+	    return -code break
+	  } ::} $w]
+	  bind $w.find.text <KeyPress-Up> [list apply {{w} {
+	    ${w}.find.b2_text invoke
+	    return -code break
+	  } ::} $w]
   #TODO: -from 0 -to 100
   #TODO: set scale position when normal ybar is used
   ttk::scale $w.find.scale -command [list glist.ybar_ $w.glist moveto]

@@ -88,8 +88,10 @@ proc ::search::Open {ref_base ref_filter title create_subwnd} {
 	grid $w.progressbar -in $w.buttons -row 0 -column 1 -columnspan 4
 	progressbar_ $w hide
 
-	bind $w <Return> "$w.buttons.search invoke"
-	bind $w.buttons.search <Destroy> "unset ::search::dbase_($w)"
+		bind $w <Return> [list ${w}.buttons.search invoke]
+		bind $w.buttons.search <Destroy> [list apply {{w} {
+			unset ::search::dbase_($w)
+		} ::} $w]
 	bind $w <<NotifyFilter>> [list apply {{w} {
 		lassign %d dbase filter
 		if {$dbase eq $::search::dbase_($w) && $filter eq $::search::filter_($w)} {

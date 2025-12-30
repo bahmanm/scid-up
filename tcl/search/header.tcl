@@ -763,8 +763,8 @@ proc ::search::header::savePreset {name} {
       }
     }} $w]
     ::packdlgbuttons $w.ok $w.cancel
-    bind $w <Escape> "$w.cancel invoke"
-    bind $w <Return> "$w.ok invoke"
+	    bind $w <Escape> [list ${w}.cancel invoke]
+	    bind $w <Return> [list ${w}.ok invoke]
     grab $w
     tk::PlaceWindow $w pointer
     focus $w.value
@@ -917,14 +917,21 @@ proc chooseEcoRange {} {
   }} $w]
   wm protocol $w WM_DELETE_WINDOW "$w.b.cancel invoke"
   pack $w.b.cancel $w.b.ok -side right -padx 5 -pady 2
-  bind $w <Escape> "
-  set scid_ecoRangeChosen {}
-  grab release $w
-  focus .
-  destroy $w
-  break"
-  bind $w <Return> "$w.b.ok invoke; break"
-  bind $w.list <Double-ButtonRelease-1> "$w.b.ok invoke; break"
+  bind $w <Escape> [list apply {{w} {
+    set scid_ecoRangeChosen {}
+    grab release $w
+    focus .
+    destroy $w
+    return -code break
+  } ::} $w]
+  bind $w <Return> [list apply {{w} {
+    ${w}.b.ok invoke
+    return -code break
+  } ::} $w]
+  bind $w.list <Double-ButtonRelease-1> [list apply {{w} {
+    ${w}.b.ok invoke
+    return -code break
+  } ::} $w]
   focus $w.list
   grab $w
   tkwait window $w

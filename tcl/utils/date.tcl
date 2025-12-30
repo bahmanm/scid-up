@@ -71,18 +71,18 @@ proc ::utils::date::chooser {{date "now"}} {
   ttk::button $win.cal.prev -image tb_prev -command [list ::utils::date::_month $win -1]
   ttk::button $win.cal.next -image tb_next -command [list ::utils::date::_month $win +1]
   ttk::button $win.cal.nextY -image tb_end -command [list ::utils::date::_month $win +12]
-  bind $win.cal <Configure> "::utils::date::_redraw $win"
-  bind $win.cal <Double-Button-1> "destroy $win"
-  bind $win <Escape> "$win.b.cancel invoke"
-  bind $win <Return> "$win.b.ok invoke"
-  bind $win <Prior> "$win.cal.prev invoke"
-  bind $win <Next> "$win.cal.next invoke"
-  bind $win <Shift-Prior> "$win.cal.prevY invoke"
-  bind $win <Shift-Next> "$win.cal.nextY invoke"
-  bind $win <Up> "::utils::date::_day $win -7"
-  bind $win <Down> "::utils::date::_day $win +7"
-  bind $win <Left> "::utils::date::_day $win -1"
-  bind $win <Right> "::utils::date::_day $win +1"
+  bind $win.cal <Configure> [list ::utils::date::_redraw $win]
+  bind $win.cal <Double-Button-1> [list destroy $win]
+  bind $win <Escape> [list ${win}.b.cancel invoke]
+  bind $win <Return> [list ${win}.b.ok invoke]
+  bind $win <Prior> [list ${win}.cal.prev invoke]
+  bind $win <Next> [list ${win}.cal.next invoke]
+  bind $win <Shift-Prior> [list ${win}.cal.prevY invoke]
+  bind $win <Shift-Next> [list ${win}.cal.nextY invoke]
+  bind $win <Up> [list ::utils::date::_day $win -7]
+  bind $win <Down> [list ::utils::date::_day $win +7]
+  bind $win <Left> [list ::utils::date::_day $win -1]
+  bind $win <Right> [list ::utils::date::_day $win +1]
 
   wm minsize $win 250 200
   wm title $win "Scid: Choose Date"

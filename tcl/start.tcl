@@ -570,7 +570,7 @@ proc configure_style {} {
     image create photo ::icon::$iname -format png -file $fname
   }
 }
-bind . <<ThemeChanged>> { if {"%W" eq "."} { configure_style } }
+bind . <<ThemeChanged>> { if {[string equal %W .]} { configure_style } }
 
 catch { ttk::style theme use $::lookTheme }
 configure_menus
@@ -643,7 +643,7 @@ proc ttk_create {pathName type x y args} {
 proc applyThemeColor_background { widget } {
   set bgcolor [ttk::style lookup . -background "" #d9d9d9]
   $widget configure -background $bgcolor
-  bind $widget <<ThemeChanged>> "::applyThemeColor_background $widget"
+  bind $widget <<ThemeChanged>> [list ::applyThemeColor_background $widget]
 }
 
 # Apply a ttk style to a tk widget
@@ -656,7 +656,7 @@ proc applyThemeStyle {style widget} {
     if {$option in $exclude} { continue }
     catch { $widget configure $option $value }
   }
-  bind $widget <<ThemeChanged>> "::applyThemeStyle $style $widget"
+  bind $widget <<ThemeChanged>> [list ::applyThemeStyle $style $widget]
 }
 
 image create photo flag_unknown -data {

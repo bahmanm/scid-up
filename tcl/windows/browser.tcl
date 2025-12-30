@@ -49,17 +49,25 @@ proc ::gbrowser::new {base gnum {ply -1}} {
     incr m
   }
   bind $w <F1> {helpWindow GameList Browsing}
-  bind $w <Escape> "destroy $w"
-  bind $w <Home> "::gbrowser::update $n start"
-  bind $w <End> "::gbrowser::update $n end"
-  bind $w <Left> "::gbrowser::update $n -1"
-  bind $w <Right> "::gbrowser::update $n +1"
-  bind $w <Up> "::gbrowser::update $n -10"
-  bind $w <Down> "::gbrowser::update $n +10"
-  bind $w <minus> "set ::gbrowser::size \[::board::resize $w.bd -1\]"
-  bind $w <Control-Shift-Left> "set ::gbrowser::size \[::board::resize $w.bd -1\]"
-  bind $w <plus> "set ::gbrowser::size \[::board::resize $w.bd +1\]"
-  bind $w <Control-Shift-Right> "set ::gbrowser::size \[::board::resize $w.bd +1\]"
+  bind $w <Escape> [list destroy $w]
+  bind $w <Home> [list ::gbrowser::update $n start]
+  bind $w <End> [list ::gbrowser::update $n end]
+  bind $w <Left> [list ::gbrowser::update $n -1]
+  bind $w <Right> [list ::gbrowser::update $n +1]
+  bind $w <Up> [list ::gbrowser::update $n -10]
+  bind $w <Down> [list ::gbrowser::update $n +10]
+  bind $w <minus> [list apply {{w delta} {
+    set ::gbrowser::size [::board::resize ${w}.bd $delta]
+  } ::} $w -1]
+  bind $w <Control-Shift-Left> [list apply {{w delta} {
+    set ::gbrowser::size [::board::resize ${w}.bd $delta]
+  } ::} $w -1]
+  bind $w <plus> [list apply {{w delta} {
+    set ::gbrowser::size [::board::resize ${w}.bd $delta]
+  } ::} $w +1]
+  bind $w <Control-Shift-Right> [list apply {{w delta} {
+    set ::gbrowser::size [::board::resize ${w}.bd $delta]
+  } ::} $w +1]
   bindMouseWheel $w "::gbrowser::mousewheelHandler $n"
 
   ttk::button $w.b.start -image tb_start -command [list ::gbrowser::update $n start]

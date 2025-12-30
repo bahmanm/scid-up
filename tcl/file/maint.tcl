@@ -110,7 +110,7 @@ proc ::maint::OpenClose {} {
   wm title $w "Scid: [tr FileMaint]"
   wm resizable $w 0 0
   bind $w <F1> {helpWindow Maintenance}
-  bind $w <Escape> "destroy $w; break"
+  bind $w <Escape> [list apply {{w} { destroy $w; return -code break } ::} $w]
   bind $w <Destroy> {set maintWin 0}
   
   ttk::frame $w.title
@@ -505,9 +505,9 @@ proc markTwins {{parent .}} {
   pack $w.f.b -side bottom -fill x
   packdlgbuttons  $w.f.b.cancel $w.f.b.go
   pack $w.f.b.defaults $w.f.b.help -side left -padx 5 -pady "15 5"
-  bind $w <F1> "$w.f.b.help invoke"
-  bind $w <Escape> "$w.f.b.cancel invoke"
-  bind $w <Return> "$w.f.b.go invoke"
+  bind $w <F1> [list ${w}.f.b.help invoke]
+  bind $w <Escape> [list ${w}.f.b.cancel invoke]
+  bind $w <Return> [list ${w}.f.b.go invoke]
   grab $w
   update idletasks
   $w.f.note configure -wraplength [winfo width $w]
@@ -718,7 +718,7 @@ proc makeClassifyWin {} {
   pack $w.f.progress -side bottom -padx 2 -pady 2
   wm resizable $w 0 0
   bind $w <F1> {helpWindow ECO}
-  bind $w <Escape> "$w.b.cancel invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
   updateClassifyWin
 }
 
@@ -797,20 +797,20 @@ proc updateTwinChecker {} {
     ttk::button $w.b.delete -text $::tr(DeleteTwins) -underline 0 \
         -command [list markTwins $w]
     ttk::button $w.b.help -text $::tr(Help) -command {helpWindow Maintenance Twins}
-    ttk::button $w.b.close -text $::tr(Close) -command [list apply {{w} { focus .; destroy $w }} $w]
-    packdlgbuttons $w.b.close $w.b.delete $w.b.help
-    pack $w.b.prev $w.b.next $w.b.share -side left -padx 5 -pady "15 5"
-    bind $w <F1> "$w.b.help invoke"
-    bind $w <Escape> "focus .; destroy $w"
+	    ttk::button $w.b.close -text $::tr(Close) -command [list apply {{w} { focus .; destroy $w }} $w]
+	    packdlgbuttons $w.b.close $w.b.delete $w.b.help
+	    pack $w.b.prev $w.b.next $w.b.share -side left -padx 5 -pady "15 5"
+	    bind $w <F1> [list ${w}.b.help invoke]
+	    bind $w <Escape> [list apply {{w} { focus .; destroy $w } ::} $w]
     bind $w <Alt-p> {::game::LoadNextPrev previous}
     bind $w <KeyPress-p> {::game::LoadNextPrev previous}
     bind $w <Alt-n> {::game::LoadNextPrev next}
     bind $w <KeyPress-n> {::game::LoadNextPrev next}
-    bind $w <Alt-d> "markTwins $w"
-    bind $w <KeyPress-d> "markTwins $w"
-    bind $w <KeyPress-1> "$w.f.left.title.d invoke"
-    bind $w <KeyPress-$::MB2> "$w.f.right.title.d invoke"
-    bind $w <KeyPress-s> "$w.b.share invoke"
+	    bind $w <Alt-d> [list markTwins $w]
+	    bind $w <KeyPress-d> [list markTwins $w]
+	    bind $w <KeyPress-1> [list ${w}.f.left.title.d invoke]
+	    bind $w <KeyPress-$::MB2> [list ${w}.f.right.title.d invoke]
+	    bind $w <KeyPress-s> [list ${w}.b.share invoke]
     bind $w <KeyPress-u> {
       if {$twincheck(left)} {.twinchecker.f.left.title.d invoke}
       if {$twincheck(right)} {.twinchecker.f.right.title.d invoke}

@@ -140,10 +140,10 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
     grid rowconfigure $w 2 -weight 0
     grid columnconfigure $w 0 -weight 1
 
-    bind $w <<NotifyNewGame>> "set ::enginewin::newgame_$id true"
+    bind $w <<NotifyNewGame>> [list set ::enginewin::newgame_$id true]
 
     # The engine should be closed before the debug .text is destroyed
-    bind $w.config <Destroy> "
+    bind $w.config <Destroy> [list apply {{id} {
         unset ::enginewin::engState($id)
         ::engine::close $id
         array unset ::enginewin::m_ *,$id
@@ -152,7 +152,7 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
         unset ::enginewin::newgame_$id
         unset ::enginewin::startTime_$id
         ::notify::EngineBestMove $id {} {}
-    "
+    } ::} $id]
 
     ::options.store ::enginewin_lastengine($id) ""
     set ::enginewin::engState($id) {}
@@ -263,7 +263,7 @@ proc ::enginewin::createButtonsBar {id btn display} {
         -validate key -validatecommand { string is integer %P } \
         -command [list after idle [list ::enginewin::changeOption $id multipv $btn.multipv]]
     bind $btn.multipv <Return> { {*}[bind %W <FocusOut>] }
-    bind $btn.multipv <FocusOut> "::enginewin::changeOption $id multipv $btn.multipv"
+    bind $btn.multipv <FocusOut> [list ::enginewin::changeOption $id multipv $btn.multipv]
     ::utils::tooltip::Set $btn.multipv [tr Lines]
 
     menu $btn.threads_menu

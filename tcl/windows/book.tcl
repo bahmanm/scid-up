@@ -151,7 +151,7 @@ namespace eval book {
     pack $w.f -expand 1 -fill both
 
     bind $w.f.combo <<ComboboxSelected>> ::book::bookSelect
-    bind $w <Destroy> "::book::closeMainBook"
+    bind $w <Destroy> [list ::book::closeMainBook]
     # we make a redundant check here, another one is done a few line above
     if { [catch {bookSelect} ] } {
       tk_messageBox -title "Scid" -type ok -icon error -message "No books found. Check books directory"
@@ -315,7 +315,9 @@ namespace eval book {
 
     bind $w.fcombo.combo <<ComboboxSelected>> ::book::bookTuningSelect
 
-    bind $w <Destroy> "if {\[string equal $w %W\]} { ::book::closeTuningBook }"
+    bind $w <Destroy> [list apply {{w} {
+        if {[string equal $w %W]} { ::book::closeTuningBook }
+    } ::} $w]
     bind $w <F1> { helpWindow BookTuning }
 
     bookTuningSelect
@@ -355,7 +357,7 @@ namespace eval book {
     set children [winfo children $w.f]
     set count [expr [llength $children] / 2]
     ttk::label $w.f.m$count -text [::trans $move]
-    bind $w.f.m$count <ButtonPress-1> " ::book::makeBookMove $move"
+    bind $w.f.m$count <ButtonPress-1> [list ::book::makeBookMove $move]
     ttk::spinbox $w.f.sp$count -from 0 -to 100 -width 3
     $w.f.sp$count set 0
     grid $w.f.m$count -row $count -column 0 -sticky w
@@ -387,7 +389,7 @@ namespace eval book {
     for {set i 0} {$i<[llength $moves]} {incr i 2} {
       lappend ::book::bookTuningMoves [lindex $moves $i]
       ttk::label $w.f.m$row -text [::trans [lindex $moves $i]]
-      bind $w.f.m$row <ButtonPress-1> " ::book::makeBookMove [lindex $moves $i] "
+      bind $w.f.m$row <ButtonPress-1> [list ::book::makeBookMove [lindex $moves $i]]
       ttk::spinbox $w.f.sp$row -from 0 -to 100 -width 3
       set pct [lindex $moves [expr $i+1] ]
       set value [string replace $pct end end ""]

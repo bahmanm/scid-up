@@ -33,7 +33,7 @@ proc ::file::finder::Open {} {
   wm title $w "Scid: $::tr(FileFinder)"
   bind $w <F1> {helpWindow Finder}
   setWinLocation $w
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
   
   ttk::frame $w.p
   ttk::labelframe $w.p.label -text $::menuLabel($::language,FinderSortType)

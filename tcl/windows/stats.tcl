@@ -21,7 +21,7 @@ proc ::windows::stats::Open {} {
   win::createDialog $w
   wm title $w "Scid: $::tr(FilterStatistic)"
   setWinLocation $w
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
 
   autoscrollText y $w.statsasb $w.stats Treeview
   $w.stats configure -width 64 -height 40 -state normal -font font_Fixed -wrap none
@@ -62,8 +62,8 @@ proc ::windows::stats::Open {} {
   pack $w.fbuttons -side top -fill x
   pack $w.statsasb -side top -fill both -expand yes
   set ::windows::stats::isOpen 1
-  bind $w <Control-q> "destroy $w"
-  bind $w <Escape> "destroy $w"
+  bind $w <Control-q> [list destroy $w]
+  bind $w <Escape> [list destroy $w]
   bind $w <F1> { helpWindow Index }
   bind $w <Destroy> {
     set ::windows::stats::isOpen 0

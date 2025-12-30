@@ -119,10 +119,10 @@ proc updateHelpWindow {name {heading ""}} {
     pack $w.scroll -side right -fill y -padx 2 -pady 2
     pack $w.text -fill both -expand 1 -padx 1
     
-    $w.text configure -font font_Regular -foreground black -background white
-    ::htext::init $w.text
-    bind $w <Configure> "recordWinSize $w"
-  }
+	    $w.text configure -font font_Regular -foreground black -background white
+	    ::htext::init $w.text
+	    bind $w <Configure> [list recordWinSize $w]
+	  }
   
   $w.text configure -cursor top_left_arrow
   $w.text configure -state normal
@@ -141,16 +141,16 @@ proc updateHelpWindow {name {heading ""}} {
   wm iconname $w "Scid help"
   
   $w.text delete 0.0 end
-  bind $w <Up> "$w.text yview scroll -1 units"
-  bind $w <Down> "$w.text yview scroll 1 units"
-  bind $w <Prior> "$w.text yview scroll -1 pages"
-  bind $w <Next> "$w.text yview scroll 1 pages"
-  bind $w <Key-Home> "$w.text yview moveto 0"
-  bind $w <Key-End> "$w.text yview moveto 0.99"
-  bind $w <Escape> "$w.b.close invoke"
-  bind $w <Key-b> "$w.b.back invoke"
-  bind $w <Left> "$w.b.back invoke"
-  bind $w <Key-i> "$w.b.index invoke"
+	  bind $w <Up> [list ${w}.text yview scroll -1 units]
+	  bind $w <Down> [list ${w}.text yview scroll 1 units]
+	  bind $w <Prior> [list ${w}.text yview scroll -1 pages]
+	  bind $w <Next> [list ${w}.text yview scroll 1 pages]
+	  bind $w <Key-Home> [list ${w}.text yview moveto 0]
+	  bind $w <Key-End> [list ${w}.text yview moveto 0.99]
+	  bind $w <Escape> [list ${w}.b.close invoke]
+	  bind $w <Key-b> [list ${w}.b.back invoke]
+	  bind $w <Left> [list ${w}.b.back invoke]
+	  bind $w <Key-i> [list ${w}.b.index invoke]
   
   ::htext::display $w.text $helptext $heading 0
   focus $w
@@ -300,89 +300,105 @@ proc ::htext::display {w helptext {section ""} {fixed 1}} {
         set sectionName [::htext::extractSectionName $tagName]
         set linkTag "link ${linkName} ${sectionName}"
         set tagName "a"
-        $w tag configure "$linkTag" -foreground blue -underline 1
-        $w tag bind "$linkTag" <ButtonRelease-1> \
-            "helpWindow $linkName $sectionName"
-        $w tag bind $linkTag <Any-Enter> \
-            "$w tag configure \"$linkTag\" -background yellow
-        $w configure -cursor hand2"
-        $w tag bind $linkTag <Any-Leave> \
-            "$w tag configure \"$linkTag\" -background {}
-        $w configure -cursor {}"
+        $w tag configure $linkTag -foreground blue -underline 1
+        $w tag bind $linkTag <ButtonRelease-1> [list helpWindow $linkName $sectionName]
+        $w tag bind $linkTag <Any-Enter> [list apply {{w tag} {
+            $w tag configure $tag -background yellow
+            $w configure -cursor hand2
+        } ::} $w $linkTag]
+        $w tag bind $linkTag <Any-Leave> [list apply {{w tag} {
+            $w tag configure $tag -background {}
+            $w configure -cursor {}
+        } ::} $w $linkTag]
       } elseif {[strIsPrefix "url " $tagName]} {
         # Check if it is a URL tag:
         set urlName [string range $tagName 4 end]
         set urlTag "url $urlName"
         set tagName "url"
-        $w tag configure "$urlTag" -foreground red -underline 1
-        $w tag bind "$urlTag" <ButtonRelease-1> "openURL {$urlName}"
-        $w tag bind $urlTag <Any-Enter> \
-            "$w tag configure \"$urlTag\" -background yellow
-        $w configure -cursor hand2"
-        $w tag bind $urlTag <Any-Leave> \
-            "$w tag configure \"$urlTag\" -background {}
-        $w configure -cursor {}"
+        $w tag configure $urlTag -foreground red -underline 1
+        $w tag bind $urlTag <ButtonRelease-1> [list openURL $urlName]
+        $w tag bind $urlTag <Any-Enter> [list apply {{w tag} {
+            $w tag configure $tag -background yellow
+            $w configure -cursor hand2
+        } ::} $w $urlTag]
+        $w tag bind $urlTag <Any-Leave> [list apply {{w tag} {
+            $w tag configure $tag -background {}
+            $w configure -cursor {}
+        } ::} $w $urlTag]
       } elseif {[strIsPrefix "run " $tagName]} {
         # Check if it is a Tcl command tag:
         set runName [string range $tagName 4 end]
         set runTag "run $runName"
         set tagName "run"
-        $w tag bind "$runTag" <ButtonRelease-1> "catch {$runName}"
-        $w tag bind $runTag <Any-Enter> \
-            "$w tag configure \"$runTag\" -foreground white
-             $w tag configure \"$runTag\" -background DodgerBlue4
-             $w configure -cursor hand2"
-        $w tag bind $runTag <Any-Leave> \
-            "$w tag configure \"$runTag\" -foreground {}
-        $w tag configure \"$runTag\" -background {}
-        $w configure -cursor {}"
+        $w tag bind $runTag <ButtonRelease-1> [list catch $runName]
+        $w tag bind $runTag <Any-Enter> [list apply {{w tag} {
+            $w tag configure $tag -foreground white
+            $w tag configure $tag -background DodgerBlue4
+            $w configure -cursor hand2
+        } ::} $w $runTag]
+        $w tag bind $runTag <Any-Leave> [list apply {{w tag} {
+            $w tag configure $tag -foreground {}
+            $w tag configure $tag -background {}
+            $w configure -cursor {}
+        } ::} $w $runTag]
       } elseif {[strIsPrefix "go " $tagName]} {
         # Check if it is a goto tag:
         set goName [string range $tagName 3 end]
         set goTag "go $goName"
         set tagName "go"
-        $w tag bind "$goTag" <ButtonRelease-1> \
-            "catch {$w see \[lindex \[$w tag nextrange $goName 1.0\] 0\]}"
-        $w tag bind $goTag <Any-Enter> \
-            "$w tag configure \"$goTag\" -foreground yellow
-        $w tag configure \"$goTag\" -background maroon
-        $w configure -cursor hand2"
-        $w tag bind $goTag <Any-Leave> \
-            "$w tag configure \"$goTag\" -foreground {}
-        $w tag configure \"$goTag\" -background {}
-        $w configure -cursor {}"
+        $w tag bind $goTag <ButtonRelease-1> [list apply {{w goName} {
+            set target [lindex [$w tag nextrange $goName 1.0] 0]
+            if {$target ne ""} {
+                catch {$w see $target}
+            }
+        } ::} $w $goName]
+        $w tag bind $goTag <Any-Enter> [list apply {{w tag} {
+            $w tag configure $tag -foreground yellow
+            $w tag configure $tag -background maroon
+            $w configure -cursor hand2
+        } ::} $w $goTag]
+        $w tag bind $goTag <Any-Leave> [list apply {{w tag} {
+            $w tag configure $tag -foreground {}
+            $w tag configure $tag -background {}
+            $w configure -cursor {}
+        } ::} $w $goTag]
       } elseif {[strIsPrefix "pi " $tagName]} {
         # Check if it is a player info tag:
         set playerTag $tagName
         set playerName [string range $playerTag 3 end]
         set tagName "pi"
-        $w tag configure "$playerTag" -foreground DodgerBlue3
-        $w tag bind "$playerTag" <ButtonRelease-1> "::pinfo::playerInfo \"$playerName\""
-        $w tag bind $playerTag <Any-Enter> \
-           "$w tag configure \"$playerTag\" -foreground white
-            $w tag configure \"$playerTag\" -background DodgerBlue4
-            $w configure -cursor hand2"
-        $w tag bind $playerTag <Any-Leave> \
-           "$w tag configure \"$playerTag\" -foreground DodgerBlue3
-            $w tag configure \"$playerTag\" -background {}
-            $w configure -cursor {}"
+        $w tag configure $playerTag -foreground DodgerBlue3
+        $w tag bind $playerTag <ButtonRelease-1> [list ::pinfo::playerInfo $playerName]
+        $w tag bind $playerTag <Any-Enter> [list apply {{w tag} {
+           $w tag configure $tag -foreground white
+           $w tag configure $tag -background DodgerBlue4
+           $w configure -cursor hand2
+        } ::} $w $playerTag]
+        $w tag bind $playerTag <Any-Leave> [list apply {{w tag} {
+           $w tag configure $tag -foreground DodgerBlue3
+           $w tag configure $tag -background {}
+           $w configure -cursor {}
+        } ::} $w $playerTag]
       } elseif {[strIsPrefix "g_" $tagName]} {
         # Check if it is a game-load tag:
         set gameTag $tagName
         set tagName "g"
         set gnum [string range $gameTag 2 end]
-        set glCommand "::game::LoadMenu $w [sc_base current] $gnum %X %Y"
+        set glCommand [list ::game::LoadMenu $w [sc_base current] $gnum %X %Y]
         $w tag bind $gameTag <ButtonPress-1> $glCommand
-        $w tag bind $gameTag <ButtonPress-$::MB3> \
-            "::gbrowser::new [sc_base current] $gnum"
-        $w tag bind $gameTag <Any-Enter> \
-            "$w tag configure $gameTag -foreground white
-             $w tag configure $gameTag -background DodgerBlue4
-             $w configure -cursor hand2"
-        $w tag bind $gameTag <Any-Leave> \
-            "$w tag configure $gameTag -foreground {}
-        $w tag configure $gameTag -background {}
-        $w configure -cursor {}"
+        $w tag bind $gameTag <ButtonPress-$::MB3> [list apply {{gnum} {
+          ::gbrowser::new [sc_base current] $gnum
+        } ::} $gnum]
+        $w tag bind $gameTag <Any-Enter> [list apply {{w tag} {
+          $w tag configure $tag -foreground white
+          $w tag configure $tag -background DodgerBlue4
+          $w configure -cursor hand2
+        } ::} $w $gameTag]
+        $w tag bind $gameTag <Any-Leave> [list apply {{w tag} {
+          $w tag configure $tag -foreground {}
+          $w tag configure $tag -background {}
+          $w configure -cursor {}
+        } ::} $w $gameTag]
       } elseif {[strIsPrefix "m_" $tagName]} {
         # Check if it is a move tag:
         set moveTag $tagName
@@ -391,26 +407,44 @@ proc ::htext::display {w helptext {section ""} {fixed 1}} {
 		  ### Does not work for variations as the var-Tag appears before
 		  ### the <m_ tags, therefore this overwrites font sizes
         ### $w tag configure $moveTag -font font_Figurine_ML
-        $w tag bind $moveTag <ButtonRelease-1> "sc_move pgn [string range $moveTag 2 end]; updateBoard"
+        $w tag bind $moveTag <ButtonRelease-1> [list apply {{moveTag} {
+            sc_move pgn [string range $moveTag 2 end]
+            updateBoard
+        } ::} $moveTag]
         # Bind middle button to popup a PGN board:
-        $w tag bind $moveTag <ButtonPress-$::MB2> "::pgn::ShowBoard .pgnWin.text $moveTag %X %Y"
-        $w tag bind $moveTag <ButtonRelease-$::MB2> "::pgn::HideBoard"
+        $w tag bind $moveTag <ButtonPress-$::MB2> [list ::pgn::ShowBoard .pgnWin.text $moveTag %X %Y]
+        $w tag bind $moveTag <ButtonRelease-$::MB2> [list ::pgn::HideBoard]
         # invoking contextual menu in PGN window
-        $w tag bind $moveTag <ButtonPress-$::MB3> "sc_move pgn [string range $moveTag 2 end]; updateBoard"
-        $w tag bind $moveTag <Any-Enter> "$w tag configure $moveTag -underline 1
-        $w configure -cursor hand2"
-        $w tag bind $moveTag <Any-Leave> "$w tag configure $moveTag -underline 0
-        $w configure -cursor {}"
+        $w tag bind $moveTag <ButtonPress-$::MB3> [list apply {{moveTag} {
+            sc_move pgn [string range $moveTag 2 end]
+            updateBoard
+        } ::} $moveTag]
+        $w tag bind $moveTag <Any-Enter> [list apply {{w tag} {
+            $w tag configure $tag -underline 1
+            $w configure -cursor hand2
+        } ::} $w $moveTag]
+        $w tag bind $moveTag <Any-Leave> [list apply {{w tag} {
+            $w tag configure $tag -underline 0
+            $w configure -cursor {}
+        } ::} $w $moveTag]
       } elseif {[strIsPrefix "c_" $tagName]} {
         # Check if it is a comment tag:
         set commentTag $tagName
         set tagName "c"
         $w tag configure $commentTag -foreground $::pgnColor(Comment) -font font_Regular
-        $w tag bind $commentTag <ButtonRelease-1> "sc_move pgn [string range $commentTag 2 end]; updateBoard; ::makeCommentWin"
-        $w tag bind $commentTag <Any-Enter> "$w tag configure $commentTag -underline 1
-        $w configure -cursor hand2"
-        $w tag bind $commentTag <Any-Leave> "$w tag configure $commentTag -underline 0
-        $w configure -cursor {}"
+        $w tag bind $commentTag <ButtonRelease-1> [list apply {{commentTag} {
+            sc_move pgn [string range $commentTag 2 end]
+            updateBoard
+            ::makeCommentWin
+        } ::} $commentTag]
+        $w tag bind $commentTag <Any-Enter> [list apply {{w tag} {
+            $w tag configure $tag -underline 1
+            $w configure -cursor hand2
+        } ::} $w $commentTag]
+        $w tag bind $commentTag <Any-Leave> [list apply {{w tag} {
+            $w tag configure $tag -underline 0
+            $w configure -cursor {}
+        } ::} $w $commentTag]
       }
       
       if {$tagName == "h1"} {$w insert end "\n"}

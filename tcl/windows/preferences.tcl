@@ -37,14 +37,16 @@ proc ::preferences::Open { {toggle ""} } {
   ttk::frame $w.options
   ttk::treeview $w.options.list -columns {0} -show {} -selectmode browse
   autoscrollBars y $w.options $w.options.list
-  bind $w.options.list <<TreeviewSelect>> "::preferences::replaceConfig \[%W selection\] $w.c"
+  bind $w.options.list <<TreeviewSelect>> [list apply {{w} {
+    ::preferences::replaceConfig [%W selection] ${w}.c
+  } ::} $w]
 
   ttk::frame $w.config
   canvas $w.c -highlightthickness 0
   ::applyThemeColor_background $w.c
   autoscrollBars both $w.config $w.c
   ttk::frame $w.c.f
-  bind $w.c.f <Configure> "::preferences::updateScrollBar $w.c"
+  bind $w.c.f <Configure> [list ::preferences::updateScrollBar $w.c]
   $w.c create window 0 0 -window $w.c.f -anchor nw
   grid columnconfigure $w.c.f 1 -weight 1
 

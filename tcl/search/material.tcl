@@ -397,8 +397,8 @@ proc ::search::material {{ref_base ""}} {
   wm title $w "Scid: $::tr(MaterialSearch)"
 
   bind $w <F1> { helpWindow Searches Material }
-  bind $w <Escape> "$w.b3.cancel invoke"
-  bind $w <Return> "$w.b3.search invoke"
+  bind $w <Escape> [list ${w}.b3.cancel invoke]
+  bind $w <Return> [list ${w}.b3.search invoke]
 
   pack [ttk::frame $w.refdb] -side top -fill x
   CreateSelectDBWidget "$w.refdb" "refDatabaseM" "$ref_base"
