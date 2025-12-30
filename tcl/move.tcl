@@ -21,7 +21,7 @@ namespace eval ::move {}
 
 proc ::move::drawVarArrows {} {
 	if {! $::showVarArrows || $::autoplayMode ||
-		([info exists ::interactionHandler] && [eval "$::interactionHandler drawVarArrows"] == 0)} {
+		([info exists ::interactionHandler] && [{*}$::interactionHandler drawVarArrows] == 0)} {
 		return 0
 	}
 
@@ -66,7 +66,7 @@ proc ::move::showVarArrows {} {
 }
 
 proc ::move::Start {} {
-	if {[info exists ::interactionHandler] && [eval "$::interactionHandler moveStart"] == 0} {
+	if {[info exists ::interactionHandler] && [{*}$::interactionHandler moveStart] == 0} {
 		return
 	}
 	sc_move start
@@ -75,7 +75,7 @@ proc ::move::Start {} {
 }
 
 proc ::move::End {} {
-	if {[info exists ::interactionHandler] && [eval "$::interactionHandler moveEnd"] == 0} {
+	if {[info exists ::interactionHandler] && [{*}$::interactionHandler moveEnd] == 0} {
 		return
 	}
 	sc_move end
@@ -84,7 +84,7 @@ proc ::move::End {} {
 }
 
 proc ::move::EndVar {} {
-	if {[info exists ::interactionHandler] && [eval "$::interactionHandler moveEnd"] == 0} {
+	if {[info exists ::interactionHandler] && [{*}$::interactionHandler moveEnd] == 0} {
 		return
 	}
 	sc_move endVar
@@ -104,7 +104,7 @@ proc ::move::EnterVar {var_num} {
 
 proc ::move::ExitVar {} {
 	if {[sc_var level] == 0 } { return 0; }
-	if {[info exists ::interactionHandler] && [eval "$::interactionHandler moveExitVar"] == 0} {
+	if {[info exists ::interactionHandler] && [{*}$::interactionHandler moveExitVar] == 0} {
 		return
 	}
 	sc_var exit;
@@ -121,7 +121,7 @@ proc ::move::ExitVarOrStart {} {
 proc ::move::Back {{count 1}} {
 	if {[sc_pos isAt start]} { return }
 	if {[sc_pos isAt vstart]} { ::move::ExitVar; return }
-	if {[info exists ::interactionHandler] && [eval "$::interactionHandler moveBack"] == 0} {
+	if {[info exists ::interactionHandler] && [{*}$::interactionHandler moveBack] == 0} {
 		return
 	}
 
@@ -141,7 +141,7 @@ proc ::move::Back {{count 1}} {
 
 proc ::move::Forward {{count 1}} {
 	if {[sc_pos isAt end] || [sc_pos isAt vend]} { return }
-	if {[info exists ::interactionHandler] && [eval "$::interactionHandler moveForward"] == 0} {
+	if {[info exists ::interactionHandler] && [{*}$::interactionHandler moveForward] == 0} {
 		return
 	}
 

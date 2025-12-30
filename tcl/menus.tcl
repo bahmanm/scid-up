@@ -208,17 +208,6 @@ $m add separator
 $m add command -label SearchUsing -accel "Ctrl+Shift+U" -command ::search::usefile
 
 
-### Play menu:
-set m .menu.play
-menu $m -postcommand "updateMenuStates $m"
-.menu add cascade -label Play -menu $m
-$m add separator
-menu $m.training
-  $m.training add command -label ToolsTrainOpenings -command ::opening::config
-  $m.training add command -label ToolsTrainTactics -command ::tactics::config
-  $m.training add command -label ToolsTrainCalvar -command ::calvar::config
-$m add cascade -label ToolsTraining -menu $m.training
-
 ### Windows menu:
 set m .menu.windows
 menu $m
@@ -410,14 +399,6 @@ proc updateMenuStates {{menuname}} {
     }
   {.menu.db} {
       set ::autoLoadBases_currdb [expr {[::file::autoLoadBases.find $::curr_db] >= 0}]
-    }
-  {.menu.play} {
-      set n [$m.play index end]
-      set st normal
-      if {[info exists ::interactionHandler]} { set st disabled }
-      for {set i 0} {$i <= $n} {incr i} {
-        catch { $m.play entryconfig $i -state $st }
-      }
     }
   {.menu.tools} {
       set st normal

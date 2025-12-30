@@ -1024,11 +1024,9 @@ proc compactDB {{base -1}} {
   destroy .analysisWin1
   destroy .analysisWin2
   destroy .coachWin
-  destroy .tacticsWin
   destroy .reviewgame
-  if {[winfo exists .calvarWin]} { ::calvar::stop }
   destroy .inputengineconsole
-
+ 
   progressWindow "Scid" [concat $::tr(CompactDatabase) "..."] $::tr(Cancel)
   set err [catch {sc_base compact $base} result]
   closeProgressWindow
@@ -1485,4 +1483,3 @@ proc mtoolAdd {tw title} {
   $tw see end
   update
 }
-

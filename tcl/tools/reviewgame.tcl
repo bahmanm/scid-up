@@ -162,7 +162,7 @@ proc ::reviewgame::clearEvaluation {} {
 
 ################################################################################
 # ::reviewgame::callback
-#   Handles play-mode callbacks while a review session is active.
+#   Handles interaction-handler callbacks while a review session is active.
 # Visibility:
 #   Public.
 # Inputs:
