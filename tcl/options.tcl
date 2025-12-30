@@ -232,8 +232,6 @@ set moveEntry(Coord) 1
 set windowsDock 1
 
 
-set ::tactics::analysisTime 3
-
 # Analysis command: to start chess analysis engine.
 set analysisCommand ""
 if {$windowsOS} {

@@ -164,10 +164,10 @@ proc updateStatusBar {} {
         return
     }
 
-    if {[info exists ::playMode]} {
-        set pInfo [eval "$::playMode info"]
+    if {[info exists ::interactionHandler]} {
+        set pInfo [{*}$::interactionHandler info]
         if {[llength $pInfo] != 4} {
-            ::board::setInfoAlert .main.board "Playing..." [tr Stop] "red" {{*}$::playMode stop}
+            ::board::setInfoAlert .main.board "Playing..." [tr Stop] "red" {{*}$::interactionHandler stop}
         } else {
             ::board::setInfoAlert .main.board {*}pInfo
         }
@@ -928,7 +928,7 @@ proc addMoveUCI {{moveUCI} {animate "-animate"}} {
         if {$moveUCI eq "0000" || ($k1 == "k"  &&  $k2 == "k")} { set moveUCI "null" }
     }
 
-    if {[info exists ::playMode] && [eval "$::playMode premove {$moveUCI}"]} { return 0 } ;# not player's turn
+    if {[info exists ::interactionHandler] && [{*}$::interactionHandler premove $moveUCI]} { return 0 } ;# not player's turn
 
     if {! [::move::Follow $moveUCI] && ! [addMoveEx $moveUCI]} {
         return 0
@@ -946,8 +946,8 @@ proc addMoveUCI {{moveUCI} {animate "-animate"}} {
 
 proc suggestMove {} {
     if {! $::suggestMoves} { return 0}
-    if {[info exists ::playMode]} {
-        return [eval "$::playMode suggestMove"]
+    if {[info exists ::interactionHandler]} {
+        return [{*}$::interactionHandler suggestMove]
     }
     return 1
 }
@@ -991,12 +991,6 @@ proc leaveSquare { square } {
 proc pressSquare { square } {
     global selectedSq highcolor
 
-    # if training with calculations of var is on, just log the event
-    if { [winfo exists .calvarWin] } {
-        ::calvar::pressSquare $square
-        return
-    }
-
     if {$selectedSq == -1} {
         set selectedSq $square
         ::board::colorSquare .main.board $square $highcolor
@@ -1026,8 +1020,6 @@ proc pressSquare { square } {
 #   part of a move.
 #
 proc releaseSquare { w x y } {
-    if { [winfo exists .calvarWin] } { return }
-
     global selectedSq bestSq
 
     ::board::setDragSquare $w -1
@@ -1206,9 +1198,50 @@ proc undoFeature {action} {
     }
 }
 
-proc setPlayMode { callback } {
-    set ::playMode "$callback"
-    if {$::playMode == ""} { unset ::playMode }
+################################################################################
+# setInteractionHandler
+#   Installs (or clears) the global interaction-handler command prefix.
+#
+# Rationale:
+#   Some features temporarily “take over” board/move interaction (e.g. training
+#   or review modes). Rather than scattering feature-specific checks, the move
+#   pipeline consults a single handler for permission and for status/UI hints.
+#
+# Contract:
+#   `callback` is a command prefix (a Tcl list) that will be invoked with a
+#   subcommand appended, e.g.:
+#     `{*}$::interactionHandler premove $moveUCI`
+#
+#   The handler must accept (at least) the following subcommands and return a
+#   boolean-like 1/0 where noted:
+#
+#   - `info`:
+#       May return a 4-element list suitable for `::board::setInfoAlert`,
+#       otherwise Scid falls back to a generic “Playing…” status with a Stop
+#       action wired to `{*}$::interactionHandler stop`.
+#   - `stop`:
+#       Must terminate the session and clear the handler (typically by calling
+#       `::setInteractionHandler ""`).
+#   - `premove <uciMove>` (returns 1/0):
+#       Return 1 to block the player's move (e.g. not the player's turn); return
+#       0 to allow normal move entry.
+#   - `suggestMove` (returns 1/0):
+#       Return 0 to suppress the default move suggestion logic; return 1 to
+#       allow it.
+#   - `moveStart`, `moveEnd`, `moveExitVar`, `moveBack`, `moveForward`,
+#     `drawVarArrows` (each returns 1/0):
+#       Return 0 to veto the corresponding default action; return 1 to allow it.
+#
+#   The handler should be robust: it must not throw errors from these entry
+#   points, as they are called from core UI event paths.
+################################################################################
+proc setInteractionHandler { callback } {
+    if {$callback eq ""} {
+        unset -nocomplain ::interactionHandler
+    } else {
+        # Canonicalise the command prefix as a proper list for safe `{*}` dispatch.
+        set ::interactionHandler [list {*}$callback]
+    }
     ::notify::PosChanged
 }
 

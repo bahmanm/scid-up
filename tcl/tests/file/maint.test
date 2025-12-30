@@ -259,7 +259,7 @@ proc ::maint_test::setup {} {
         return
     }
 
-    # Default: never treat .calvarWin as existing.
+    # Default: never treat extra windows as existing.
     ::maint_test::stubCommand winfo {subcmd args} {
         if {$subcmd eq "exists"} {
             return 0
@@ -592,7 +592,7 @@ test maint-compactDB-success-1.0 {compactDB compacts after confirmation and noti
 
     # Assert
     set destroyed [lsort -dict $::maint_test::destroyCalls]
-    set expectedDestroyed [lsort -dict [list .analysisWin1 .analysisWin2 .coachWin .inputengineconsole .reviewgame .tacticsWin]]
+    set expectedDestroyed [lsort -dict [list .analysisWin1 .analysisWin2 .coachWin .inputengineconsole .reviewgame]]
 
     list \
         [expr {$destroyed eq $expectedDestroyed}] \
