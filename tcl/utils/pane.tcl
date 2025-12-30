@@ -79,12 +79,12 @@ proc ::utils::pane::Create {win pane1 pane2 width height {ratio 0.5} {orient ver
   #bind $win.pane_sash <Leave>           "::utils::pane::Leave $win"
 
   if {$vertical} { set c "%Y" } else { set c "%X" }
-  bind $win.pane_grip <ButtonPress-1>   "::utils::pane::Grab $win"
-  bind $win.pane_grip <B1-Motion>       "::utils::pane::Drag $win $c"
-  bind $win.pane_grip <ButtonRelease-1> "::utils::pane::Drop $win $c"
-  bind $win.pane_sash <ButtonPress-1>   "::utils::pane::Grab $win"
-  bind $win.pane_sash <B1-Motion>       "::utils::pane::Drag $win $c"
-  bind $win.pane_sash <ButtonRelease-1> "::utils::pane::Drop $win $c"
+  bind $win.pane_grip <ButtonPress-1>   [list ::utils::pane::Grab $win]
+  bind $win.pane_grip <B1-Motion>       [list ::utils::pane::Drag $win $c]
+  bind $win.pane_grip <ButtonRelease-1> [list ::utils::pane::Drop $win $c]
+  bind $win.pane_sash <ButtonPress-1>   [list ::utils::pane::Grab $win]
+  bind $win.pane_sash <B1-Motion>       [list ::utils::pane::Drag $win $c]
+  bind $win.pane_sash <ButtonRelease-1> [list ::utils::pane::Drop $win $c]
 
   ::utils::pane::Divide $win $ratio
   return $win

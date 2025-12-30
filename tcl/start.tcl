@@ -304,7 +304,7 @@ proc safeSource {filename args} {
     $::safeInterp eval [list set $varname $value]
   }
   $::safeInterp eval [list set vdir $vdir]
-  $::safeInterp eval "source \$vdir/$n"
+  $::safeInterp eval [list source [file join $vdir $n]]
   foreach {varname value} $args {
     $::safeInterp eval [list unset $varname]
   }
@@ -346,7 +346,7 @@ proc safeSourceStyle {filename} {
   interp alias $safeInterp ::styleOption {} ::safeStyleOption $safeInterp
 
   $safeInterp eval [list set vdir $vdir]
-  $safeInterp eval "source \$vdir/[file tail $filename]"
+  $safeInterp eval [list source [file join $vdir [file tail $filename]]]
   ::safe::interpDelete $safeInterp
 }
 
@@ -393,7 +393,7 @@ proc safeStyle {interp args} {
 
     set script_i [lsearch -exact $args -settings]
     if {$script_i != -1} {
-      set script_j [expr $script_i + 1]
+      set script_j [expr {$script_i + 1}]
       ttk::style {*}[lreplace $args $script_i $script_j]
       $interp eval [list ttk::style theme settings $themeName [lindex $args $script_j]]
       return
@@ -570,7 +570,7 @@ proc configure_style {} {
     image create photo ::icon::$iname -format png -file $fname
   }
 }
-bind . <<ThemeChanged>> { if {"%W" eq "."} { configure_style } }
+bind . <<ThemeChanged>> { if {[string equal %W .]} { configure_style } }
 
 catch { ttk::style theme use $::lookTheme }
 configure_menus
@@ -580,7 +580,7 @@ configure_menus
 # Based on a ttk::checkbutton, update -text to reflect its state.
 # Example:
 #     ttk::checkbutton widget_name -style Switch.Toolbutton \
-#         -command "::update_switch_btn widget_name"
+#         -command [list ::update_switch_btn widget_name]
 #     ::update_switch_btn widget_name initial_value
 # Return the value of the variable associated with the widget.
 proc ::update_switch_btn {widget {set_value ""}} {
@@ -589,7 +589,7 @@ proc ::update_switch_btn {widget {set_value ""}} {
     set ::$varname $set_value
   }
   if {[$widget instate selected]} {
-    set full_circle [expr $::windowsOS ?"\u2B24":"\u25CF"]
+    set full_circle [expr {$::windowsOS ?"\u2B24":"\u25CF"}]
     $widget configure -text "       $full_circle"
   } else {
     $widget configure -text "\u25EF       "
@@ -610,8 +610,8 @@ proc autoscrollText {bars frame widget style} {
 proc ttk_text {pathName {args ""}} {
   set style Treeview
   if {[set idx [lsearch $args "-style"]] >=0} {
-    set style [lindex $args [expr $idx + 1]]
-    set args [lreplace $args $idx [expr $idx + 1]]
+    set style [lindex $args [expr {$idx + 1}]]
+    set args [lreplace $args $idx [expr {$idx + 1}]]
   }
   set res [text $pathName -cursor arrow -highlightthickness 0 -font font_Regular]
   if {[llength $args] > 0} {
@@ -643,7 +643,7 @@ proc ttk_create {pathName type x y args} {
 proc applyThemeColor_background { widget } {
   set bgcolor [ttk::style lookup . -background "" #d9d9d9]
   $widget configure -background $bgcolor
-  bind $widget <<ThemeChanged>> "::applyThemeColor_background $widget"
+  bind $widget <<ThemeChanged>> [list ::applyThemeColor_background $widget]
 }
 
 # Apply a ttk style to a tk widget
@@ -656,7 +656,7 @@ proc applyThemeStyle {style widget} {
     if {$option in $exclude} { continue }
     catch { $widget configure $option $value }
   }
-  bind $widget <<ThemeChanged>> "::applyThemeStyle $style $widget"
+  bind $widget <<ThemeChanged>> [list ::applyThemeStyle $style $widget]
 }
 
 image create photo flag_unknown -data {

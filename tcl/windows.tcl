@@ -43,9 +43,11 @@ proc createToplevel { {w} {closeto ""} } {
 # This function is necessary only if does exists a "destroy" command for the win created with createToplevel
 ################################################################################
 proc createToplevelFinalize {w} {
-    bind $w <Destroy> "+if {\[string equal $w %W\]} {
-      cleanup_todo_remove $w
-    }"
+    bind $w <Destroy> [list +apply {{w} {
+      if {[string equal $w %W]} {
+        cleanup_todo_remove $w
+      }
+    } ::} $w]
 }
 proc cleanup_todo_remove { w } {
     set dockw ".fdock[string range $w 1 end]"

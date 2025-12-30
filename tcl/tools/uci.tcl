@@ -247,9 +247,9 @@ namespace eval uci {
                         set side [lindex [split $analysis(fen$n)] 1]
                     }
                     if { $side == "b"} {
-                        set uciInfo(tmp_score$n) [ expr 0.0 - $uciInfo(tmp_score$n) ]
+                        set uciInfo(tmp_score$n) [expr {0.0 - $uciInfo(tmp_score$n) }]
                         if { $uciInfo(scoremate$n) } {
-                            set uciInfo(scoremate$n) [ expr 0 - $uciInfo(scoremate$n) ]
+                            set uciInfo(scoremate$n) [expr {0 - $uciInfo(scoremate$n) }]
                             if { $uciInfo(tmp_score$n) < 0 } {
                                 set uciInfo(tmp_score$n) [ expr {$uciInfo(tmp_score$n) - 1.0} ]
                             }
@@ -316,7 +316,7 @@ namespace eval uci {
                 set toBeFormatted 0
             }
             
-            set idx [ expr $uciInfo(multipv$n) -1 ]
+            set idx [expr {$uciInfo(multipv$n) -1 }]
             
             # was if $analyze etc..
             if { $idx < $analysis(multiPVCount$n) } {
@@ -469,7 +469,7 @@ namespace eval uci {
         flush $pipe
         
         # Give a few seconds for the engine to output its options, then automatically close it.
-        after 5000  "::uci::closeUCIengine $n 0"
+        after 5000 [list ::uci::closeUCIengine $n 0]
     }
     
 ################################################################################
@@ -700,13 +700,13 @@ namespace eval uci {
             ::uci::saveConfig
             destroy .uciConfigWin
         }
-        ttk::button $w.fbuttons.cancel -text $::tr(Cancel) -command "destroy .uciConfigWin"
+        ttk::button $w.fbuttons.cancel -text $::tr(Cancel) -command [list destroy .uciConfigWin]
         pack $w.fbuttons.save $w.fbuttons.cancel -side left -expand yes -fill x -padx 20 -pady 2
         pack $w.fopt -expand 1 -fill both
         addHorizontalRule $w
         pack $w.fbuttons -expand 1 -fill both
-        bind $w <Return> "$w.fbuttons.save invoke"
-        bind $w <Escape> "destroy .uciConfigWin"
+        bind $w <Return> [list ${w}.fbuttons.save invoke]
+        bind $w <Escape> [list destroy .uciConfigWin]
         catch {grab .uciConfigWin}
     }
 ################################################################################
@@ -851,7 +851,7 @@ namespace eval uci {
                 after $max_wait "::uci::onReady_ $n"
             }
         } else {
-            eval {*}$cmd
+            {*}$cmd
         }
     }
 
@@ -923,7 +923,7 @@ namespace eval uci {
         while { [llength $::analysis(whenReady$n)] } {
             set cmd [lindex $::analysis(whenReady$n) 0]
             set ::analysis(whenReady$n) [lrange $::analysis(whenReady$n) 1 end]
-            eval {*}$cmd
+            {*}$cmd
             if { $::analysis(waitForReadyOk$n) || \
                  $::analysis(waitForBestMove$n) || \
                  [info exists ::analysis(thinking$n)] } {  break }

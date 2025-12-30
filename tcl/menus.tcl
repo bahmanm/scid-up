@@ -51,7 +51,7 @@ if { $macOS } {
 
 ### File menu:
 set m .menu.file
-menu $m -postcommand "updateMenuStates $m"
+menu $m -postcommand [list updateMenuStates $m]
 .menu add cascade -label File -menu $m
 $m add command -label FileNew -command ::file::New
 $m add command -label FileOpen -acc "Ctrl+O" -command ::file::Open
@@ -64,13 +64,14 @@ $m add command -label ToolsOpenBaseAsTree -command ::file::openBaseAsTree
 menu $m.recenttrees
 $m add cascade -label ToolsOpenRecentBaseAsTree -menu $m.recenttrees
 $m add separator
-set ::menuFileRecentIdx [expr [$m index end] +1]
+set menuEndIdx [$m index end]
+set ::menuFileRecentIdx [expr {$menuEndIdx + 1}]
 $m add command -label FileExit -accelerator "Ctrl+Q" -command ::file::Exit
 
 
 ### Database menu:
 set m .menu.db
-menu $m -postcommand "updateMenuStates $m"
+menu $m -postcommand [list updateMenuStates $m]
 .menu add cascade -label Database -menu $m
 $m add command -label FileClose -acc "Ctrl+W" -command ::file::Close
 $m add checkbutton -label LoadatStartup -variable ::autoLoadBases_currdb -command {
@@ -94,7 +95,8 @@ menu $m.copygames
     }
   }
   $m.copygames add separator
-  set ::menuDBCopyGamesIdx [expr [$m.copygames index end] +1]
+  set copygamesEndIdx [$m.copygames index end]
+  set ::menuDBCopyGamesIdx [expr {$copygamesEndIdx + 1}]
 $m add cascade -label CopyAllGames -menu $m.copygames
 menu $m.exportfilter
   $m.exportfilter add command -label ToolsExpFilterPGN \
@@ -129,7 +131,8 @@ menu $m.spell
   $m.spell add command -label AddEloRatings -command {allocateRatings}
 $m add cascade -label FileMaintName -menu $m.spell
 $m add separator
-set ::menuDbSwitchIdx [expr [$m index end] +1]
+set menuEndIdx [$m index end]
+set ::menuDbSwitchIdx [expr {$menuEndIdx + 1}]
 
 
 ### Edit menu:
@@ -162,7 +165,7 @@ $m add command -label EditPaste -command {
 
 ### Game menu:
 set m .menu.game
-menu $m -postcommand "updateMenuStates $m"
+menu $m -postcommand [list updateMenuStates $m]
 .menu add cascade -label Game -menu $m
 $m add command -label GameNew -accelerator "Ctrl+N" -command ::game::Clear
 $m add command -label GameReload -command ::game::Reload
@@ -212,7 +215,7 @@ $m add command -label SearchUsing -accel "Ctrl+Shift+U" -command ::search::usefi
 set m .menu.windows
 menu $m
 .menu add cascade -label Windows -menu $m
-$m add checkbutton -label WindowsComment -var ::windows::commenteditor::isOpen -command "::makeCommentWin toggle" -accelerator "Ctrl+E"
+$m add checkbutton -label WindowsComment -var ::windows::commenteditor::isOpen -command [list ::makeCommentWin toggle] -accelerator "Ctrl+E"
 $m add checkbutton -label WindowsPGN -variable pgnWin -command ::pgn::OpenClose  -accelerator "Ctrl+P"
 $m add checkbutton -label OptionsWindowsShowGameInfo -variable showGameInfo -command ::toggleGameInfo
 $m add separator
@@ -228,14 +231,14 @@ $m add command -label WindowsGraph -command ::tools::graphs::score::Refresh
 
 ### Tools menu:
 set m .menu.tools
-menu $m -postcommand "updateMenuStates $m"
+menu $m -postcommand [list updateMenuStates $m]
 .menu add cascade -label Tools -menu $m
 $m  add command -label ToolsConfigureEngines -command ::enginelist::choose
 $m  add command -label ToolsStartEngine1 \
-    -command "::enginewin::start 1" -accelerator "F2"
+    -command [list ::enginewin::start 1] -accelerator "F2"
 $m  add command -label ToolsStartEngine2 \
-    -command "::enginewin::start 2" -accelerator "F3"
-$m  add command -label ToolsAnalysis -command "makeAnalysisWin 1"
+    -command [list ::enginewin::start 2] -accelerator "F3"
+$m  add command -label ToolsAnalysis -command [list makeAnalysisWin 1]
 $m  add command -label ToolsTrainReviewGame -command ::reviewgame::start
 $m add separator
 $m add checkbutton -label ToolsFilterGraph \
@@ -269,28 +272,32 @@ menu $m.language
   foreach l $::languages {
       $m.language add radiobutton -label $::langName($l) \
           -underline $::langUnderline($l) -variable language -value $l \
-          -command "setLanguage; ::notify::PosChanged pgnonly"
+          -command [list apply {{} { setLanguage; ::notify::PosChanged pgnonly }}]
   }
 $m add cascade -label OptionsLanguage -menu $m.language
 menu $m.theme -tearoff 1
-set ::menuThemeListIdx [expr [$m.theme index end] +1]
+set themeEndIdx [$m.theme index end]
+set ::menuThemeListIdx [expr {$themeEndIdx + 1}]
 $m add cascade -label OptionsTheme -menu $m.theme
 menu $m.savelayout
 menu $m.restorelayout
-    foreach i {"1 (default)" "2" "3"} slot {1 2 3} {
-      $m.savelayout add command -label $i -command "::docking::layout_save $slot"
-      $m.restorelayout add command -label $i -command "::docking::layout_restore $slot"
-    }
+	    foreach i {"1 (default)" "2" "3"} slot {1 2 3} {
+	      $m.savelayout add command -label $i -command [list ::docking::layout_save $slot]
+	      $m.restorelayout add command -label $i -command [list ::docking::layout_restore $slot]
+	    }
 $m add command -label ConfigureScid -command { ::preferences::Open toggle }
 $m add command -label OptionsResources -command ::preferences::resources
 menu $m.export
-  $m.export add command -label "PGN file text" -underline 0 -command "setExportText PGN"
-  $m.export add command -label "HTML file text" -underline 0 -command "setExportText HTML"
-  $m.export add command -label "LaTeX file text" -underline 0 -command "setExportText LaTeX"
+  $m.export add command -label "PGN file text" -underline 0 -command [list setExportText PGN]
+  $m.export add command -label "HTML file text" -underline 0 -command [list setExportText HTML]
+  $m.export add command -label "LaTeX file text" -underline 0 -command [list setExportText LaTeX]
 $m add cascade -label OptionsExport -menu $m.export
 $m add separator
 $m add checkbutton -label FullScreen -variable optionFullScreen \
-  -command { wm attributes . -fullscreen [expr ![wm attributes . -fullscreen]] }
+  -command {
+    set fullscreen [wm attributes . -fullscreen]
+    wm attributes . -fullscreen [expr {!$fullscreen}]
+  }
 $m add checkbutton -label OptionsWindowsDock -variable windowsDock
 $m add cascade -label OptionsWindowsSaveLayout -menu $m.savelayout
 $m add cascade -label OptionsWindowsRestoreLayout -menu $m.restorelayout
@@ -394,7 +401,7 @@ proc updateMenuStates {{menuname}} {
       $m.file delete $::menuFileRecentIdx $idx2
       set nrecent [::recentFiles::show $m.file $::menuFileRecentIdx]
       if {$nrecent > 0} {
-        $m.file insert [expr $::menuFileRecentIdx + $nrecent] separator
+        $m.file insert [expr {$::menuFileRecentIdx + $nrecent}] separator
       }
     }
   {.menu.db} {
@@ -463,12 +470,12 @@ proc menuUpdateBases {} {
 
     if {$i != $::curr_db && ! $readonly} {
         .menu.db.copygames add command -label "Base $i: $fname" \
-            -command "::windows::gamelist::CopyGames {} $::curr_db $i all"
+            -command [list ::windows::gamelist::CopyGames {} $::curr_db $i all]
     }
 
     if {! $readonly} {
         .menu.db.importfile add command -label "into $i: $fname" \
-            -command "importPgnFile $i"
+            -command [list importPgnFile $i]
     }
   }
 
@@ -668,7 +675,8 @@ proc readThemePkgFile { fullname } {
     if {$fullname ne "" && $fullname != $::ThemePackageFile } {
         set count [llength [ttk::style theme names]]
         set ret [ catch { ::safeSourceStyle $fullname } ]
-        set newthemes [expr [llength [ttk::style theme names]] - $count]
+        set newCount [llength [ttk::style theme names]]
+        set newthemes [expr {$newCount - $count}]
         if { $ret == 0 && $newthemes > 0  } {
             menuUpdateThemes
             set ::ThemePackageFile $fullname

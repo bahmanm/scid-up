@@ -83,8 +83,11 @@ namespace eval ExtHardware {
            button .main.fbutton.button.exthardware -image tb_eng_disconnected
            .main.fbutton.button.exthardware configure -relief flat -border 1 -highlightthickness 0 \
                -anchor n -takefocus 0
-           bind .main.fbutton.button.exthardware <Any-Enter> "+.main.fbutton.button.exthardware configure -relief groove"
-           bind .main.fbutton.button.exthardware <Any-Leave> "+.main.fbutton.button.exthardware configure -relief flat; break"
+           bind .main.fbutton.button.exthardware <Any-Enter> [list +.main.fbutton.button.exthardware configure -relief groove]
+           bind .main.fbutton.button.exthardware <Any-Leave> [list +apply {{} {
+               .main.fbutton.button.exthardware configure -relief flat
+               return -code break
+           } ::}]
            pack .main.fbutton.button.space4 .main.fbutton.button.exthardware -side left -pady 1 -padx 0 -ipadx 0 -pady 0 -ipady 0
            pack .main.fbutton.button.exthardware -side left -pady 1 -padx 0 -ipadx 0 -pady 0 -ipady 0
 
@@ -204,7 +207,10 @@ namespace eval ExtHardware {
        destroy .exthardwareConfig
        $::ExtHardware::bindbutton
     }
-    ttk::button $w.bCancel -text [::tr Cancel] -command "::ExtHardware::HWbuttonImg tb_eng_disconnected ; destroy $w"
+    ttk::button $w.bCancel -text [::tr Cancel] -command [list apply {{w} {
+        ::ExtHardware::HWbuttonImg tb_eng_disconnected
+        destroy $w
+    } ::} $w]
     packdlgbuttons $w.bCancel $w.bOk -in $w.buttons
 
     grid $w.options    -stick ew    -row 0 -column 0
@@ -241,8 +247,11 @@ namespace eval ExtHardware {
         button .main.fbutton.button.exthardware -image tb_eng_disconnected
         .main.fbutton.button.exthardware configure -relief flat -border 1 -highlightthickness 0 \
             -anchor n -takefocus 0
-        bind .main.fbutton.button.exthardware <Any-Enter> "+.main.fbutton.button.exthardware configure -relief groove"
-        bind .main.fbutton.button.exthardware <Any-Leave> "+.main.fbutton.button.exthardware configure -relief flat; break"
+        bind .main.fbutton.button.exthardware <Any-Enter> [list +.main.fbutton.button.exthardware configure -relief groove]
+        bind .main.fbutton.button.exthardware <Any-Leave> [list +apply {{} {
+            .main.fbutton.button.exthardware configure -relief flat
+            return -code break
+        } ::}]
         pack .main.fbutton.button.space4 .main.fbutton.button.exthardware -side left -pady 1 -padx 0 -ipadx 0 -pady 0 -ipady 0
         pack .main.fbutton.button.exthardware -side left -pady 1 -padx 0 -ipadx 0 -pady 0 -ipady 0
 
@@ -310,7 +319,7 @@ namespace eval inputengine {
     ::setTitle $w [::tr IEConsole]
 
     ttk::scrollbar $w.ysc     -command { .inputengineconsole.console yview }
-    text      $w.console -height 5  -width 80 -wrap word -yscrollcommand "$w.ysc set"
+    text      $w.console -height 5  -width 80 -wrap word -yscrollcommand [list $w.ysc set]
 
     ttk::label     $w.lmode   -text [::tr IESending]
 
@@ -896,10 +905,10 @@ namespace eval inputengine {
             if {$::inputengine::StoreClock == 1} {
                if { ($::inputengine::oldWhiteClock != $::inputengine::NoClockTime) && \
                     ($::inputengine::WhiteClock    != $::inputengine::NoClockTime) } {
-                  set wHrs [expr $::inputengine::WhiteClock / 60 / 60]
-                  set wMin [expr ($::inputengine::WhiteClock - $wHrs*60*60) / 60 ]
-                  set wSec [expr ($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) ]
-                  set timediff [expr $::inputengine::oldWhiteClock - $::inputengine::WhiteClock]
+                  set wHrs [expr {$::inputengine::WhiteClock / 60 / 60}]
+                  set wMin [expr {($::inputengine::WhiteClock - $wHrs*60*60) / 60 }]
+                  set wSec [expr {($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) }]
+                  set timediff [expr {$::inputengine::oldWhiteClock - $::inputengine::WhiteClock}]
                   set ::inputengine::oldWhiteClock $::inputengine::WhiteClock
                   sc_pos setComment "\[%ct $wHrs:$wMin:$wSec\] \[%emt $timediff\]"
                }
@@ -913,10 +922,10 @@ namespace eval inputengine {
             if {$::inputengine::StoreClock == 1} {
                if { ($::inputengine::oldBlackClock != $::inputengine::NoClockTime) && \
                     ($::inputengine::BlackClock    != $::inputengine::NoClockTime) } {
-                  set bHrs [expr $::inputengine::BlackClock / 60 / 60]
-                  set bMin [expr ($::inputengine::BlackClock - $bHrs*60*60) / 60 ]
-                  set bSec [expr ($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) ]
-                  set timediff [expr $::inputengine::oldBlackClock - $::inputengine::BlackClock]
+                  set bHrs [expr {$::inputengine::BlackClock / 60 / 60}]
+                  set bMin [expr {($::inputengine::BlackClock - $bHrs*60*60) / 60 }]
+                  set bSec [expr {($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) }]
+                  set timediff [expr {$::inputengine::oldBlackClock - $::inputengine::BlackClock}]
                   set ::inputengine::oldBlackClock $::inputengine::BlackClock
                   sc_pos setComment "\[%ct $bHrs:$bMin:$bSec\] \[%emt $timediff\]"
                }
@@ -936,9 +945,9 @@ namespace eval inputengine {
             regsub -all {[A-Za-z:# ]} $event "" ::inputengine::WhiteClock
 
             # calculate a sensible format
-            set wHrs [expr $::inputengine::WhiteClock / 60 / 60]
-            set wMin [expr ($::inputengine::WhiteClock - $wHrs*60*60) / 60 ]
-            set wSec [expr ($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) ]
+            set wHrs [expr {$::inputengine::WhiteClock / 60 / 60}]
+            set wMin [expr {($::inputengine::WhiteClock - $wHrs*60*60) / 60 }]
+            set wSec [expr {($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) }]
 
             if {$wHrs > 0} {
                .inputengineconsole.wClock configure -text "$wHrs:$wMin:$wSec (EXT)"
@@ -947,7 +956,7 @@ namespace eval inputengine {
             }
 
             ###---### Is this enough to set game clocks for all possible occurrences?
-            catch { ::gameclock::setSec 1 [expr -1*$::inputengine::WhiteClock] }
+            catch { ::gameclock::setSec 1 [expr {-1*$::inputengine::WhiteClock}] }
           } \
           "Time Black:" {
             if { ($::inputengine::oldBlackClock == $::inputengine::NoClockTime) } {
@@ -955,9 +964,9 @@ namespace eval inputengine {
             }
             regsub -all {[A-Za-z:# ]} $event "" ::inputengine::BlackClock
 
-            set bHrs [expr $::inputengine::BlackClock / 60 / 60]
-            set bMin [expr ($::inputengine::BlackClock - $bHrs*60*60) / 60 ]
-            set bSec [expr ($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) ]
+            set bHrs [expr {$::inputengine::BlackClock / 60 / 60}]
+            set bMin [expr {($::inputengine::BlackClock - $bHrs*60*60) / 60 }]
+            set bSec [expr {($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) }]
 
             if {$bHrs > 0} {
                .inputengineconsole.bClock configure -text "$bHrs:$bMin:$bSec (EXT)"
@@ -966,7 +975,7 @@ namespace eval inputengine {
             }
 
             ###---### Is this enough to set game clocks for all possible occurrences?
-            catch { ::gameclock::setSec 2 [expr -1*$::inputengine::BlackClock] }
+            catch { ::gameclock::setSec 2 [expr {-1*$::inputengine::BlackClock}] }
           } \
           "Wrong move performed:" {
              # This event can only be used if there is a possibility to

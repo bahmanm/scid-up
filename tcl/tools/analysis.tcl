@@ -394,22 +394,25 @@ proc ::enginelist::choose {} {
     ttk::frame $w.list
     # Set up enginelist
     ttk::treeview $w.list.list -columns { "Name" "Elo" "Time" } -height 12 \
-        -show headings -selectmode browse -yscrollcommand "$w.list.ybar set"
+        -show headings -selectmode browse -yscrollcommand [list $w.list.ybar set]
     set wid [font measure font_Regular W]
-    $w.list.list column Name -width [expr 12 * $wid]
+    $w.list.list column Name -width [expr {12 * $wid}]
     $w.list.list heading Name -text [tr EngineName]
-    $w.list.list column Elo -anchor e -width [expr 4 * $wid]
+    $w.list.list column Elo -anchor e -width [expr {4 * $wid}]
     $w.list.list heading Elo -text [tr EngineElo]
-    $w.list.list column Time -width [expr 12 * $wid]
+    $w.list.list column Time -width [expr {12 * $wid}]
     $w.list.list heading Time -text [tr EngineTime]
-    ttk::scrollbar $w.list.ybar -command "$w.list.list yview"
+    ttk::scrollbar $w.list.ybar -command [list $w.list.list yview]
     pack $w.list.list $w.list.ybar -side left -fill both -expand 1
     
     # The list of choices:
     pack $w.list -side top -fill y -expand 1
     pack $w.buttons -side top -fill x -pady { 5 0 }
-    bind $w.list.list <Double-ButtonRelease-1> "$w.buttons.ok invoke; break"
-    bind $w.list.list <ButtonRelease-1> "engine.singleclick_ %W %x %y"
+    bind $w.list.list <Double-ButtonRelease-1> [list apply {{w} {
+        ${w}.buttons.ok invoke
+        return -code break
+    } ::} $w]
+    bind $w.list.list <ButtonRelease-1> [list engine.singleclick_ %W %x %y]
     
     set f $w.buttons
     dialogbutton $f.add -text $::tr(EngineNew...) -command {::enginelist::edit -1}
@@ -435,8 +438,11 @@ proc ::enginelist::choose {} {
     focus $w.list.list
     wm protocol $w WM_DELETE_WINDOW "destroy $w"
     bind $w <F1> { helpWindow Analysis List }
-    bind $w <Escape> "destroy $w"
-    bind $w.list.list <Return> "$w.buttons.ok invoke; break"
+    bind $w <Escape> [list destroy $w]
+    bind $w.list.list <Return> [list apply {{w} {
+        ${w}.buttons.ok invoke
+        return -code break
+    } ::} $w]
     set engines(selection) ""
     catch {grab $w}
     tkwait window $w
@@ -657,14 +663,22 @@ proc ::enginelist::edit {index} {
             focus .enginelist
         }
     }
-    ttk::button $f.cancel -text $::tr(Cancel) -command "destroy $w; raise .enginelist; focus .enginelist"
+    ttk::button $f.cancel -text $::tr(Cancel) -command [list apply {{w} {
+        destroy $w
+        raise .enginelist
+        focus .enginelist
+    } ::} $w]
     pack $f -side bottom -fill x
     pack $f.cancel $f.ok -side right -padx 2 -pady 2
     ttk::label $f.required -font font_Small -text $::tr(EngineRequired)
     pack $f.required -side left
     
-    bind $w <Return> "$f.ok invoke"
-    bind $w <Escape> "destroy $w; raise .enginelist; focus .enginelist"
+    bind $w <Return> [list ${f}.ok invoke]
+    bind $w <Escape> [list apply {{w} {
+        destroy $w
+        raise .enginelist
+        focus .enginelist
+    } ::} $w]
     bind $w <F1> { helpWindow Analysis List }
     focus $w.f.eName
     wm resizable $w 1 0
@@ -1104,11 +1118,11 @@ proc markExercise { prevscore score nag} {
     
     set deltamove [expr {$score - $prevscore}]
     # filter tactics so only those with high gains are kept
-    if { [expr abs($deltamove)] < $::informant(+/-) } { return 0 }
+    if { [expr {abs($deltamove)}] < $::informant(+/-) } { return 0 }
     # dismiss games where the result is already clear (high score,and we continue in the same way)
-    if { [expr $prevscore * $score] >= 0} {
-        if { [expr abs($prevscore) ] > $::informant(+--) } { return 0 }
-        if { [expr abs($prevscore)] > $::informant(+-) && [expr abs($score) ] < [expr 2 * abs($prevscore)]} { return 0 }
+    if { [expr {$prevscore * $score}] >= 0} {
+        if { [expr {abs($prevscore) }] > $::informant(+--) } { return 0 }
+        if { [expr {abs($prevscore)}] > $::informant(+-) && [expr {abs($score) }] < [expr {2 * abs($prevscore)}]} { return 0 }
     }
     
     # The best move is much better than others.
@@ -1116,16 +1130,16 @@ proc markExercise { prevscore score nag} {
         return 0
     }
     set sc2 [lindex [ lindex $::analysis(multiPV1) 1 ] 1]
-    if { [expr abs( $score - $sc2 )] < 1.5 } { return 0 }
+    if { [expr {abs( $score - $sc2 )}] < 1.5 } { return 0 }
     
     # There is no other winning moves (the best move may not win, of course, but
     # I reject exercises when there are e.g. moves leading to +9, +7 and +5 scores)
-    if { [expr $score * $sc2] > 0.0 && [expr abs($score)] > $::informant(+-) && [expr abs($sc2)] > $::informant(+-) } {
+    if { [expr {$score * $sc2}] > 0.0 && [expr {abs($score)}] > $::informant(+-) && [expr {abs($sc2)}] > $::informant(+-) } {
         return 0
     }
     
     # The best move does not lose position.
-    if {[sc_pos side] == "white" && $score < [expr 0.0 - $::informant(+/-)] } { return 0 }
+    if {[sc_pos side] == "white" && $score < [expr {0.0 - $::informant(+/-)}] } { return 0 }
     if {[sc_pos side] == "black" && $score > $::informant(+/-) } { return 0}
     
     # Move is not obvious: check that it is not the first move guessed at low depths
@@ -1150,13 +1164,14 @@ proc markExercise { prevscore score nag} {
     
     # find at what timing the right move was reliably found
     # only the move is checked, not if the score is close to the expected one
-    for {set t [expr [llength $timer] -1]} {$t >= 0} { incr t -1} {
+    set timerLen [llength $timer]
+    for {set t [expr {$timerLen - 1}]} {$t >= 0} { incr t -1} {
         if { [lindex $movelist $t] != $bm0 } {
             break
         }
     }
     
-    set difficulty [expr $t +2]
+    set difficulty [expr {$t +2}]
     
     # If the base opened is read only, like a PGN file, avoids an exception
     catch { sc_base gameflag [sc_base current] [sc_game number] set T }
@@ -1387,7 +1402,7 @@ proc addAnnotation { {n 1} } {
     # Or that we must annotate all moves
     #
     if {  (  $annotateBlunders == "blundersonly"
-          && ($isBlunder > 1 || ($isBlunder > 0 && [expr abs($score)] >= 327.0))
+          && ($isBlunder > 1 || ($isBlunder > 0 && [expr {abs($score)}] >= 327.0))
           && ! $gameIsLost)
        || ($annotateBlunders == "allmoves") } {
         if { $isBlunder > 0 } {
@@ -1958,7 +1973,7 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     set n_engines [llength $::engines(list)]
     if { $index >= $n_engines} {
         if { $n_engines > 0 } {
-            tk_messageBox -message "Invalid Engine Number: [expr $index +1]"
+            tk_messageBox -message "Invalid Engine Number: [expr {$index +1}]"
             makeAnalysisWin $n -1
         }
         return
@@ -2033,47 +2048,49 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     
     ttk::frame $w.b1
     pack $w.b1 -side bottom -fill x
-    ttk::button $w.b1.automove -image tb_training  -command "toggleAutomove $n"
+    ttk::button $w.b1.automove -image tb_training  -command [list toggleAutomove $n]
     ::utils::tooltip::Set $w.b1.automove $::tr(Training)
     
-    ttk::button $w.b1.lockengine -image tb_lockengine -command "toggleLockEngine $n"
+    ttk::button $w.b1.lockengine -image tb_lockengine -command [list toggleLockEngine $n]
     ::utils::tooltip::Set $w.b1.lockengine $::tr(LockEngine)
     .analysisWin$n.b1.lockengine configure -state disabled
     
-    ttk::button $w.b1.line -image tb_addvar -command "addAnalysisVariation $n"
+    ttk::button $w.b1.line -image tb_addvar -command [list addAnalysisVariation $n]
     ::utils::tooltip::Set $w.b1.line $::tr(AddVariation)
     
-    ttk::button $w.b1.alllines -image tb_addallvars -command "addAllVariations $n"
+    ttk::button $w.b1.alllines -image tb_addallvars -command [list addAllVariations $n]
     ::utils::tooltip::Set $w.b1.alllines $::tr(AddAllVariations)
     
-    ttk::button $w.b1.move -image tb_addmove -command "makeAnalysisMove $n"
+    ttk::button $w.b1.move -image tb_addmove -command [list makeAnalysisMove $n]
     ::utils::tooltip::Set $w.b1.move $::tr(AddMove)
 
     ttk::spinbox $w.b1.multipv -from 1 -to 8 -increment 1 -textvariable analysis(multiPVCount$n) -state disabled -width 2 \
-            -command "after idle changePVSize $n"
+            -command [list apply {{n val} {
+                after idle [list changePVSize $n $val]
+            } ::} $n]
     ::utils::tooltip::Set $w.b1.multipv $::tr(Lines)
     
     # add a button to start/stop engine analysis
-    ttk::button $w.b1.bStartStop -image tb_eng_on -command "toggleEngineAnalysis $n"
-    ::utils::tooltip::Set $w.b1.bStartStop "$::tr(StartEngine) (F[expr 3 + $n])"
+    ttk::button $w.b1.bStartStop -image tb_eng_on -command [list toggleEngineAnalysis $n]
+    ::utils::tooltip::Set $w.b1.bStartStop "$::tr(StartEngine) (F[expr {3 + $n}])"
 
     if {$n == 1} {
         set ::finishGameMode 0
-        ttk::button $w.b1.bFinishGame -image tb_finish_off -command "toggleFinishGame $n"
+        ttk::button $w.b1.bFinishGame -image tb_finish_off -command [list toggleFinishGame $n]
         ::utils::tooltip::Set $w.b1.bFinishGame $::tr(FinishGame)
     }
-    ttk::button $w.b1.showboard -image tb_coords -command "toggleAnalysisBoard $n"
+    ttk::button $w.b1.showboard -image tb_coords -command [list toggleAnalysisBoard $n]
     ::utils::tooltip::Set $w.b1.showboard $::tr(ShowAnalysisBoard)
     
-    ttk::button $w.b1.showinfo -image tb_engineinfo -command "toggleEngineInfo $n"
+    ttk::button $w.b1.showinfo -image tb_engineinfo -command [list toggleEngineInfo $n]
     ::utils::tooltip::Set $w.b1.showinfo $::tr(ShowInfo)
     
     if {$n == 1} {
-        ttk::button $w.b1.annotate -command "configAnnotation" \
+        ttk::button $w.b1.annotate -command [list configAnnotation] \
             -image [list tb_annotate pressed tb_annotate_on]
         ::utils::tooltip::Set $w.b1.annotate $::tr(Annotate...)
     }
-    ttk::button $w.b1.priority -image tb_cpu_hi -command "setAnalysisPriority $w $n"
+    ttk::button $w.b1.priority -image tb_cpu_hi -command [list setAnalysisPriority $w $n]
     ::utils::tooltip::Set $w.b1.priority $::tr(LowPriority)
     
     ttk::button $w.b1.help -image tb_help -command { helpWindow Analysis }
@@ -2096,7 +2113,7 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     pack $w.text -side top -fill both
     pack $w.hist -side top -expand 1 -fill both
     
-    bind $w.hist.text <ButtonPress-$::MB3> "toggleMovesDisplay $n"
+    bind $w.hist.text <ButtonPress-$::MB3> [list toggleMovesDisplay $n]
     $w.text tag configure blue -foreground DodgerBlue3
     $w.text tag configure bold -font font_Bold
     $w.text tag configure small -font font_Small
@@ -2108,15 +2125,17 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
             by moving backward or forward or making a new move.)" small
     }
     $w.text configure -state disabled
-    bind $w <Destroy> "if {\[string equal $w %W\]} { destroyAnalysisWin $n }"
-    bind $w <Escape> "focus .; destroy $w"
-    bind $w <Key-a> "$w.b1.bStartStop invoke"
+    bind $w <Destroy> [list apply {{w n} {
+        if {[string equal $w %W]} { destroyAnalysisWin $n }
+    } ::} $w $n]
+    bind $w <Escape> [list apply {{w} { focus .; destroy $w } ::} $w]
+    bind $w <Key-a> [list ${w}.b1.bStartStop invoke]
     wm minsize $w 25 0
     ::createToplevelFinalize $w
 
     set analysis(onUciOk$n) "onUciOk $n $w.b1.multipv $autostart [list [ lindex $engineData 8 ]]"
     fileevent $analysis(pipe$n) readable "::uci::processAnalysisInput $n"
-    after 1000 "checkAnalysisStarted $n"
+    after 1000 [list checkAnalysisStarted $n]
 
     catch {
         ::enginelist::sort
@@ -2174,7 +2193,7 @@ proc onUciOk {{n} {multiPv_spin} {autostart} {uci_options}} {
 #     the analysis text.
 ################################################################################
 proc toggleMovesDisplay { {n 1} } {
-    set ::analysis(movesDisplay$n) [expr 1 - $::analysis(movesDisplay$n)]
+    set ::analysis(movesDisplay$n) [expr {1 - $::analysis(movesDisplay$n)}]
     set h .analysisWin$n.hist.text
     $h configure -state normal
     $h delete 1.0 end
@@ -2736,7 +2755,7 @@ proc updateAnalysisText {{n 1}} {
     $t configure -state normal
     $t delete 0.0 end
     
-    if { [expr abs($score)] >= 327.0 } {
+    if { [expr {abs($score)}] >= 327.0 } {
         if { [catch { set tmp [format "M%d " $analysis(scoremate$n)]} ] } {
             set tmp [format "%+.1f " $score]
         }
@@ -2864,23 +2883,23 @@ proc scoreToMate { score pv n } {
     if { [string index $pv end] == "#" || [string index $pv end] == "+" && [string index $pv end-1] == "+"} {
         set plies [llength $pv]
         
-        set mate [expr $plies / 2 + 1 ]
+        set mate [expr {$plies / 2 + 1 }]
         
         set sign ""
-        if {[expr $plies % 2] == 0 && [sc_pos side] == "white" || [expr $plies % 2] == 1 && [sc_pos side] == "black"} {
+        if {[expr {$plies % 2}] == 0 && [sc_pos side] == "white" || [expr {$plies % 2}] == 1 && [sc_pos side] == "black"} {
             set sign "-"
         }
         if {[sc_pos side] == "white" } {
             if { $sign == "" } {
-                set mate [expr $plies / 2 + 1 ]
+                set mate [expr {$plies / 2 + 1 }]
             } else  {
-                set mate [expr $plies / 2 ]
+                set mate [expr {$plies / 2 }]
             }
         } else  {
             if { $sign == "" } {
-                set mate [expr $plies / 2 ]
+                set mate [expr {$plies / 2 }]
             } else  {
-                set mate [expr $plies / 2 + 1 ]
+                set mate [expr {$plies / 2 + 1 }]
             }
         }
         
@@ -2930,7 +2949,7 @@ proc addMoveNumbers { e pv } {
     }
     for {set i $start} {$i < [llength $pv]} {incr i} {
         set m [lindex $pv $i]
-        if { [expr $i % 2] == 0 && $start == 0 || [expr $i % 2] == 1 && $start == 1 } {
+        if { [expr {$i % 2}] == 0 && $start == 0 || [expr {$i % 2}] == 1 && $start == 1 } {
             append ret "$n.$spc$m "
         } else  {
             append ret "$m "
@@ -2959,7 +2978,7 @@ proc toggleAnalysisBoard {n} {
         setWinSize .analysisWin$n
         .analysisWin$n.b1.showboard state !pressed
     } else {
-        bind .analysisWin$n <Configure> ""
+        bind .analysisWin$n <Configure> {}
         set analysis(showBoard$n) 1
         pack .analysisWin$n.bd -side right -before .analysisWin$n.b1 -padx 4 -pady 4 -anchor n
         update
@@ -3220,7 +3239,7 @@ proc automove_go {{n 1}} {
             after cancel "automove $n"
             ::tree::doTraining $n
         } else {
-            after 1000 "automove $n"
+            after 1000 [list automove $n]
         }
     }
 }

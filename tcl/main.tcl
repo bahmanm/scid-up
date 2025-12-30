@@ -265,8 +265,8 @@ proc updateMainToolbar {} {
     ::board::setButtonCmd .main.board back ""
     unset -nocomplain ::gameInfoBar(tb_BD_Start)
   } else {
-    ::board::setButtonCmd .main.board leavevar "::move::ExitVarOrStart"
-    ::board::setButtonCmd .main.board back "::move::Back"
+    ::board::setButtonCmd .main.board leavevar [list ::move::ExitVarOrStart]
+    ::board::setButtonCmd .main.board back [list ::move::Back]
     set ::gameInfoBar(tb_BD_Start) "::move::Start"
   }
   if {[sc_pos isAt end] || [sc_pos isAt vend]} {
@@ -275,8 +275,8 @@ proc updateMainToolbar {} {
     unset -nocomplain ::gameInfoBar(tb_BD_End)
     unset -nocomplain ::gameInfoBar(tb_BD_Autoplay)
   } else {
-    ::board::setButtonCmd .main.board forward "::move::Forward"
-    ::board::setButtonCmd .main.board endvar "::move::EndVar"
+    ::board::setButtonCmd .main.board forward [list ::move::Forward]
+    ::board::setButtonCmd .main.board endvar [list ::move::EndVar]
     set ::gameInfoBar(tb_BD_End) "::move::End"
     set ::gameInfoBar(tb_BD_Autoplay) "startAutoplay"
   }
@@ -323,7 +323,7 @@ proc ::updateTreeFilter {{base ""}} {
         #TODO: don't do a full database search if there is only one filter.
         #set n_filters [llength [lsort -unique -index 1 $::treeFilterUpdating_]]
 
-        eval progressBarSet $progressbar
+        progressBarSet {*}$progressbar
         set err [catch {sc_filter search $base "tree" board}]
         if {$err && $::errorCode != $::ERROR::UserCancel} {
             ERROR::MessageBox
@@ -413,7 +413,7 @@ proc ::createMainEvalBarMenu {w} {
             }
         } else {
             $w.evalbar_menu add command -label $engName \
-                -command "set ::mainEvalBarEngineID_ \[::enginewin::start $engID\]"
+                -command [list apply {{engID} { set ::mainEvalBarEngineID_ [::enginewin::start $engID] }} $engID]
         }
     }
     foreach {engName} [enginecfg::names] {
@@ -504,7 +504,7 @@ proc showVars {} {
     toplevel $w
     ::setTitle $w $::tr(Variations)
     setWinLocation $w
-    set h [expr $numVars + 1]
+    set h [expr {$numVars + 1}]
     if { $h> 19} { set h 19 }
     ttk::treeview $w.lbVar -columns {0} -show {} -selectmode browse
     $w.lbVar configure -height $h
@@ -539,12 +539,15 @@ proc showVars {} {
     $w.lbVar focus 0
     $w.lbVar selection set 0
 
-    bind $w <Configure> "recordWinSize $w"
-    bind $w <Escape> "destroy $w"
-    bind $w <Left> "destroy $w"
-    bind $w <Right> "::move::EnterVar \[$w.lbVar selection\]; destroy $w"
-    bind $w <Return> "event generate $w <Right>"
-    bind $w <ButtonRelease-1> "event generate $w <Right>"
+    bind $w <Configure> [list recordWinSize $w]
+    bind $w <Escape> [list destroy $w]
+    bind $w <Left> [list destroy $w]
+    bind $w <Right> [list apply {{w} {
+        ::move::EnterVar [${w}.lbVar selection]
+        destroy $w
+    } ::} $w]
+    bind $w <Return> [list event generate $w <Right>]
+    bind $w <ButtonRelease-1> [list event generate $w <Right>]
 
     tkwait visibility $w
     ::tk::SetFocusGrab $w $w.lbVar
@@ -595,7 +598,7 @@ proc togglePhotosSize {{toggle 1}} {
     if {! $::gameInfo(photos)} { return }
 
     updatePlayerPhotos
-    if {$toggle} { set ::photosMinimized [expr !$::photosMinimized] }
+    if {$toggle} { set ::photosMinimized [expr {!$::photosMinimized}] }
 
     set distance [expr {[image width photoB] + 2}]
     if { $distance < 10 } { set distance 82 }
@@ -626,10 +629,10 @@ proc readPhotoFile {fname} {
         set count [array size ::unsafe::spffile]
         safeSource $spi fname $fname
         set newcount [array size ::unsafe::spffile]
-        if {[expr $newcount - $count] > 0} {
-            ::splash::add "Found [expr $newcount - $count] player photos in [file tail $fname]"
+        if {[expr {$newcount - $count}] > 0} {
+            ::splash::add "Found [expr {$newcount - $count}] player photos in [file tail $fname]"
             ::splash::add "Loading information from index file [file tail $spi]"
-            return [expr $newcount - $count]
+            return [expr {$newcount - $count}]
         } else {
             set count 0
         }
@@ -647,7 +650,7 @@ proc readPhotoFile {fname} {
     while {[gets $fd line] >= 0} {
         # search for the string      photo "Player Name"
         if { [regexp {^photo \"(.*)\" \{$} $line -> name] } {
-            set count [expr $count + 1 ]
+            set count [expr {$count + 1 }]
             set begin [tell $fd]
             # skip data block
             while {1} {
@@ -656,7 +659,7 @@ proc readPhotoFile {fname} {
                 if {[regexp {.*\}.*} $line ]} {break}
             }
             set trimname [trimString $name]
-            set size [expr $end - $begin ]
+            set size [expr {$end - $begin }]
             set ::unsafe::photobegin($trimname) $begin
             set ::unsafe::photosize($trimname) $size
             set ::unsafe::spffile($trimname) $fname
@@ -816,13 +819,13 @@ proc getPromoPiece {} {
     wm resizable $w 0 0
     set col "w"
     if { [sc_pos side] == "black" } { set col "b" }
-    ttk::button $w.bq -image ${col}q45 -command "set ::result 2 ; destroy $w"
-    ttk::button $w.br -image ${col}r45 -command "set ::result 3 ; destroy $w"
-    ttk::button $w.bb -image ${col}b45 -command "set ::result 4 ; destroy $w"
-    ttk::button $w.bn -image ${col}n45 -command "set ::result 5 ; destroy $w"
+    ttk::button $w.bq -image ${col}q45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 2]
+    ttk::button $w.br -image ${col}r45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 3]
+    ttk::button $w.bb -image ${col}b45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 4]
+    ttk::button $w.bn -image ${col}n45 -command [list apply {{w result} { set ::result $result; destroy $w }} $w 5]
     pack $w.bq $w.br $w.bb $w.bn -side left
-    bind $w <Escape> "set ::result 2 ; destroy $w"
-    bind $w <Return> "set ::result 2 ; destroy $w"
+    bind $w <Escape> [list apply {{w} { set ::result 2; destroy $w } ::} $w]
+    bind $w <Return> [list apply {{w} { set ::result 2; destroy $w } ::} $w]
     update
     catch { grab $w }
     tkwait window $w
@@ -1254,10 +1257,12 @@ proc resizeMainBoard {} {
     set availw [winfo width .main]
     set availh [winfo height .main]
     if {$::showGameInfo} {
-      set availh [expr $availh - [winfo height .main.gameInfo] ]
+      set gameInfoH [winfo height .main.gameInfo]
+      set availh [expr {$availh - $gameInfoH}]
     }
     if { [llength [pack slaves .main.tb]] != 0 } {
-      set availh [expr $availh - [winfo height .main.tb] ]
+      set tbH [winfo height .main.tb]
+      set availh [expr {$availh - $tbH}]
     }
     set ::boardSize [::board::resizeAuto .main.board "0 0 $availw $availh"]
   }
@@ -1314,15 +1319,15 @@ proc CreateMainBoard { {w} } {
   InitToolbar .main.tb
 
   for {set i 0} { $i < 64 } { incr i } {
-    ::board::bind $w.board $i <Enter> "enterSquare $i"
-    ::board::bind $w.board $i <Leave> "leaveSquare $i"
-    ::board::bind $w.board $i <ButtonPress-1> "pressSquare $i"
-    ::board::bind $w.board $i <Control-ButtonPress-1> "addMarker $w.board %X %Y"
-    ::board::bind $w.board $i <Control-ButtonRelease-1> "addMarker $w.board %X %Y"
-    ::board::bind $w.board $i <ButtonPress-$::MB3> "addMarker $w.board %X %Y"
-    ::board::bind $w.board $i <ButtonRelease-$::MB3> "addMarker $w.board %X %Y"
-    ::board::bind $w.board $i <B1-Motion> "::board::dragPiece $w.board %X %Y"
-    ::board::bind $w.board $i <ButtonRelease-1> "releaseSquare $w.board %X %Y"
+    ::board::bind $w.board $i <Enter> [list enterSquare $i]
+    ::board::bind $w.board $i <Leave> [list leaveSquare $i]
+    ::board::bind $w.board $i <ButtonPress-1> [list pressSquare $i]
+    ::board::bind $w.board $i <Control-ButtonPress-1> [list addMarker $w.board %X %Y]
+    ::board::bind $w.board $i <Control-ButtonRelease-1> [list addMarker $w.board %X %Y]
+    ::board::bind $w.board $i <ButtonPress-$::MB3> [list addMarker $w.board %X %Y]
+    ::board::bind $w.board $i <ButtonRelease-$::MB3> [list addMarker $w.board %X %Y]
+    ::board::bind $w.board $i <B1-Motion> [list ::board::dragPiece $w.board %X %Y]
+    ::board::bind $w.board $i <ButtonRelease-1> [list releaseSquare $w.board %X %Y]
   }
 
   bind $w <Key> {
@@ -1334,7 +1339,7 @@ proc CreateMainBoard { {w} } {
   bind $w <BackSpace> moveEntry_Backspace
   bind $w <Delete> moveEntry_Backspace
   bind $w <space> moveEntry_Complete
-  bind $w <ButtonRelease> "focus $w"
+  bind $w <ButtonRelease> [list focus $w]
   bind $w <Configure> {+::resizeMainBoard }
 
   bindMouseWheel $w "main_mousewheelHandler"
@@ -1367,8 +1372,8 @@ proc CreateGameInfo {} {
   # Set up player photos:
   ttk::label .main.photoW -image photoW -anchor ne
   ttk::label .main.photoB -image photoB -anchor ne
-  bind .main.photoW <ButtonPress-1> "togglePhotosSize"
-  bind .main.photoB <ButtonPress-1> "togglePhotosSize"
+  bind .main.photoW <ButtonPress-1> [list togglePhotosSize]
+  bind .main.photoB <ButtonPress-1> [list togglePhotosSize]
 
   # Right-mouse button menu for gameInfo frame:
   menu .main.gameInfo.menu -tearoff 0
@@ -1510,7 +1515,7 @@ proc ConfigToolbar { w } {
   foreach i {newdb open closedb finder save bkm row gprev gnext row newgame copy paste row boardsearch headersearch \
 		 materialsearch row switcher glist pgn tmt maint eco tree crosstab engine } {
       if { $i eq "row" } { incr row; set col 0 } else {
-	  ttk::button $w.f.$i -image tb_$i -command "toggleToolbarButton $w.f $i"
+		  ttk::button $w.f.$i -image tb_$i -command [list toggleToolbarButton $w.f $i]
 	  if { $::toolbar_temp($i) } { $w.f.$i state pressed }
 	  grid $w.f.$i -row $row -column $col -sticky news -padx 4 -pady "0 8"
 	  incr col
@@ -1519,8 +1524,8 @@ proc ConfigToolbar { w } {
   setToolbarTooltips $w.f
   addHorizontalRule $w
   pack [ttk::frame $w.b] -side bottom -fill x
-  ttk::button $w.on -text "+ [::utils::string::Capital $::tr(all)]" -command "toggleAllToolbarButtons $w.f 1"
-  ttk::button $w.off -text "- [::utils::string::Capital $::tr(all)]" -command "toggleAllToolbarButtons $w.f 0"
+	  ttk::button $w.on -text "+ [::utils::string::Capital $::tr(all)]" -command [list toggleAllToolbarButtons $w.f 1]
+	  ttk::button $w.off -text "- [::utils::string::Capital $::tr(all)]" -command [list toggleAllToolbarButtons $w.f 0]
 
   pack $w.on $w.off -side left -padx 2 -pady "5 0"
 }

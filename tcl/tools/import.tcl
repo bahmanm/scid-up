@@ -36,18 +36,21 @@ proc importPgnGame {} {
   autoscrollText both $edit.f $edit.text Treeview
   $edit.text configure -height 12 -width 80 -wrap none -setgrid 1 -state normal
   # Override tab-binding for this widget:
-  bind $edit.text <Key-Tab> "[bind all <Key-Tab>]; break"
+  bind $edit.text <Key-Tab> [list apply {{script} {
+    uplevel #0 $script
+    return -code break
+  } ::} [bind all <Key-Tab>]]
   grid $edit.f -row 0 -column 0 -sticky nesw
   grid rowconfig $edit 0 -weight 1 -minsize 0
   grid columnconfig $edit 0 -weight 1 -minsize 0
   
   # Right-mouse button cut/copy/paste menu:
   menu $edit.text.rmenu -tearoff 0
-  $edit.text.rmenu add command -label "Cut" -command "tk_textCut $edit.text"
-  $edit.text.rmenu add command -label "Copy" -command "tk_textCopy $edit.text"
-  $edit.text.rmenu add command -label "Paste" -command "tk_textPaste $edit.text"
-  $edit.text.rmenu add command -label "Select all" -command "$edit.text tag add sel 1.0 end"
-  bind $edit.text <ButtonPress-$::MB3> "tk_popup $edit.text.rmenu %X %Y"
+  $edit.text.rmenu add command -label "Cut" -command [list tk_textCut $edit.text]
+  $edit.text.rmenu add command -label "Copy" -command [list tk_textCopy $edit.text]
+  $edit.text.rmenu add command -label "Paste" -command [list tk_textPaste $edit.text]
+  $edit.text.rmenu add command -label "Select all" -command [list $edit.text tag add sel 1.0 end]
+  bind $edit.text <ButtonPress-$::MB3> [list tk_popup $edit.text.rmenu %X %Y]
   
   autoscrollText y $pane.err.f $pane.err.text Treeview
   $pane.err.text configure -height 4 -width 75 -wrap word -setgrid 1 -state normal
@@ -248,10 +251,7 @@ proc importPgnFile {{base} {fnames ""}} {
     -fill black -text "0:00 / 0:00"
 
   ttk::button $w.buttons.stop -textvar ::tr(Stop) -command { progressBarCancel}
-  ttk::button $w.buttons.close -textvar ::tr(Close) -state disabled -command "
-    focus .
-    destroy $w
-  "
+  ttk::button $w.buttons.close -textvar ::tr(Close) -state disabled -command [list apply {{w} { focus .; destroy $w }} $w]
   grid $w.progress $w.buttons.stop $w.buttons.close -in $w.buttons
   grid rowconfigure $w.buttons 0 -weight 1
   grid columnconfigure $w.buttons 0 -weight 1

@@ -100,9 +100,16 @@ proc ::preport::preportDlg {args} {
   dialogbutton $w.b.help -text $::tr(Help) \
       -command {helpWindow Reports Player}
   dialogbutton $w.b.ok -text OK \
-      -command "catch {grab release $w}; destroy $w; ::preport::makeReportWin"
+      -command [list apply {{w} {
+        catch {grab release $w}
+        destroy $w
+        ::preport::makeReportWin
+      } ::} $w]
   dialogbutton $w.b.cancel -text $::tr(Cancel) \
-      -command "catch {grab release $w}; destroy $w"
+      -command [list apply {{w} {
+        catch {grab release $w}
+        destroy $w
+      } ::} $w]
   # foreach button {help ok cancel} {
   # $w.b.$button configure -font font_Small
   # }
@@ -180,7 +187,7 @@ proc ::preport::makeReportWin {args} {
     toplevel $w
     wm withdraw $w
     wm title $w "Scid: [tr ToolsPlayerReport]"
-    bind $w <Visibility> "raiseWin $w"
+    bind $w <Visibility> [list raiseWin $w]
 
     pack [ttk::frame $w.b] -side bottom -fill x
     set ::preport::_interrupt 0
@@ -202,8 +209,8 @@ proc ::preport::makeReportWin {args} {
     }
     wm resizable $w 0 0
     # Set up geometry for middle of screen:
-    set x [winfo screenwidth $w]; set x [expr $x - 400]; set x [expr $x / 2]
-    set y [winfo screenheight $w]; set y [expr $y - 20]; set y [expr $y / 2]
+    set x [winfo screenwidth $w]; set x [expr {$x - 400}]; set x [expr {$x / 2}]
+    set y [winfo screenheight $w]; set y [expr {$y - 20}]; set y [expr {$y / 2}]
     wm geometry $w +$x+$y
     wm deiconify $w
     grab $w.b.cancel
@@ -213,8 +220,8 @@ proc ::preport::makeReportWin {args} {
   set searchArgs {}
   lappend searchArgs -filter RESET
   lappend searchArgs "-$::preport::_color"
-  lappend searchArgs "\"$::preport::_player\""
-  eval sc_search header $searchArgs
+  lappend searchArgs $::preport::_player
+  sc_search header {*}$searchArgs
   if {$showProgress} {
     if {$::preport::_interrupt} {
       catch {grab release $w.b.cancel}
@@ -276,20 +283,20 @@ proc ::preport::makeReportWin {args} {
         -command ::preport::setOptions
     $w.menu.file add separator
     $w.menu.file add command -label Close \
-        -command "$w.b.close invoke"
+        -command [list $w.b.close invoke]
     $w.menu.helpmenu add command -label "Player Report Help" \
         -accelerator F1 -command {helpWindow Reports Player}
     $w.menu.helpmenu add command -label "Index" \
         -command {helpWindow Index}
 
     bind $w <F1> {helpWindow Reports Player}
-    bind $w <Escape> "$w.b.close invoke"
-    bind $w <Up> "$w.text yview scroll -1 units"
-    bind $w <Down> "$w.text yview scroll 1 units"
-    bind $w <Prior> "$w.text yview scroll -1 pages"
-    bind $w <Next> "$w.text yview scroll 1 pages"
-    bind $w <Key-Home> "$w.text yview moveto 0"
-    bind $w <Key-End> "$w.text yview moveto 0.99"
+    bind $w <Escape> [list ${w}.b.close invoke]
+    bind $w <Up> [list ${w}.text yview scroll -1 units]
+    bind $w <Down> [list ${w}.text yview scroll 1 units]
+    bind $w <Prior> [list ${w}.text yview scroll -1 pages]
+    bind $w <Next> [list ${w}.text yview scroll 1 pages]
+    bind $w <Key-Home> [list ${w}.text yview moveto 0]
+    bind $w <Key-End> [list ${w}.text yview moveto 0.99]
 
     autoscrollText y $w.scroll $w.text Treeview
     $w.text configure -height 30 -width 85 -font font_Small -state normal -wrap word
@@ -302,7 +309,10 @@ proc ::preport::makeReportWin {args} {
     ttk::button $w.b.update -textvar ::tr(Update...) -command {
       ::preport::preportDlg
     }
-    ttk::button $w.b.close -textvar ::tr(Close) -command "focus .; destroy $w"
+    ttk::button $w.b.close -textvar ::tr(Close) -command [list apply {{w} {
+      focus .
+      destroy $w
+    } ::} $w]
     pack $w.b -side bottom -fill x
     pack $w.scroll -side top -fill both -expand yes
     pack $w.b.close $w.b.update -side right -padx 2 -pady 2
@@ -394,7 +404,7 @@ proc ::preport::setOptions {} {
   array set ::preport::backup [array get ::preport]
   wm resizable $w 0 0
   wm title $w  "Scid: [tr ToolsPlayerReport]: [tr Options]"
-  bind $w <Escape> "$w.b.cancel invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
 }
 
 

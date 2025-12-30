@@ -306,7 +306,7 @@ test import-importPgnFile-1.0 {importPgnFile autocloses when no warnings and no 
 
     # Assert
     set scheduledScript [lindex [lindex $::import_test::afterCalls 0] 1]
-    eval $scheduledScript
+    {*}$scheduledScript
 
     list $::import_test::scBaseImportCalls $::import_test::afterCalls $::import_test::notifyDbModifiedCalls $::import_test::destroyCalls
 } -cleanup {

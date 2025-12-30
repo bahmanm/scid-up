@@ -59,29 +59,30 @@ proc ::utils::date::chooser {{date "now"}} {
   canvas $win.cal -width 300 -height 220
   ::applyThemeColor_background $win.cal
   pack [ttk::frame $win.b] -side bottom -fill x
-  ttk::button $win.b.ok -text "OK" -command "destroy $win"
-  ttk::button $win.b.cancel -text $::tr(Cancel) -command "
+  ttk::button $win.b.ok -text "OK" -command [list destroy $win]
+  ttk::button $win.b.cancel -text $::tr(Cancel) -command [list apply {{win} {
     set ::utils::date::_selected {}
-    destroy $win"
+    destroy $win
+  }} $win]
   pack $win.b.cancel $win.b.ok -side right -padx 5 -pady 5
   pack $win.cal -side top -expand yes -fill both
 
-  ttk::button $win.cal.prevY -image tb_start -command "::utils::date::_month $win -12"
-  ttk::button $win.cal.prev -image tb_prev -command "::utils::date::_month $win -1"
-  ttk::button $win.cal.next -image tb_next -command "::utils::date::_month $win +1"
-  ttk::button $win.cal.nextY -image tb_end -command "::utils::date::_month $win +12"
-  bind $win.cal <Configure> "::utils::date::_redraw $win"
-  bind $win.cal <Double-Button-1> "destroy $win"
-  bind $win <Escape> "$win.b.cancel invoke"
-  bind $win <Return> "$win.b.ok invoke"
-  bind $win <Prior> "$win.cal.prev invoke"
-  bind $win <Next> "$win.cal.next invoke"
-  bind $win <Shift-Prior> "$win.cal.prevY invoke"
-  bind $win <Shift-Next> "$win.cal.nextY invoke"
-  bind $win <Up> "::utils::date::_day $win -7"
-  bind $win <Down> "::utils::date::_day $win +7"
-  bind $win <Left> "::utils::date::_day $win -1"
-  bind $win <Right> "::utils::date::_day $win +1"
+  ttk::button $win.cal.prevY -image tb_start -command [list ::utils::date::_month $win -12]
+  ttk::button $win.cal.prev -image tb_prev -command [list ::utils::date::_month $win -1]
+  ttk::button $win.cal.next -image tb_next -command [list ::utils::date::_month $win +1]
+  ttk::button $win.cal.nextY -image tb_end -command [list ::utils::date::_month $win +12]
+  bind $win.cal <Configure> [list ::utils::date::_redraw $win]
+  bind $win.cal <Double-Button-1> [list destroy $win]
+  bind $win <Escape> [list ${win}.b.cancel invoke]
+  bind $win <Return> [list ${win}.b.ok invoke]
+  bind $win <Prior> [list ${win}.cal.prev invoke]
+  bind $win <Next> [list ${win}.cal.next invoke]
+  bind $win <Shift-Prior> [list ${win}.cal.prevY invoke]
+  bind $win <Shift-Next> [list ${win}.cal.nextY invoke]
+  bind $win <Up> [list ::utils::date::_day $win -7]
+  bind $win <Down> [list ::utils::date::_day $win +7]
+  bind $win <Left> [list ::utils::date::_day $win -1]
+  bind $win <Right> [list ::utils::date::_day $win +1]
 
   wm minsize $win 250 200
   wm title $win "Scid: Choose Date"
@@ -114,7 +115,7 @@ proc ::utils::date::chooser {{date "now"}} {
 proc ::utils::date::_day {win delta} {
   set unit "day"
   if {$delta < 0} {set unit "day ago"}
-  set time [clock scan "[expr abs($delta)] $unit" -base $::utils::date::_time]
+  set time [clock scan "[expr {abs($delta)}] $unit" -base $::utils::date::_time]
   set day [string trimleft [clock format $time -format "%d"] 0]
   set month [string trimleft [clock format $time -format "%m"] 0]
   set year [clock format $time -format "%Y"]
@@ -188,7 +189,7 @@ proc ::utils::date::_redraw {win} {
   set month [string trimleft [clock format $time -format "%m"] 0]
   set year [clock format $time -format "%Y"]
   $win.cal create text [expr {$wmax/2} ] $bottom -anchor s -font font_Bold \
-    -text "[lindex $::tr(Months) [expr $month - 1]] $year"
+    -text "[lindex $::tr(Months) [expr {$month - 1}]] $year"
 
   incr bottom 3
   $win.cal create line 0 $bottom $wmax $bottom -width 2
@@ -223,7 +224,7 @@ proc ::utils::date::_redraw {win} {
     $win.cal create rectangle $x0 $y0 $x1 $y1 \
       -outline "" -fill "" -tags [list $date-sensor all-sensor]
 
-    $win.cal bind $date-sensor <ButtonPress-1> "::utils::date::_select $win $date"
+    $win.cal bind $date-sensor <ButtonPress-1> [list ::utils::date::_select $win $date]
   }
 
   if {$current != ""} {

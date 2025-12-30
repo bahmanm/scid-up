@@ -131,7 +131,7 @@ proc ::optable::makeReportWin {args} {
     toplevel $w -background [ttk::style lookup . -background]
     wm withdraw $w
     wm title $w "Scid: Generating Report"
-    bind $w <Visibility> "raiseWin $w"
+    bind $w <Visibility> [list raiseWin $w]
 
     pack [ttk::frame $w.b] -side bottom -fill x
     set ::optable::_interrupt 0
@@ -152,8 +152,8 @@ proc ::optable::makeReportWin {args} {
     }
     wm resizable $w 0 0
     # Set up geometry for middle of screen:
-    set x [winfo screenwidth $w]; set x [expr $x - 400]; set x [expr $x / 2]
-    set y [winfo screenheight $w]; set y [expr $y - 20]; set y [expr $y / 2]
+    set x [winfo screenwidth $w]; set x [expr {$x - 400}]; set x [expr {$x / 2}]
+    set y [winfo screenheight $w]; set y [expr {$y - 20}]; set y [expr {$y / 2}]
     wm geometry $w +$x+$y
     wm deiconify $w
     grab $w.b.cancel
@@ -215,7 +215,7 @@ proc ::optable::makeReportWin {args} {
         -command ::optable::setOptions
     $w.menu.file add separator
     $w.menu.file add command -label OprepFileClose \
-        -command "$w.b.close invoke"
+        -command [list $w.b.close invoke]
     $w.menu.favorites add command -label OprepFavoritesAdd \
         -command ::optable::addFavoriteDlg
     $w.menu.favorites add command -label OprepFavoritesEdit \
@@ -231,13 +231,13 @@ proc ::optable::makeReportWin {args} {
     ::optable::updateFavoritesMenu
 
     bind $w <F1> {helpWindow Reports Opening}
-    bind $w <Escape> "$w.b.close invoke"
-    bind $w <Up> "$w.text yview scroll -1 units"
-    bind $w <Down> "$w.text yview scroll 1 units"
-    bind $w <Prior> "$w.text yview scroll -1 pages"
-    bind $w <Next> "$w.text yview scroll 1 pages"
-    bind $w <Key-Home> "$w.text yview moveto 0"
-    bind $w <Key-End> "$w.text yview moveto 0.99"
+    bind $w <Escape> [list ${w}.b.close invoke]
+    bind $w <Up> [list ${w}.text yview scroll -1 units]
+    bind $w <Down> [list ${w}.text yview scroll 1 units]
+    bind $w <Prior> [list ${w}.text yview scroll -1 pages]
+    bind $w <Next> [list ${w}.text yview scroll 1 pages]
+    bind $w <Key-Home> [list ${w}.text yview moveto 0]
+    bind $w <Key-End> [list ${w}.text yview moveto 0.99]
 
     # TODO: Is it really ok for the text to not be a child of the frame (grid propagate)?
     autoscrollText y $w.scroll $w.text Treeview
@@ -260,7 +260,10 @@ proc ::optable::makeReportWin {args} {
 
     ttk::button $w.b.mergeGames -textvar ::tr(MergeGames) -command ::optable::mergeGames
     ttk::button $w.b.help -textvar ::tr(Help) -command {helpWindow Reports Opening}
-    ttk::button $w.b.close -textvar ::tr(Close) -command "focus .; destroy $w"
+    ttk::button $w.b.close -textvar ::tr(Close) -command [list apply {{w} {
+      focus .
+      destroy $w
+    } ::} $w]
     pack $w.b -side bottom -fill x
     pack $w.scroll -side left -fill both -expand yes
     pack $w.b.close $w.b.update -side right -padx 1 -pady 2
@@ -286,9 +289,9 @@ proc ::optable::makeReportWin {args} {
   }
   ::board::update $w.text.bd [sc_pos board]
   $w.b.exclude.m delete 0 end
-  $w.b.exclude.m add radiobutton -label "---" -variable ::optable::_data(exclude) -command "$w.b.update invoke"
+  $w.b.exclude.m add radiobutton -label "---" -variable ::optable::_data(exclude) -command [list $w.b.update invoke]
   foreach move $::optable::_data(moves) {
-    $w.b.exclude.m add radiobutton -label $move -variable ::optable::_data(exclude) -command "$w.b.update invoke"
+    $w.b.exclude.m add radiobutton -label $move -variable ::optable::_data(exclude) -command [list $w.b.update invoke]
   }
   if {[lsearch $::optable::_data(moves) $::optable::_data(exclude)] < 0} {
     set ::optable::_data(exclude) "---"
@@ -473,7 +476,7 @@ proc ::optable::setOptions {} {
   array set ::optable::backup [array get ::optable]
   wm resizable $w 0 0
   wm title $w  "Scid: [tr ToolsOpReport]: [tr OprepFileOptions]"
-  bind $w <Escape> "$w.b.cancel invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
 }
 
 ################################################################################
@@ -714,7 +717,8 @@ proc ::optable::setupRatios {} {
     }
   }
   foreach y {1 5 10} {
-    set year "[expr [::utils::date::today year]-$y]"
+    set todayYear [::utils::date::today year]
+    set year [expr {$todayYear - $y}]
     append year ".[::utils::date::today month].[::utils::date::today day]"
     set r [sc_filter freq [sc_base current] tree date $year]
     set filter [lindex $r 0]
@@ -750,7 +754,7 @@ proc ::optable::setupRatios {} {
 proc ::optable::_percent {x fmt} {
   set p "%"
   if {$fmt == "latex"} { set p "\\%" }
-  return "[expr $x / 10][sc_info decimal][expr $x % 10]$p"
+  return "[expr {$x / 10}][sc_info decimal][expr {$x % 10}]$p"
 }
 
 ################################################################################
@@ -912,7 +916,7 @@ proc ::optable::stats {fmt} {
   if {$fmt == "html"} { append s "<pre>\n" }
   if {$fmt == "ctext"} { append s "<tt>" }
   set stat ""
-  append s " [::utils::string::Pad $stat [expr $len - 4]] [::utils::string::PadRight $games 10]"
+  append s " [::utils::string::Pad $stat [expr {$len - 4}]] [::utils::string::PadRight $games 10]"
   append s "     1-0     =-=     0-1 [::utils::string::PadRight $score 8]\n"
   append s "-----------------------------------------------------------"
   append s "\n [::utils::string::Pad $all $len]"     [sc_filter stats all]
@@ -1207,7 +1211,7 @@ proc ::optable::report {fmt withTable {flipPos 0}} {
         if {$d > 0} {
           append r " ([format $tr(OprepUp) $d $percent])"
         } elseif {$d < 0} {
-          append r " ([format $tr(OprepDown) [expr 0- $d] $percent])"
+          append r " ([format $tr(OprepDown) [expr {0- $d}] $percent])"
         } else {
           append r " ($tr(OprepSame))"
         }
@@ -1384,7 +1388,10 @@ proc ::optable::updateFavoritesMenu {} {
     set name [lindex $entry 0]
     set moves [lindex $entry 1]
     $m add command -label $name \
-        -command "importMoveList [list $moves]; ::optable::makeReportWin"
+        -command [list apply {{moves} {
+          importMoveList [list $moves]
+          ::optable::makeReportWin
+        } ::} $moves]
   }
   if {[llength $::reportFavorites] == 0} {
     $m entryconfigure 1 -state disabled
@@ -1449,7 +1456,10 @@ proc ::optable::addFavoriteDlg {} {
   ttk::frame $w.b
   pack $w.b -side bottom -fill x
   ttk::button $w.b.ok -text OK -command ::optable::addFavoriteOK
-  ttk::button $w.b.cancel -text $::tr(Cancel) -command "grab release $w; destroy $w"
+  ttk::button $w.b.cancel -text $::tr(Cancel) -command [list apply {{w} {
+    grab release $w
+    destroy $w
+  } ::} $w]
   packdlgbuttons $w.b.cancel $w.b.ok
   focus $w.e
   grab $w
@@ -1517,15 +1527,15 @@ proc ::optable::editFavoritesDlg {} {
   bind $w <F1> {helpWindow Reports Opening}
   ttk::entry $w.e -width 60 \
       -textvariable reportFavoritesName -exportselection 0
-  $w.e configure -validate key -validatecommand "after 200 ::optable::editFavoritesRefresh; return true"
+  $w.e configure -validate key -validatecommand [list apply {{} { after 200 ::optable::editFavoritesRefresh; return true }}]
   pack $w.e -side top -fill x
   pack [ttk::frame $w.b] -side bottom -fill x
   ttk::frame $w.f
   ttk::treeview $w.f.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$w.f.ybar set"
+             -yscrollcommand [list $w.f.ybar set]
   $w.f.list configure -height 10
   $w.f.list column 0 -width 50
-  ttk::scrollbar $w.f.ybar -takefocus 0 -command "$w.f.list yview"
+  ttk::scrollbar $w.f.ybar -takefocus 0 -command [list $w.f.list yview]
   pack $w.f.ybar -side right -fill y
   pack $w.f.list -side left -fill both -expand 1
   pack $w.f -side top -fill both -expand yes
@@ -1811,8 +1821,16 @@ proc ::optable::generateFavoriteReports {} {
   addHorizontalRule $w
   pack [ttk::frame $w.b] -side bottom -fill x
   ttk::button $w.b.ok -text "OK"\
-      -command "::optable::reportFavoritesOK; grab release $w; destroy $w; ::optable::makeReportWin"
-  ttk::button $w.b.cancel -text $::tr(Cancel) -command "grab release $w; destroy $w"
+      -command [list apply {{w} {
+        ::optable::reportFavoritesOK
+        grab release $w
+        destroy $w
+        ::optable::makeReportWin
+      } ::} $w]
+  ttk::button $w.b.cancel -text $::tr(Cancel) -command [list apply {{w} {
+    grab release $w
+    destroy $w
+  } ::} $w]
   packdlgbuttons $w.b.cancel $w.b.ok
   grab $w
 }
@@ -1847,7 +1865,7 @@ proc ::optable::reportFavoritesOK {} {
   toplevel $w
   wm withdraw $w
   wm title $w "Scid: Generating Reports"
-  bind $w <Visibility> "raiseWin $w"
+  bind $w <Visibility> [list raiseWin $w]
   pack [ttk::label $w.t -width 40 -text "Generating reports. Please wait..." -font font_Bold] -side top -pady 5
   pack [ttk::label $w.report] -side top -pady 5
   wm deiconify $w

@@ -87,19 +87,19 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
 
   ttk::label $dlg.family_lbl -text [tr OptionsFonts] -anchor w
   ttk::entry $dlg.family_ent -textvariable fd_family -background white
-  bind  $dlg.family_ent <Key-Return> "FontDialogRegen $font_name"
+  bind  $dlg.family_ent <Key-Return> [list FontDialogRegen $font_name]
   grid config $dlg.family_lbl -column 0 -row 0 -sticky w
   grid config $dlg.family_ent -column 0 -row 1 -sticky snew
 
   ttk::label $dlg.style_lbl  -text "Font Style" -anchor w
   ttk::entry $dlg.style_ent  -textvariable fd_style -width 11 -background white
-  bind  $dlg.style_ent  <Key-Return>  "FontDialogRegen $font_name"
+  bind  $dlg.style_ent  <Key-Return>  [list FontDialogRegen $font_name]
   grid config $dlg.style_lbl  -column 1 -row 0 -sticky w
   grid config $dlg.style_ent  -column 1 -row 1 -sticky snew
 
   ttk::label $dlg.size_lbl   -text [tr FinderSortSize] -anchor w
   ttk::entry $dlg.size_ent   -textvariable fd_size -width 4 -background white
-  bind  $dlg.size_ent   <Key-Return> "FontDialogRegen $font_name"
+  bind  $dlg.size_ent   <Key-Return> [list FontDialogRegen $font_name]
   grid config $dlg.size_lbl   -column 2 -row 0 -sticky w
   grid config $dlg.size_ent   -column 2 -row 1 -sticky snew
 
@@ -107,10 +107,10 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.family_list
   ttk::frame $fr
   ttk::treeview $fr.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$fr.scroll set"
+             -yscrollcommand [list $fr.scroll set]
   $fr.list configure -height 7
   $fr.list column 0 -width 140
-  ttk::scrollbar $fr.scroll -command "$fr.list yview"
+  ttk::scrollbar $fr.scroll -command [list $fr.list yview]
 
   set i 0
   foreach f $families {
@@ -118,7 +118,7 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
       incr i
   }
 
-  bind $fr.list <Double-Button-1> "FontDialogFamily $fr.list $font_name $dlg.family_ent"
+  bind $fr.list <Double-Button-1> [list FontDialogFamily $fr.list $font_name $dlg.family_ent]
 
   pack $fr.scroll -side right -fill y
   pack $fr.list -side left -fill x
@@ -128,10 +128,10 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.style_list
   ttk::frame $fr
   ttk::treeview $fr.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$fr.scroll set"
+             -yscrollcommand [list $fr.scroll set]
   $fr.list configure -height 7
   $fr.list column 0 -width 60
-  ttk::scrollbar $fr.scroll -command "$fr.list yview"
+  ttk::scrollbar $fr.scroll -command [list $fr.list yview]
 
   set i 0
   foreach style { "Regular" "Bold" "Italic" "Bold Italic" } {
@@ -139,7 +139,7 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
       incr i
   }
 
-  bind $fr.list <Double-Button-1> "FontDialogStyle $fr.list $font_name $dlg.style_ent"
+  bind $fr.list <Double-Button-1> [list FontDialogStyle $fr.list $font_name $dlg.style_ent]
 
   pack $fr.scroll -side right -fill y
   pack $fr.list -side left
@@ -149,10 +149,10 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.size_list
   ttk::frame $fr
   ttk::treeview $fr.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$fr.scroll set"
+             -yscrollcommand [list $fr.scroll set]
   $fr.list configure -height 7
   $fr.list column 0 -width 30
-  ttk::scrollbar $fr.scroll -command "$fr.list yview"
+  ttk::scrollbar $fr.scroll -command [list $fr.list yview]
 
   set i 0
   for {set j 7} {$j <= 20} {incr j} {
@@ -160,7 +160,7 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
       incr i
   }
 
-  bind $fr.list <Double-Button-1> "FontDialogSize $fr.list $font_name $dlg.size_ent"
+  bind $fr.list <Double-Button-1> [list FontDialogSize $fr.list $font_name $dlg.size_ent]
 
   pack $fr.scroll -side right -fill y
   pack $fr.list -side left
@@ -170,11 +170,11 @@ proc FontDialog {font_name {options ""} {fixedOnly 0}} {
   set fr $dlg.ok_cancel
   ttk::frame $fr
 
-  ttk::button $fr.ok -text "OK" -command "set fd_close 1"
-  ttk::button $fr.cancel  -text [tr Cancel] -command "set fd_close 0"
+  ttk::button $fr.ok -text "OK" -command [list set fd_close 1]
+  ttk::button $fr.cancel  -text [tr Cancel] -command [list set fd_close 0]
   pack $fr.ok -side top -fill x
   pack $fr.cancel -side top -fill x -pady 2
-  ttk::button $fr.help -text [tr Help] -command "helpWindow Options"
+  ttk::button $fr.help -text [tr Help] -command [list helpWindow Options]
   pack $fr.help -side top -fill x -pady 10
   grid config $fr -column 4 -row 1 -rowspan 2 -sticky snew -padx "10 0"
 
