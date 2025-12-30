@@ -524,7 +524,7 @@ proc ::enginecfg::createOptionWidgets {id configFrame options} {
             if {$type eq "combo"} {
                 lassign [lsort -decreasing -integer [lmap elem $var_list { string length $elem }]] maxlen
                 ttk::combobox $w.value$i -width [incr maxlen] -values $var_list -state readonly
-                bind $w.value$i <<ComboboxSelected>> "::enginecfg::setOptionFromWidget $id $i %W"
+                bind $w.value$i <<ComboboxSelected>> [list ::enginecfg::setOptionFromWidget $id $i %W]
             } elseif {$type eq "check"} {
                 ttk::checkbutton $w.value$i -onvalue true -offvalue false -style Switch.Toolbutton -command \
                     [list apply {{id i btn} {

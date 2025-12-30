@@ -242,7 +242,7 @@ proc ::utils::validate::Regexp {expression name el op} {
 #   - This truncates towards zero: `int(value / tickinterval) * tickinterval`.
 ################################################################################
 proc ::utils::validate::roundScale { var tickinterval value } {
-  set $var [expr int($value/$tickinterval ) * $tickinterval]
+  set $var [expr {int($value/$tickinterval ) * $tickinterval}]
 }
 
 ################################################################################
@@ -260,5 +260,5 @@ proc ::utils::validate::roundScale { var tickinterval value } {
 #   - Updates the variable named by `var` to a formatted string (e.g. "5.0").
 ################################################################################
 proc ::utils::validate::floatScale { var tickinterval value } {
-  set $var [format "%.1f" [expr ($value/$tickinterval ) * $tickinterval] ]
+  set $var [format "%.1f" [expr {($value/$tickinterval ) * $tickinterval}] ]
 }

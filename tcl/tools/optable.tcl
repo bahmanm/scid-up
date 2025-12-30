@@ -152,8 +152,8 @@ proc ::optable::makeReportWin {args} {
     }
     wm resizable $w 0 0
     # Set up geometry for middle of screen:
-    set x [winfo screenwidth $w]; set x [expr $x - 400]; set x [expr $x / 2]
-    set y [winfo screenheight $w]; set y [expr $y - 20]; set y [expr $y / 2]
+    set x [winfo screenwidth $w]; set x [expr {$x - 400}]; set x [expr {$x / 2}]
+    set y [winfo screenheight $w]; set y [expr {$y - 20}]; set y [expr {$y / 2}]
     wm geometry $w +$x+$y
     wm deiconify $w
     grab $w.b.cancel
@@ -717,7 +717,8 @@ proc ::optable::setupRatios {} {
     }
   }
   foreach y {1 5 10} {
-    set year "[expr [::utils::date::today year]-$y]"
+    set todayYear [::utils::date::today year]
+    set year [expr {$todayYear - $y}]
     append year ".[::utils::date::today month].[::utils::date::today day]"
     set r [sc_filter freq [sc_base current] tree date $year]
     set filter [lindex $r 0]
@@ -753,7 +754,7 @@ proc ::optable::setupRatios {} {
 proc ::optable::_percent {x fmt} {
   set p "%"
   if {$fmt == "latex"} { set p "\\%" }
-  return "[expr $x / 10][sc_info decimal][expr $x % 10]$p"
+  return "[expr {$x / 10}][sc_info decimal][expr {$x % 10}]$p"
 }
 
 ################################################################################
@@ -915,7 +916,7 @@ proc ::optable::stats {fmt} {
   if {$fmt == "html"} { append s "<pre>\n" }
   if {$fmt == "ctext"} { append s "<tt>" }
   set stat ""
-  append s " [::utils::string::Pad $stat [expr $len - 4]] [::utils::string::PadRight $games 10]"
+  append s " [::utils::string::Pad $stat [expr {$len - 4}]] [::utils::string::PadRight $games 10]"
   append s "     1-0     =-=     0-1 [::utils::string::PadRight $score 8]\n"
   append s "-----------------------------------------------------------"
   append s "\n [::utils::string::Pad $all $len]"     [sc_filter stats all]
@@ -1210,7 +1211,7 @@ proc ::optable::report {fmt withTable {flipPos 0}} {
         if {$d > 0} {
           append r " ([format $tr(OprepUp) $d $percent])"
         } elseif {$d < 0} {
-          append r " ([format $tr(OprepDown) [expr 0- $d] $percent])"
+          append r " ([format $tr(OprepDown) [expr {0- $d}] $percent])"
         } else {
           append r " ($tr(OprepSame))"
         }

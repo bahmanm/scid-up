@@ -520,7 +520,9 @@ proc changeBaseType {baseNum} {
   ttk::style configure btypeWin.Treeview -rowheight 36
   ttk::treeview $w.t -columns {} -show tree -selectmode browse \
         -yscrollcommand [list $w.yscroll set] -style btypeWin.Treeview
-  bind $w.t <<TreeviewSelect>> "selectBaseType \[$w.t selection\]"
+  bind $w.t <<TreeviewSelect>> [list apply {{w} {
+    selectBaseType [$w selection]
+  } ::} $w.t]
   $w.t configure -height 9
 
   ttk::scrollbar $w.yscroll -command [list $w.t yview] -takefocus 0
@@ -546,19 +548,23 @@ proc changeBaseType {baseNum} {
   }
 
   bind $w <Up> {
-    if {$temp_dbtype != 0} { selectBaseType [expr $temp_dbtype - 1] }
+    if {$temp_dbtype != 0} { selectBaseType [expr {$temp_dbtype - 1}] }
     break
   }
 
   bind $w <Down> {
-    if {$temp_dbtype < [expr [llength $::windows::switcher::base_types] - 1]} {
-      selectBaseType [expr $temp_dbtype + 1]
+    set baseTypesCount [llength $::windows::switcher::base_types]
+    if {$temp_dbtype < [expr {$baseTypesCount - 1}]} {
+      selectBaseType [expr {$temp_dbtype + 1}]
     }
     break
   }
 
   bind $w <Home> { selectBaseType 0 }
-  bind $w <End> { selectBaseType [expr [llength $::windows::switcher::base_types] - 1] }
+  bind $w <End> {
+    set baseTypesCount [llength $::windows::switcher::base_types]
+    selectBaseType [expr {$baseTypesCount - 1}]
+  }
   bind $w <Escape> [list ${w}.b.cancel invoke]
   bind $w <Return> [list ${w}.b.set invoke]
 
@@ -733,7 +739,7 @@ proc ::windows::switcher::Draw {{w} {numColumns} {iconWidth} {iconHeight} } {
   set x 0
   set y 0
   foreach i [sc_base list] {
-      $w.c coords tag$i [expr $x + 2] [expr $y + 2]
+      $w.c coords tag$i [expr {$x + 2}] [expr {$y + 2}]
       incr column
       if { $x == 0} { incr numRows }
       if {$column == $numColumns} {

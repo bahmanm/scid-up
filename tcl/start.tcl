@@ -393,7 +393,7 @@ proc safeStyle {interp args} {
 
     set script_i [lsearch -exact $args -settings]
     if {$script_i != -1} {
-      set script_j [expr $script_i + 1]
+      set script_j [expr {$script_i + 1}]
       ttk::style {*}[lreplace $args $script_i $script_j]
       $interp eval [list ttk::style theme settings $themeName [lindex $args $script_j]]
       return
@@ -589,7 +589,7 @@ proc ::update_switch_btn {widget {set_value ""}} {
     set ::$varname $set_value
   }
   if {[$widget instate selected]} {
-    set full_circle [expr $::windowsOS ?"\u2B24":"\u25CF"]
+    set full_circle [expr {$::windowsOS ?"\u2B24":"\u25CF"}]
     $widget configure -text "       $full_circle"
   } else {
     $widget configure -text "\u25EF       "
@@ -610,8 +610,8 @@ proc autoscrollText {bars frame widget style} {
 proc ttk_text {pathName {args ""}} {
   set style Treeview
   if {[set idx [lsearch $args "-style"]] >=0} {
-    set style [lindex $args [expr $idx + 1]]
-    set args [lreplace $args $idx [expr $idx + 1]]
+    set style [lindex $args [expr {$idx + 1}]]
+    set args [lreplace $args $idx [expr {$idx + 1}]]
   }
   set res [text $pathName -cursor arrow -highlightthickness 0 -font font_Regular]
   if {[llength $args] > 0} {

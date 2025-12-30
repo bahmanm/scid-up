@@ -513,7 +513,8 @@ proc ::htext::display {w helptext {section ""} {fixed 1}} {
       set imgName [string range $tagName 4 end]
       #flags are not loaded on start, so check if a flag needs to load
       if { $imgName ne [info commands $imgName] && [string range $imgName 0 3] eq "flag" } {
-        set imgName [getFlagImage [string range $imgName [expr [string length $imgName] - 3] end] yes]
+        set imgLen [string length $imgName]
+        set imgName [getFlagImage [string range $imgName [expr {$imgLen - 3}] end] yes]
       }
       set winName $w.$imgName
       while {[winfo exists $winName]} { append winName a }
@@ -526,8 +527,8 @@ proc ::htext::display {w helptext {section ""} {fixed 1}} {
       if {$idx == -1} {
         set imgName [string range $tagName 7 end]
       } else  {
-        set imgName [string trim [string range $tagName 7 [expr $idx -1]]]
-        set cmd [ string range $tagName [expr $idx +9] end ]
+        set imgName [string trim [string range $tagName 7 [expr {$idx -1}]]]
+        set cmd [ string range $tagName [expr {$idx +9}] end ]
       }
       set winName $w.$imgName
       while {[winfo exists $winName]} { append winName a }

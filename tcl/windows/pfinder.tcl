@@ -133,9 +133,12 @@ proc ::plist::refresh {} {
   $t insert end "\t" title
   foreach i {Games Oldest Newest Elo Name} {
     $t tag configure s$i -font font_SmallBold
-    $t tag bind s$i <1> "set ::plist::sort $i; ::plist::refresh"
-    $t tag bind s$i <Any-Enter> "$t tag config s$i -foreground red"
-    $t tag bind s$i <Any-Leave> "$t tag config s$i -foreground {}"
+    $t tag bind s$i <1> [list apply {{i} {
+      set ::plist::sort $i
+      ::plist::refresh
+    } ::} $i]
+    $t tag bind s$i <Any-Enter> [list $t tag config s$i -foreground red]
+    $t tag bind s$i <Any-Leave> [list $t tag config s$i -foreground {}]
     $t insert end "\t" title
     $t insert end [tr PListSort$i] [list title s$i]
   }

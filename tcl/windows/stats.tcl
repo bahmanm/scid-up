@@ -119,7 +119,7 @@ proc ::windows::stats::refresh_wnd {} {
   set s ""
   set sm "\n"
   set stat ""
-  append s " [::utils::string::Pad $stat [expr $len - 4]] [::utils::string::PadRight $games 10]"
+  append s " [::utils::string::Pad $stat [expr {$len - 4}]] [::utils::string::PadRight $games 10]"
   append s "     1-0     =-=     0-1 [::utils::string::PadRight $score 8]\n"
   append s "--------------------------------------------------------------"
   append s "\n [::utils::string::Pad $all $len]" [sc_filter stats all]
@@ -224,7 +224,7 @@ proc ::windows::stats::refresh_wnd {} {
   set stat ""
   if { $::windows::stats::old_elo || $::windows::stats::old_year} {
       append s "\n\n"
-      append s "OldYear/OldElo[::utils::string::Pad $stat [expr $len - 17]] [::utils::string::PadRight $games 10]"
+      append s "OldYear/OldElo[::utils::string::Pad $stat [expr {$len - 17}]] [::utils::string::PadRight $games 10]"
       append s "     1-0     =-=     0-1 [::utils::string::PadRight $score 8]\n"
       append s "--------------------------------------------------------------"
       append s "\n [::utils::string::Pad $all $len]" [sc_filter stats all]

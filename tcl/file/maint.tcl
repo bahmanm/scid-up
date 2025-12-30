@@ -346,7 +346,7 @@ proc ::maint::Refresh {} {
       $w.customFlags.text$i insert end $tagvalue
       grid $w.customFlags
       if {$tagvalue ne ""} {
-        $w.dm.mark.title.m entryconfigure [expr $i + 11] -label "$tagvalue ($i)"
+        $w.dm.mark.title.m entryconfigure [expr {$i + 11}] -label "$tagvalue ($i)"
       }
     }
   }
@@ -666,7 +666,7 @@ proc makeClassifyWin {} {
   set month [::utils::date::today month]
   set day [::utils::date::today day]
   ttk::radiobutton $w.f.g.year -textvar ::tr(ClassifyYear) -variable classifyOption(AllGames) \
-      -value "date:[expr $year - 1].$month.$day"
+      -value "date:[expr {$year - 1}].$month.$day"
   if {$month == "01"} {
     incr year -1
     set month 12

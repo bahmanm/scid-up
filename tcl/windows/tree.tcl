@@ -434,7 +434,7 @@ proc ::tree::displayLines { baseNumber moves } {
       set firstLine [ lindex [split $posComment "\n"] 0 ]
       $w.f.tl insert end "$firstLine\n" [ list bluefg tagtooltip_poscomment ]
       ::utils::tooltip::Set $w.f.tl -tag tagtooltip_poscomment $posComment
-      $w.f.tl tag bind tagtooltip_poscomment <Double-Button-1> "::tree::mask::addComment"
+      $w.f.tl tag bind tagtooltip_poscomment <Double-Button-1> [list ::tree::mask::addComment]
     }
   }
 
@@ -443,11 +443,14 @@ proc ::tree::displayLines { baseNumber moves } {
     $w.f.tl image create end -image tb_empty -align center
     $w.f.tl image create end -image tb_empty -align center
     $w.f.tl insert end "    "
-    $w.f.tl tag bind tagclick0 <ButtonPress-$::MB3> "::tree::mask::contextMenu $w.f.tl dummy %x %y %X %Y ; break"
+    $w.f.tl tag bind tagclick0 <ButtonPress-$::MB3> [list apply {{w} {
+      ::tree::mask::contextMenu $w dummy %x %y %X %Y
+      return -code break
+    } ::} $w.f.tl]
   }
   $w.f.tl insert end "[lindex $moves 0]\n" tagclick0
 
-  for { set i 1 } { $i < [expr $len - 3 ] } { incr i } {
+  for { set i 1 } { $i < [expr {$len - 3 }] } { incr i } {
     set line [lindex $moves $i]
     if {$line == ""} { continue }
     set move [lindex $line 1]
@@ -458,13 +461,13 @@ proc ::tree::displayLines { baseNumber moves } {
 
     set tagfg ""
 
-    if { $maskFile != "" && $i > 0 && $i < [expr $len - 3] } {
+    if { $maskFile != "" && $i > 0 && $i < [expr {$len - 3}] } {
       if { [::tree::mask::moveExists $move] } {
         set tagfg "bluefg"
       }
     }
     if { $maskFile != "" } {
-      if { $i > 0 && $i < [expr $len - 3] && $move != "\[end\]" } {
+      if { $i > 0 && $i < [expr {$len - 3}] && $move != "\[end\]" } {
         # images
         foreach j { 0 1 } {
           set img [::tree::mask::getImage $move $j]
@@ -487,8 +490,11 @@ proc ::tree::displayLines { baseNumber moves } {
     if {$colorScore != ""} {
       $w.f.tl tag add $colorScore end-31c end-26c
     }
-    if {$move != "" && $move != "---" && $move != "\[end\]" && $i != [expr $len -2] && $i != 0} {
-      $w.f.tl tag bind tagclick$i <Button-1> "[list ::tree::selectCallback $baseNumber $move ] ; break"
+    if {$move != "" && $move != "---" && $move != "\[end\]" && $i != [expr {$len -2}] && $i != 0} {
+      $w.f.tl tag bind tagclick$i <Button-1> [list apply {{baseNumber move} {
+        ::tree::selectCallback $baseNumber $move
+        return -code break
+      } ::} $baseNumber $move]
     }
 
     if { $maskFile != "" } {
@@ -498,22 +504,25 @@ proc ::tree::displayLines { baseNumber moves } {
         set firstLine [ lindex [split $comment "\n"] 0 ]
         $w.f.tl insert end " $firstLine" tagtooltip$i
         ::utils::tooltip::Set $w.f.tl -tag tagtooltip$i $comment
-        $w.f.tl tag bind tagtooltip$i <Double-Button-1> "::tree::mask::addComment $move"
+        $w.f.tl tag bind tagtooltip$i <Double-Button-1> [list ::tree::mask::addComment $move]
       }
     }
 
     if { $maskFile != "" } {
       # Bind right button to popup a contextual menu:
-      $w.f.tl tag bind tagclick$i <ButtonPress-$::MB3> "::tree::mask::contextMenu $w.f.tl $move %x %y %X %Y ; break"
+      $w.f.tl tag bind tagclick$i <ButtonPress-$::MB3> [list apply {{w move} {
+        ::tree::mask::contextMenu $w $move %x %y %X %Y
+        return -code break
+      } ::} $w.f.tl $move]
     }
-    $w.f.tl tag add tagclick$i [expr $i +1 + $hasPositionComment].0 [expr $i + 1 + $hasPositionComment].end
+    $w.f.tl tag add tagclick$i [expr {$i +1 + $hasPositionComment}].0 [expr {$i + 1 + $hasPositionComment}].end
 
     $w.f.tl insert end "\n"
 
   } ;# end for loop
 
   # Display the last lines (total)
-  for { set i [expr $len - 3 ] } { $i < [expr $len - 1 ] } { incr i } {
+  for { set i [expr {$len - 3 }] } { $i < [expr {$len - 1 }] } { incr i } {
     if { $maskFile != "" } {
       $w.f.tl image create end -image tb_empty -align center
       $w.f.tl image create end -image tb_empty -align center
@@ -535,7 +544,10 @@ proc ::tree::displayLines { baseNumber moves } {
         continue
       }
 
-      $w.f.tl tag bind tagclick$idx <Button-1> "[list ::tree::selectCallback $baseNumber [lindex $m 0] ] ; break"
+      $w.f.tl tag bind tagclick$idx <Button-1> [list apply {{baseNumber move} {
+        ::tree::selectCallback $baseNumber $move
+        return -code break
+      } ::} $baseNumber [lindex $m 0]]
       # images
       foreach j {4 5} {
         if {[lindex $m $j] == ""} {
@@ -559,8 +571,11 @@ proc ::tree::displayLines { baseNumber moves } {
       ::utils::tooltip::Set $w.f.tl -tag tagtooltip$idx $comment
 
       # Bind right button to popup a contextual menu:
-      $w.f.tl tag bind tagclick$idx <ButtonPress-$::MB3> "::tree::mask::contextMenu $w.f.tl  [lindex $m 0] %x %y %X %Y ; break"
-      $w.f.tl tag add tagclick$idx [ expr $currentLine -1].0 [ expr $currentLine -1].end
+      $w.f.tl tag bind tagclick$idx <ButtonPress-$::MB3> [list apply {{w move} {
+        ::tree::mask::contextMenu $w $move %x %y %X %Y
+        return -code break
+      } ::} $w.f.tl [lindex $m 0]]
+      $w.f.tl tag add tagclick$idx [expr {$currentLine -1}].0 [expr {$currentLine -1}].end
       incr idx
     }
   }
@@ -620,14 +635,14 @@ proc ::tree::getColorScore { line } {
   if { $ngames < $::tree::scoreHighlight_MinGames } {
     return ""
   }
-  set wavg [ expr 50 + $::tree::scoreHighlight_WhiteExpectedScoreBonus ]
-  set bavg [ expr 50 - $::tree::scoreHighlight_WhiteExpectedScoreBonus ]
-  if { [sc_pos side] == "white" && $success > [ expr $wavg + $::tree::scoreHighlight_Margin ] || \
-        [sc_pos side] == "black" && $success < [ expr $wavg - $::tree::scoreHighlight_Margin ] } {
+  set wavg [expr {50 + $::tree::scoreHighlight_WhiteExpectedScoreBonus }]
+  set bavg [expr {50 - $::tree::scoreHighlight_WhiteExpectedScoreBonus }]
+  if { [sc_pos side] == "white" && $success > [expr {$wavg + $::tree::scoreHighlight_Margin }] || \
+        [sc_pos side] == "black" && $success < [expr {$wavg - $::tree::scoreHighlight_Margin }] } {
     return greenfg
   }
-  if { [sc_pos side] == "white" && $success < [ expr $wavg - $::tree::scoreHighlight_Margin ] || \
-        [sc_pos side] == "black" && $success > [ expr $wavg + $::tree::scoreHighlight_Margin ] } {
+  if { [sc_pos side] == "white" && $success < [expr {$wavg - $::tree::scoreHighlight_Margin }] || \
+        [sc_pos side] == "black" && $success > [expr {$wavg + $::tree::scoreHighlight_Margin }] } {
     return redfg
   }
   return ""
@@ -858,7 +873,7 @@ proc ::tree::graph { baseNumber {bpress 0}} {
   # [.treeWin$baseNumber.f.tl get 0 end]
 
   set numTreeLines [llength $treeData]
-  set totalLineIndex [expr $numTreeLines - 2]
+  set totalLineIndex [expr {$numTreeLines - 2}]
 
   for {set i 0} {$i < [llength $treeData]} {incr i} {
     # Extract info from each line of the tree window:
@@ -889,7 +904,7 @@ proc ::tree::graph { baseNumber {bpress 0}} {
         incr count
         lappend data $count
         lappend data $score
-        lappend xlabels [list $count "$move ([expr round($score)]%)\n$freq: [expr round($fpct)]%"]
+        lappend xlabels [list $count "$move ([expr {round($score)}]%)\n$freq: [expr {round($fpct)}]%"]
       }
     }
   }
@@ -899,7 +914,7 @@ proc ::tree::graph { baseNumber {bpress 0}} {
     incr count
     set fpct [expr {double($othersCount) * 100.0 / double($totalGames)}]
     set sc [expr {round($othersScore / double($othersCount))}]
-    set othersName "$m ($sc%)\n$othersCount: [expr round($fpct)]%"
+    set othersName "$m ($sc%)\n$othersCount: [expr {round($fpct)}]%"
     lappend data $count
     lappend data [expr {$othersScore / double($othersCount)}]
     lappend xlabels [list $count $othersName]
@@ -1024,7 +1039,7 @@ proc ::tree::mask::open { {filename ""} } {
     if { [lsearch $recentMask $filename ] == -1 } {
       set recentMask [ linsert $recentMask 0 $filename]
       if {[llength $recentMask] > $::tree::mask::maxRecent } {
-        set recentMask [ lreplace $recentMask  [ expr $::tree::mask::maxRecent -1 ] end ]
+        set recentMask [ lreplace $recentMask  [expr {$::tree::mask::maxRecent -1 }] end ]
       }
 
       # update recent masks menu entry
@@ -1129,7 +1144,7 @@ proc ::tree::mask::contextMenu {win move x y xc yc} {
 
   foreach j { 0 1 } {
     menu $mctxt.image$j
-    $mctxt add cascade -label "[tr Marker] [expr $j +1]" -menu $mctxt.image$j -state $state
+    $mctxt add cascade -label "[tr Marker] [expr {$j +1}]" -menu $mctxt.image$j -state $state
     foreach e { Include Exclude MainLine Bookmark White Black NewLine ToBeVerified ToTrain Dubious ToRemove } {
       set i  $::tree::mask::marker2image($e)
       $mctxt.image$j add command -label [ tr $e ] -image $i -compound left -command [list ::tree::mask::setImage $move $i $j]
@@ -1150,14 +1165,16 @@ proc ::tree::mask::contextMenu {win move x y xc yc} {
   set lMatchMoves [sc_pos moves]
   if {[llength $lMatchMoves ] > 16} {
     # split the moves in several menus
-    for {set idxMenu 0} { $idxMenu <= [expr int([llength $lMatchMoves ] / 16) ]} {incr idxMenu} {
+    set matchMovesCount [llength $lMatchMoves]
+    set maxIdxMenu [expr {int($matchMovesCount / 16)}]
+    for {set idxMenu 0} { $idxMenu <= $maxIdxMenu } {incr idxMenu} {
       menu $mctxt.matchmoves$idxMenu
-      $mctxt add cascade -label "[ tr AddThisMoveToMask ] ([expr $idxMenu + 1 ])" -menu $mctxt.matchmoves$idxMenu
+      $mctxt add cascade -label "[ tr AddThisMoveToMask ] ([expr {$idxMenu + 1 }])" -menu $mctxt.matchmoves$idxMenu
       for {set i 0} {$i < 16} {incr i} {
-        if {[expr $i + $idxMenu * 16 +1] > [llength $lMatchMoves ] } {
+        if {[expr {$i + $idxMenu * 16 +1}] > [llength $lMatchMoves ] } {
           break
         }
-        set m [lindex $lMatchMoves [expr $i + $idxMenu * 16]]
+        set m [lindex $lMatchMoves [expr {$i + $idxMenu * 16}]]
         if {$m == "OK"} { set m "O-O" }
         if {$m == "OQ"} { set m "O-O-O" }
         $mctxt.matchmoves$idxMenu add command -label [::trans $m] -command [list ::tree::mask::addToMask $m]
@@ -1442,7 +1459,7 @@ proc ::tree::mask::setImage { move img nmr } {
     tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
-  set loc [expr 4 + $nmr]
+  set loc [expr {4 + $nmr}]
   set newmove [lreplace [lindex $moves $idxm] $loc $loc $img ]
   set moves [lreplace $moves $idxm $idxm $newmove ]
   set mask($fen) [ lreplace $mask($fen) 0 0 $moves ]
@@ -1464,7 +1481,7 @@ proc ::tree::mask::getImage { move nmr } {
   if { $idxm == -1} {
     return tb_empty
   }
-  set loc [expr 4 + $nmr]
+  set loc [expr {4 + $nmr}]
   set img [lindex $moves $idxm $loc]
   if {$img == ""} { set img tb_empty }
   return $img
@@ -1747,9 +1764,9 @@ proc ::tree::mask::createImage {marker1 marker2} {
   set h1 [image height $img1]
   set h2 [image height $img2]
   set margin 2
-  image create photo $marker1$marker2 -height $h1 -width [expr $w1 + $w2 + $margin]
+  image create photo $marker1$marker2 -height $h1 -width [expr {$w1 + $w2 + $margin}]
   $marker1$marker2 copy $img1 -from 0 0 -to 0 0
-  $marker1$marker2 copy $img2 -from 0 0 -to [expr $w1 +$margin] 0
+  $marker1$marker2 copy $img2 -from 0 0 -to [expr {$w1 +$margin}] 0
 }
 ################################################################################
 #
@@ -1802,9 +1819,9 @@ proc ::tree::mask::populateDisplayMask { moves parent fen fenSeen posComment} {
     if {[lindex $m 4] != "" && [lindex $m 5] != ""} {
       set l [array get ::tree::mask::marker2image]
       set idx [ lsearch $l [lindex $m 4] ]
-      set mark1 [lindex $l [expr $idx -1 ] ]
+      set mark1 [lindex $l [expr {$idx -1 }] ]
       set idx [ lsearch $l [lindex $m 5] ]
-      set mark2 [lindex $l [expr $idx -1 ] ]
+      set mark2 [lindex $l [expr {$idx -1 }] ]
       createImage $mark1 $mark2
       set img $mark1$mark2
     }
@@ -1902,7 +1919,7 @@ proc ::tree::mask::searchMask { baseNumber } {
 
   # Markers 1 & 2
   foreach j { 0 1 } {
-    ttk::checkbutton $w.f1.ml$j -text "[tr Marker] [expr $j +1]" -variable ::tree::mask::searchMask_usemarker$j
+    ttk::checkbutton $w.f1.ml$j -text "[tr Marker] [expr {$j +1}]" -variable ::tree::mask::searchMask_usemarker$j
     menu $w.f1.menum$j
     ttk::menubutton $w.f1.m$j -textvariable ::tree::mask::searchMask_trm$j -menu $w.f1.menum$j -style pad0.TMenubutton
     set ::tree::mask::searchMask_trm$j [tr "Include"]
@@ -1915,8 +1932,8 @@ proc ::tree::mask::searchMask { baseNumber } {
             set ::tree::mask::searchMask_m$j $i
           }} $j [tr $e] $i]
     }
-      grid $w.f1.ml$j -column [expr 1 + $j] -row 0 -sticky w -padx [expr $j*10]
-    grid $w.f1.m$j -column [expr 1 + $j] -row 1 -sticky w -padx [expr $j*10]
+      grid $w.f1.ml$j -column [expr {1 + $j}] -row 0 -sticky w -padx [expr {$j*10}]
+    grid $w.f1.m$j -column [expr {1 + $j}] -row 1 -sticky w -padx [expr {$j*10}]
   }
 
   # Color

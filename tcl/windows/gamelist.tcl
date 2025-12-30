@@ -49,7 +49,7 @@ proc ::windows::gamelist::Open { {base ""} {filter ""} } {
 				if {[info exists ::recentSort]} {
 					set idx [lsearch -exact $::recentSort "[sc_base filename $base]"]
 					if {$idx != -1} {
-						set ::glist_Sort(ly$glwin) [lindex $::recentSort [expr $idx +1]]
+						set ::glist_Sort(ly$glwin) [lindex $::recentSort [expr {$idx +1}]]
 						::windows::gamelist::createGList_ $glwin
 					}
 				}
@@ -328,7 +328,7 @@ proc ::windows::gamelist::AweGuess {{txt}} {
 	for {set np 1} {
 	  [regexp \
 	    {^(?:(.*?)\s+)??(gnum|white|black|welo|belo|elo|eco|date|event|site|variant)\s+(.+?)(?:\s+(.*))?$} \
-	    $extra([expr $np -1]) -> extra([expr $np -1]) param($np) val($np) extra($np) \
+	    $extra([expr {$np -1}]) -> extra([expr {$np -1}]) param($np) val($np) extra($np) \
 	  ]
 	} {incr np} {}
 
@@ -432,7 +432,7 @@ proc ::windows::gamelist::createWin_ { {w} {base} {filter} } {
 	::windows::gamelist::createMenu_ $w
 	if {[info exists ::recentSort]} {
 		set idx [lsearch -exact $::recentSort "[sc_base filename $base]"]
-		if {$idx != -1} { set ::glist_Sort(ly$w) [lindex $::recentSort [expr $idx +1]] }
+		if {$idx != -1} { set ::glist_Sort(ly$w) [lindex $::recentSort [expr {$idx +1}]] }
 	}
 	::windows::gamelist::createGList_ $w
 	#TODO:
@@ -668,14 +668,14 @@ proc ::windows::gamelist::updateStats_ { {w} } {
 	set winW [expr { $barW + 10 * $percW + 4 }]
 	if {[info exists ::gamelistLastTreeW($w)]} {
 		set diff [expr { $::gamelistLastTreeW($w) - $winW }]
-		if {$diff > -5 && $diff < [expr 4 * $rectW]} {
+		if {$diff > -5 && $diff < [expr {4 * $rectW}]} {
 			set winW $::gamelistLastTreeW($w)
 			incr barW $diff
 			incr moveW $diff
 		}
 	}
 	set ::gamelistLastTreeW($w) $winW
-	set coeff [expr $percW / 10.0]
+	set coeff [expr {$percW / 10.0}]
 	set line $lineH
 	$w.stats.b.c delete all
 	set i_add 0
@@ -691,18 +691,22 @@ proc ::windows::gamelist::updateStats_ { {w} } {
 			set perfCmd "tk_messageBox -message"
 			lappend perfCmd [format {Performance: %.0f (%+.0f)} $performance $rate]
 		}
-		$w.stats.b.c create rectangle 4 [expr { $line - $rectH }] $rectW [expr { $line -$rectB }] \
-		    -fill $pColor -outline "" -tag perf$i_add
-		$w.stats.b.c bind perf$i_add <ButtonPress-1> "$perfCmd"
+			$w.stats.b.c create rectangle 4 [expr { $line - $rectH }] $rectW [expr { $line -$rectB }] \
+			    -fill $pColor -outline "" -tag perf$i_add
+			$w.stats.b.c bind perf$i_add <ButtonPress-1> [list apply {{cmdPrefix} {
+				if {[llength $cmdPrefix]} {
+					{*}$cmdPrefix
+				}
+			} ::} $perfCmd]
 
-		$w.stats.b.c bind add$i_add <ButtonPress-1> "
-			if {! \[addSanMove \{$moveSAN\}\] && \$::gamelistPosMask($w) == 0} {
-				$w.buttons.boardFilter invoke
-			}
-		"
-		if { $toMove == "B" } { set moveSAN "..$moveSAN" }
-		ttk_create $w.stats.b.c text [expr int($rectW*1.5)] $line -anchor sw \
-		    -text $moveSAN -font font_Regular -tag add$i_add
+			$w.stats.b.c bind add$i_add <ButtonPress-1> [list apply {{w moveSAN} {
+				if {![addSanMove $moveSAN] && $::gamelistPosMask($w) == 0} {
+					$w.buttons.boardFilter invoke
+				}
+			} ::} $w $moveSAN]
+			if { $toMove == "B" } { set moveSAN "..$moveSAN" }
+			ttk_create $w.stats.b.c text [expr {int($rectW*1.5)}] $line -anchor sw \
+			    -text $moveSAN -font font_Regular -tag add$i_add
 
 		incr i_add
 		ttk_create $w.stats.b.c text $moveW $line -anchor se \
@@ -895,8 +899,8 @@ proc glist.create {{w} {layout} {reset_layout false}} {
   grid columnconfigure $w.find 3 -weight 1
   set ::glistFindBar($w.glist) $w.find
   glist.showfindbar_ $w.glist $layout
-  bind $w <<FindBarHide>> "glist.showfindbar_ $w.glist $layout 0"
-  bind $w <<FindBarShow>> "glist.showfindbar_ $w.glist $layout 1"
+  bind $w <<FindBarHide>> [list glist.showfindbar_ $w.glist $layout 0]
+  bind $w <<FindBarShow>> [list glist.showfindbar_ $w.glist $layout 1]
 
   set ::glistLoaded($w.glist) 0
   set ::glistTotal($w.glist) 0
@@ -1081,7 +1085,7 @@ proc glist.findgame_ {{w_parent} {dir}} {
   if { [string is integer $txt] } {
     set r [sc_base gamelocation $::glistBase($w) $::glistFilter($w) $::glistSortStr($w) $txt]
   } else {
-    set gstart [expr int($::glistFirst($w))]
+    set gstart [expr {int($::glistFirst($w))}]
     foreach {n ply} [split [$w selection] "_"] {
       if {$n != ""} {
         set gstart [sc_base gamelocation $::glistBase($w) $::glistFilter($w) $::glistSortStr($w) $n]
@@ -1094,18 +1098,18 @@ proc glist.findgame_ {{w_parent} {dir}} {
   if {$r == "none"} {
     $w_entryT configure -style Error.TEntry
   } else {
-    if {$r >= [expr $::glistFirst($w) + $::glistVisibleLn($w)] || $r < $::glistFirst($w)} {
+    if {$r >= [expr {$::glistFirst($w) + $::glistVisibleLn($w)}] || $r < $::glistFirst($w)} {
       set ::glistFirst($w) $r
       glist.ybar_ $w scroll
     }
-    after idle glist.select_ $w [expr $r +1]
+    after idle glist.select_ $w [expr {$r +1}]
   }
   unbusyCursor $w_parent
 }
 
 proc glist.select_ {w {idx 0}} {
   if {$idx != "end" && $idx > 0} {
-    set idx [expr int($idx - $::glistFirst($w) -1)]
+    set idx [expr {int($idx - $::glistFirst($w) -1)}]
   }
   $w selection set [lindex [$w children {}] $idx]
 }
@@ -1302,7 +1306,7 @@ proc glist.sortInit_ {w {layout}} {
   set ::glistSortStr($w) ""
   set i 0
   foreach {c dir} $::glist_Sort($layout) {
-    set arrow_idx [expr $i *2]
+    set arrow_idx [expr {$i *2}]
     if {$dir == "-"} { incr arrow_idx }
     $w heading $c -image ::glist_Arrows($arrow_idx)
     append ::glistSortStr($w) [lindex $::glist_SortShortcuts $c] $dir
@@ -1359,7 +1363,7 @@ proc glist.sortStore_ {w layout} {
   if {[info exists ::recentSort]} {
     set idx [lsearch -exact $::recentSort $file]
     if {$idx != -1} {
-      set ::recentSort [lreplace $::recentSort $idx [expr $idx +1] ]
+      set ::recentSort [lreplace $::recentSort $idx [expr {$idx +1}] ]
     }
     while {[llength $::recentSort] > 20} {
       set ::recentSort [lreplace $::recentSort 0 1]
@@ -1426,13 +1430,15 @@ proc glist.yscroll_ {w first last} {
 
 #Drag and drop and changes in column's layout
 proc glist.insertcol_ {{w} {layout} {col} {after}} {
-  set b [expr [string trimleft $after {#}]]
+  set b [string trimleft $after {#}]
+  set b [expr {int($b)}]
   set ::glist_ColOrder($layout) [linsert $::glist_ColOrder($layout) $b $col]
   $w configure -displaycolumns $::glist_ColOrder($layout)
 }
 
 proc glist.removecol_ {{w} {layout} {col}} {
-  set d [expr [string trimleft $col {#}] -1]
+  set d [string trimleft $col {#}]
+  set d [expr {int($d) - 1}]
   set ::glist_ColOrder($layout) [lreplace $::glist_ColOrder($layout) $d $d]
   $w configure -displaycolumns $::glist_ColOrder($layout)
 }

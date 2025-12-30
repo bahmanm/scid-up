@@ -592,13 +592,13 @@ proc options.write {} {
 
     puts $optionF ""
     foreach i [lsort [array names winWidth]] {
-      puts $optionF "set winWidth($i)  [expr $winWidth($i)]"
-      puts $optionF "set winHeight($i) [expr $winHeight($i)]"
+      puts $optionF "set winWidth($i)  [expr {$winWidth($i)}]"
+      puts $optionF "set winHeight($i) [expr {$winHeight($i)}]"
     }
     puts $optionF ""
     foreach i [lsort [array names winX]] {
-      puts $optionF "set winX($i)  [expr $winX($i)]"
-      puts $optionF "set winY($i)  [expr $winY($i)]"
+      puts $optionF "set winX($i)  [expr {$winX($i)}]"
+      puts $optionF "set winY($i)  [expr {$winY($i)}]"
     }
     puts $optionF ""
     puts $optionF "set analysisCommand [list $analysisCommand]"

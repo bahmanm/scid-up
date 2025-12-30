@@ -115,7 +115,7 @@ proc ::utils::date::chooser {{date "now"}} {
 proc ::utils::date::_day {win delta} {
   set unit "day"
   if {$delta < 0} {set unit "day ago"}
-  set time [clock scan "[expr abs($delta)] $unit" -base $::utils::date::_time]
+  set time [clock scan "[expr {abs($delta)}] $unit" -base $::utils::date::_time]
   set day [string trimleft [clock format $time -format "%d"] 0]
   set month [string trimleft [clock format $time -format "%m"] 0]
   set year [clock format $time -format "%Y"]
@@ -189,7 +189,7 @@ proc ::utils::date::_redraw {win} {
   set month [string trimleft [clock format $time -format "%m"] 0]
   set year [clock format $time -format "%Y"]
   $win.cal create text [expr {$wmax/2} ] $bottom -anchor s -font font_Bold \
-    -text "[lindex $::tr(Months) [expr $month - 1]] $year"
+    -text "[lindex $::tr(Months) [expr {$month - 1}]] $year"
 
   incr bottom 3
   $win.cal create line 0 $bottom $wmax $bottom -width 2
@@ -224,7 +224,7 @@ proc ::utils::date::_redraw {win} {
     $win.cal create rectangle $x0 $y0 $x1 $y1 \
       -outline "" -fill "" -tags [list $date-sensor all-sensor]
 
-    $win.cal bind $date-sensor <ButtonPress-1> "::utils::date::_select $win $date"
+    $win.cal bind $date-sensor <ButtonPress-1> [list ::utils::date::_select $win $date]
   }
 
   if {$current != ""} {

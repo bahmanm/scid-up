@@ -18,8 +18,8 @@
 #   - None.
 ################################################################################
 proc getScorefromComment { comment maxY } {
-    set maxY [expr $maxY - 0.01 ]
-    set minY [expr 0.0 - $maxY]
+    set maxY [expr {$maxY - 0.01 }]
+    set minY [expr {0.0 - $maxY}]
     set evalExp {.*?\[%eval\s*(.*?)\s*\].*}
     set eval ""
     set score ""
@@ -42,7 +42,7 @@ proc getScorefromComment { comment maxY } {
     set foundIndex [string first ":M" $comment]
     # check for Mate :M5 or :M-3
     if { $foundIndex >= 0 } {
-        if { [scan [string range $comment [expr $foundIndex+2] end] "%f" score] == 1 } {
+        if { [scan [string range $comment [expr {$foundIndex+2}] end] "%f" score] == 1 } {
             # change Mate in x to +/$minY
             if { $score >= 1 } { set score $maxY }
             if { $score <= -1 } { set score $minY }
@@ -53,9 +53,9 @@ proc getScorefromComment { comment maxY } {
         if { $foundIndex < 0 } { set foundIndex [string first "-M" $comment]; set f -1 }
         # check for Mate +M5 or -M3 (Annotation from Arena GUI)
         if { $foundIndex >= 0 } {
-            if { [scan [string range $comment [expr $foundIndex+2] end] "%f" score] == 1 } {
+            if { [scan [string range $comment [expr {$foundIndex+2}] end] "%f" score] == 1 } {
                 # change Mate in x to +/- maxY
-                set score [expr $f * $score]
+                set score [expr {$f * $score}]
                 if { $score >= 1 } { set score $maxY }
                 if { $score <= -1 } { set score $minY }
             }
@@ -609,10 +609,10 @@ proc MoveTimeList {color add} {
         # only search in the mainline
         if { $RAVd == 0 && $RAVn == 0} {
             # append comments for white
-            if {  $color == "w" && [expr $movenr % 2] == 1 }  {
+            if {  $color == "w" && [expr {$movenr % 2}] == 1 }  {
                 lappend mainline [lindex [lindex $game $i] 4] }
             # append comments for black
-            if {  $color == "b" && [expr $movenr % 2] == 0 }  {
+            if {  $color == "b" && [expr {$movenr % 2}] == 0 }  {
                 lappend mainline [lindex [lindex $game $i] 4] }
             incr movenr
         }
@@ -631,14 +631,14 @@ proc MoveTimeList {color add} {
             scan $clkms "%f" sec
             if { [scan $clkms "%f" sec ] == 1 } {
                 # scale millisec to minutes
-                lappend movetimes [expr $movenr+$offset] [expr { $sec / 60000.0 }] }
+                lappend movetimes [expr {$movenr+$offset}] [expr { $sec / 60000.0 }] }
         } else {
             set clkExp {.*?\[%clk\s*(.*?)\s*\].*}
             set clock ""
             regexp $clkExp $comment -> clock
             if { $clock != "" } {
                 if { [scan $clock "%f:%f:%f" ho mi sec ] == 3 } {
-                    lappend movetimes [expr $movenr+$offset] [expr { $ho*60.0 + $mi + $sec/60}] }
+                    lappend movetimes [expr {$movenr+$offset}] [expr { $ho*60.0 + $mi + $sec/60}] }
             } else {
                 set emtExp {.*?\[%emt\s*(.*?)\s*\].*}
                 set emt ""
@@ -660,7 +660,7 @@ proc MoveTimeList {color add} {
                             set f [expr { $f/60.0 + $sum }]
                             set sum $f
                         }
-                        lappend movetimes [expr $movenr+$offset] $f
+                        lappend movetimes [expr {$movenr+$offset}] $f
                     }
                 }
             }
@@ -711,11 +711,11 @@ proc ::tools::graphs::MoveScoreList { invw invb } {
 
         if { $score ne "" } {
             # we have found something valid, check if the score should be inverted
-            if { $invw == 1 &&  $side == 1 } { set score [expr 0.0 - $score] }
-            if { $invb == 1 &&  $side == 0 } { set score [expr 0.0 - $score] }
+            if { $invw == 1 &&  $side == 1 } { set score [expr {0.0 - $score}] }
+            if { $invb == 1 &&  $side == 0 } { set score [expr {0.0 - $score}] }
             lappend moveScores $movenr $score
         }
-        set movenr [expr $movenr + 0.5]
+        set movenr [expr {$movenr + 0.5}]
         if { $side == 0 } { set side 1 } else { set side 0 }
     }
     return $moveScores

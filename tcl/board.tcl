@@ -34,9 +34,9 @@ proc avgImgColor { file } {
         incr g $g1
         incr b $b1
     }
-    set r [expr int(($r) / $i)]
-    set g [expr int(($g) / $i)]
-    set b [expr int(($b) / $i)]
+    set r [expr {int(($r) / $i)}]
+    set g [expr {int(($g) / $i)}]
+    set b [expr {int(($b) / $i)}]
     return [ format "#%02x%02x%02x" $r $g $b ]
 }
 
@@ -57,7 +57,7 @@ proc SetBoardTextures {} {
     # create lite and dark squares
     image create photo bgl$size -width $size -height $size
     image create photo bgd$size -width $size -height $size
-    set z [expr int (ceil ($size / $textureSize))]
+    set z [expr {int (ceil ($size / $textureSize))}]
     bgl$size copy $boardfile_lite -zoom $z
     bgd$size copy $boardfile_dark -zoom $z
   }
@@ -244,7 +244,7 @@ proc chooseBoardColors { w {choice -1}} {
     canvas $c -height $psize -width $psize -background black
     $c create rectangle 0 0 [expr {20 - $i}] [expr {20 - $i}] -tag dark
     $c create rectangle [expr {20 + $i}] [expr {20 + $i}] $psize $psize -tag dark
-    $c create rectangle 0 [expr {20 + $i}] [expr 20 - $i] $psize -tag lite
+    $c create rectangle 0 [expr {20 + $i}] [expr {20 - $i}] $psize -tag lite
     $c create rectangle [expr {20 + $i}] 0 $psize [expr {20 - $i}] -tag lite
     pack $b $c -side left -padx 1
     bind $c <Button-1> [list apply {{i} {
@@ -271,13 +271,13 @@ proc chooseBoardColors { w {choice -1}} {
         set x0 0
         set y0 0
     } else {
-        set x0 [expr $bl]
-        set y0 [expr $bt]
+        set x0 [expr {$bl}]
+        set y0 [expr {$bt}]
     }
-    set x1 [expr $x0 + $ssi]
-    set y1 [expr $y0 + $ssi]
-    set x2 [expr $x1 + $ssi]
-    set y2 [expr $y1 + $ssi]
+    set x1 [expr {$x0 + $ssi}]
+    set y1 [expr {$y0 + $ssi}]
+    set x2 [expr {$x1 + $ssi}]
+    set y2 [expr {$y1 + $ssi}]
     $c create rectangle $x0 $y0 $x1 $y1 -tag dark
     $c create rectangle $x1 $y1 $x2 $y2 -tag dark
     $c create rectangle $x0 $y1 $x1 $y2 -tag lite
@@ -326,7 +326,7 @@ proc chooseBoardColors { w {choice -1}} {
   foreach tex $::textureSquare {
     set f $w.texture.p$count
     grid [ ttk::frame $f ] -row $row -column $col -padx 5
-    canvas $f.c -width [expr $psize*2] -height [expr $psize*2] -background red
+    canvas $f.c -width [expr {$psize*2}] -height [expr {$psize*2}] -background red
     $f.c create image 0 0 -image ${tex}-l -anchor nw
     $f.c create image $psize 0 -image ${tex}-d -anchor nw
     $f.c create image 0 $psize -image ${tex}-d -anchor nw
@@ -460,7 +460,7 @@ proc ::board::new {w {psize 40} } {
   catch { grid anchor $w center }
 
   set startrow 5
-  grid $w.bd -row [expr $startrow +1] -column 3 -rowspan 8 -columnspan 8
+  grid $w.bd -row [expr {$startrow +1}] -column 3 -rowspan 8 -columnspan 8
   set bd $w.bd
 
   # Create empty board:
@@ -478,15 +478,15 @@ proc ::board::new {w {psize 40} } {
   # Set up coordinate labels:
   for {set i 1} {$i <= 8} {incr i} {
     ttk::label $w.lrank$i -text [expr {9 - $i}]
-    grid $w.lrank$i -row [expr $startrow + $i] -column 2 -sticky e -padx 5
+    grid $w.lrank$i -row [expr {$startrow + $i}] -column 2 -sticky e -padx 5
     ttk::label $w.rrank$i -text [expr {9 - $i}]
-    grid $w.rrank$i -row [expr $startrow + $i] -column 11 -sticky w -padx 5
+    grid $w.rrank$i -row [expr {$startrow + $i}] -column 11 -sticky w -padx 5
   }
   foreach i {1 2 3 4 5 6 7 8} file {a b c d e f g h} {
     ttk::label $w.tfile$file -text $file
-    grid $w.tfile$file -row $startrow -column [expr $i + 2] -sticky s
+    grid $w.tfile$file -row $startrow -column [expr {$i + 2}] -sticky s
     ttk::label $w.bfile$file -text $file
-    grid $w.bfile$file -row [expr $startrow + 9] -column [expr $i + 2] -sticky n
+    grid $w.bfile$file -row [expr {$startrow + 9}] -column [expr {$i + 2}] -sticky n
   }
 
   canvas $w.score -width 8 -cursor hand2
@@ -537,8 +537,8 @@ proc ::board::addInfoBar {w varname} {
   ttk::frame $w.bar.info
   ttk_text $w.bar.info.t -style Toolbutton
   autoscrollBars y $w.bar.info $w.bar.info.t
-  $w.bar.info.t tag bind click <Any-Enter> "$w.bar.info.t configure -cursor hand2"
-  $w.bar.info.t tag bind click <Any-Leave> "$w.bar.info.t configure -cursor {}"
+  $w.bar.info.t tag bind click <Any-Enter> [list $w.bar.info.t configure -cursor hand2]
+  $w.bar.info.t tag bind click <Any-Leave> [list $w.bar.info.t configure -cursor {}]
   grid propagate $w.bar.info 0
   ttk::button $w.bar.leavevar -image tb_BD_BackStart -style Toolbutton
   ttk::button $w.bar.back -image tb_BD_Back -style Toolbutton
@@ -603,26 +603,49 @@ proc ::board::setInfoAlert {{w} {header} {msg} {msgcolor} {cmd}} {
   }} $cmd]
 }
 
-set ::board::repeatCmd 400
-proc ::board::setButtonCmd {{w} {button} {cmd}} {
-  if {$cmd == ""} {
-    $w.bar.$button configure -state disabled
-  } else {
-    $w.bar.$button configure -state normal
-    ::bind $w.bar.$button <ButtonPress-1> "
-      $cmd
-      set ::board::repeatCmd \[expr int(\$::board::repeatCmd *0.8)\]
-      after \$::board::repeatCmd \"event generate $w.bar.$button <ButtonPress-1>\"
-    "
-    ::bind $w.bar.$button <Any-Leave> "
-      after cancel \"event generate $w.bar.$button <ButtonPress-1>\"
-      set ::board::repeatCmd 400
-    "
-    ::bind $w.bar.$button <ButtonRelease-1> "
-      after cancel \"event generate $w.bar.$button <ButtonPress-1>\"
-      set ::board::repeatCmd 400
-    "
+set ::board::repeatDelayInitial 400
+array set ::board::repeatDelay {}
+array set ::board::repeatAfterId {}
+
+proc ::board::repeatStart {widget cmdPrefix} {
+  ::board::repeatCancel $widget
+  set ::board::repeatDelay($widget) $::board::repeatDelayInitial
+  ::board::repeatStep $widget $cmdPrefix
+}
+
+proc ::board::repeatStep {widget cmdPrefix} {
+  if {![winfo exists $widget]} {
+    ::board::repeatCancel $widget
+    return
   }
+  {*}$cmdPrefix
+  set ::board::repeatDelay($widget) [expr {max(20, int($::board::repeatDelay($widget) * 0.8))}]
+  set ::board::repeatAfterId($widget) [after $::board::repeatDelay($widget) [list ::board::repeatStep $widget $cmdPrefix]]
+}
+
+proc ::board::repeatCancel {widget} {
+  if {[info exists ::board::repeatAfterId($widget)]} {
+    after cancel $::board::repeatAfterId($widget)
+    unset ::board::repeatAfterId($widget)
+  }
+  unset -nocomplain ::board::repeatDelay($widget)
+}
+
+proc ::board::setButtonCmd {{w} {button} {cmdPrefix}} {
+  set widget $w.bar.$button
+  if {$cmdPrefix eq ""} {
+    ::board::repeatCancel $widget
+    $widget configure -state disabled
+    ::bind $widget <ButtonPress-1> {}
+    ::bind $widget <Any-Leave> {}
+    ::bind $widget <ButtonRelease-1> {}
+    return
+  }
+
+  $widget configure -state normal
+  ::bind $widget <ButtonPress-1> [list ::board::repeatStart $widget $cmdPrefix]
+  ::bind $widget <Any-Leave> [list ::board::repeatCancel $widget]
+  ::bind $widget <ButtonRelease-1> [list ::board::repeatCancel $widget]
 }
 
 proc ::board::setButtonImg {{w} {button} {img}} {
@@ -648,28 +671,28 @@ proc ::board::toggleEvalBar {w} {
 proc ::board::drawEvalBar_ { w } {
     if { ! $::board::_evalbarShow($w) } { return }
     set maxscore $::board::_evalbarMaxScore($w)
-    set h [expr $::board::_size($w) * 8 + $::board::_border($w) * 6 - 2 ]
+    set h [expr {$::board::_size($w) * 8 + $::board::_border($w) * 6 - 2 }]
     set width 14
 
     $w.score delete nl barUp barDown
-    $w.score configure -background grey50 -width [expr $width -2] -height $h \
+    $w.score configure -background grey50 -width [expr {$width -2}] -height $h \
         -borderwidth 1 -highlightthickness 0
 
     set colorUp grey7
     set colorDown grey94
-    set ::board::_evalbarScale($w) [expr ($h + 2) / ($maxscore * -2.0)]
+    set ::board::_evalbarScale($w) [expr {($h + 2) / ($maxscore * -2.0)}]
     if { $::board::_flip($w) } {
         set colorUp grey94
         set colorDown grey7
-        set ::board::_evalbarScale($w) [expr $::board::_evalbarScale($w) * -1]
+        set ::board::_evalbarScale($w) [expr {$::board::_evalbarScale($w) * -1}]
     }
     $w.score create rectangle 0 0 0 0 -tag barUp -width 0 -fill $colorUp
     $w.score create rectangle 0 0 0 0 -tag barDown -width 0 -fill $colorDown
 
-    for { set i [expr 1 - $maxscore] } { $i < $maxscore } { incr i } {
-        set h1 [expr $h / 2 + $i * $::board::_evalbarScale($w)]
+    for { set i [expr {1 - $maxscore}] } { $i < $maxscore } { incr i } {
+        set h1 [expr {$h / 2 + $i * $::board::_evalbarScale($w)}]
         if { $i == 0 } {
-            $w.score create rectangle 0 $h1 $width [expr $h1 + 2] -fill red -width 0 -tag nl
+            $w.score create rectangle 0 $h1 $width [expr {$h1 + 2}] -fill red -width 0 -tag nl
         } else {
             $w.score create line 0 $h1 $width $h1 -fill gray40 -tag nl
         }
@@ -699,9 +722,9 @@ proc ::board::updateEvalBar { w score } {
             }
         }
 
-        set midY [expr $h / 2 + $score * $::board::_evalbarScale($w)]
+        set midY [expr {$h / 2 + $score * $::board::_evalbarScale($w)}]
         $w.score coords barUp 0 0 $width $midY
-        $w.score coords barDown 0 $midY $width [expr $h + 1]
+        $w.score coords barDown 0 $midY $width [expr {$h + 1}]
     }
 }
 
@@ -745,12 +768,12 @@ proc ::board::newToolBar_ {{w} {varname}} {
   $m add command -label "  [tr EditDelete]" -image tb_BD_VarDelete -compound left
   $m add command -label "  [tr LeaveVariant]" -image tb_BD_VarLeave -compound left
   $m add command -label "  [tr GameStart]" -image tb_BD_Start -compound left -accelerator "<home>"
-  ::bind $w.bar.back <ButtonRelease-$::MB3> "::board::updateToolBar_ $m $varname %W"
+  ::bind $w.bar.back <ButtonRelease-$::MB3> [list ::board::updateToolBar_ $m $varname %W]
 
   set m [menu $w.menu_forw]
   $m add command -label "  [tr Autoplay]" -image tb_BD_Autoplay -compound left
   $m add command -label "  [tr GameEnd]" -image tb_BD_End -compound left -accelerator "<end>"
-  ::bind $w.bar.forward <ButtonRelease-$::MB3> "::board::updateToolBar_ $m $varname %W"
+  ::bind $w.bar.forward <ButtonRelease-$::MB3> [list ::board::updateToolBar_ $m $varname %W]
 
   set m [menu $w.menu]
   $m add command -label "  [tr EditSetup]" -image tb_BD_SetupBoard -compound left
@@ -814,12 +837,14 @@ proc ::board::size {w} {
 proc ::board::resizeAuto {w bbox} {
   set availw  [lindex $bbox 2]
   set availh  [lindex $bbox 3]
-  set extraw  [expr [winfo reqwidth $w]  - $::board::_size($w) * 8]
-  set extrah  [expr [winfo reqheight $w] - $::board::_size($w) * 8]
-  set availw  [expr $availw - $extraw]
-  set availh  [expr $availh - $extrah]
+  set reqw [winfo reqwidth $w]
+  set reqh [winfo reqheight $w]
+  set extraw [expr {$reqw - $::board::_size($w) * 8}]
+  set extrah [expr {$reqh - $::board::_size($w) * 8}]
+  set availw  [expr {$availw - $extraw}]
+  set availh  [expr {$availh - $extrah}]
   set maxSize [expr {$availh < $availw ? $availh : $availw}]
-  set maxSize [expr $maxSize / 8]
+  set maxSize [expr {$maxSize / 8}]
 
   set newSize 0
   foreach size $::boardSizes {
@@ -1238,7 +1263,8 @@ proc ::board::mark::DrawCircle {pathName square color} {
   set width 0.06 ;# outline around circle, 0.0 < $width < 1.0
 
   set box [GetBox $pathName $square $size]
-  set width [expr int($width * [lindex $box 4] / $size)]
+  set boxWidth [lindex $box 4]
+  set width [expr {int($width * $boxWidth / $size)}]
   $pathName create oval [lrange $box 0 3] \
       -fill "" -outline $color -width $width \
       -tag [list mark circle mark$square p$square]
@@ -1357,26 +1383,28 @@ proc ::board::mark::DrawNag { pathName square nag color} {
   if {$square < 0  ||  $square > 63} { return }
   set box [::board::mark::GetBox $pathName.bd $square]
   set bsize $::board::_size($pathName)
-  set size [expr  $bsize / 5]
-  set p(0) [expr [lindex $box 2] - $size]
-  set p(1) [expr [lindex $box 1] - $size]
-  set p(2) [expr $p(0) + 2 * $size]
-  set p(3) [expr $p(1) + 2 * $size]
+  set size [expr {$bsize / 5}]
+  set boxX2 [lindex $box 2]
+  set boxY1 [lindex $box 1]
+  set p(0) [expr {$boxX2 - $size}]
+  set p(1) [expr {$boxY1 - $size}]
+  set p(2) [expr {$p(0) + 2 * $size}]
+  set p(3) [expr {$p(1) + 2 * $size}]
   set offsetX 0
   set offsetY 0
   #check for outside board
-  if { $p(2) > [expr 8 * $bsize] } {
-      set p(0) [expr $p(0) - $size]
-      set p(2) [expr $p(2) - $size]
+  if { $p(2) > [expr {8 * $bsize}] } {
+      set p(0) [expr {$p(0) - $size}]
+      set p(2) [expr {$p(2) - $size}]
       set offsetX $size
   }
   if { $p(1) < 0 } {
-      set p(1) [expr $p(1) + $size]
-      set p(3) [expr $p(3) + $size]
+      set p(1) [expr {$p(1) + $size}]
+      set p(3) [expr {$p(3) + $size}]
       set offsetY $size
   }
   $pathName.bd create oval $p(0) $p(1) $p(2) $p(3) -outline $color -fill $color -tag highlightLastMove
-  $pathName.bd create text [expr [lindex $box 2] - $offsetX] [expr [lindex $box 1] + $offsetY] -text $nag \
+  $pathName.bd create text [expr {$boxX2 - $offsetX}] [expr {$boxY1 + $offsetY}] -text $nag \
       -tag highlightLastMove -fill white -font [list font_Bold $size bold]
 }
 
@@ -1517,13 +1545,13 @@ proc ::board::dragPiece {w x y} {
 #   Binds the given event on the given square number to
 #   the specified action.
 #
-proc ::board::bind {w sq event action} {
+proc ::board::bind {w sq event cmdPrefix} {
   if {$sq == "all"} {
     for {set i 0} {$i < 64} {incr i} {
-      $w.bd bind p$i $event $action
+      $w.bd bind p$i $event $cmdPrefix
     }
   } else {
-    $w.bd bind p$sq $event $action
+    $w.bd bind p$sq $event $cmdPrefix
   }
 }
 
@@ -1769,21 +1797,21 @@ proc ::board::material {w} {
       Q {incr q}
     }
   }
-  set sum [expr abs($p) + abs($n) +abs($b) +abs($r) +abs($q) ]
+  set sum [expr {abs($p) + abs($n) +abs($b) +abs($r) +abs($q) }]
   set rank 0
 
   foreach pType {q r b n p} {
-    set count [expr "\$$pType"]
+    set count [expr {"\$$pType"}]
     if {$count < 0} {
       addMaterial $count $pType $f $rank $sum
-      incr rank [expr abs($count) ]
+      incr rank [expr {abs($count) }]
     }
   }
   foreach pType {q r b n p} {
-    set count [expr "\$$pType"]
+    set count [expr {"\$$pType"}]
     if {$count > 0} {
       addMaterial $count $pType $f $rank $sum
-      incr rank [expr abs($count) ]
+      incr rank [expr {abs($count) }]
     }
   }
 }
@@ -1791,17 +1819,17 @@ proc ::board::addMaterial {count piece parent rank sum} {
   if {$count == 0} {return}
   if {$count <0} {
     set col "b"
-    set count [expr 0 - $count ]
+    set count [expr {0 - $count }]
   } else  {
     set col "w"
   }
   set w [$parent cget -width]
   set h [$parent cget -height]
-  set offset [expr ($h - ($sum * 20)) / 2]
+  set offset [expr {($h - ($sum * 20)) / 2}]
   if {$offset <0} { set offset 0 }
-  set x [expr $w / 2]
+  set x [expr {$w / 2}]
   for {set i 0} {$i<$count} {incr i} {
-    set y [expr $rank * 20 +10 + $offset + $i * 20]
+    set y [expr {$rank * 20 +10 + $offset + $i * 20}]
     $parent create image $x $y -image $col${piece}20 -tag material
   }
 }
@@ -1824,16 +1852,20 @@ proc ::board::toggleMaterial {w} {
 ################################################################################
 proc ::board::drawInnerCoords { w sq c pos fontsize color} {
     set box [::board::mark::GetBox $w.bd $sq 1.0]
-    set len [expr int([lindex $box 4])]
+    set boxLen [lindex $box 4]
+    set len [expr {int($boxLen)}]
+    set box0 [lindex $box 0]
+    set box1 [lindex $box 1]
+    set box3 [lindex $box 3]
     if { [string is digit $c] } {
-        set x   [expr [lindex $box 0] + $pos * ($len - $fontsize)]
-        set y   [expr [lindex $box 1] + $fontsize ]
+        set x [expr {$box0 + $pos * ($len - $fontsize)}]
+        set y [expr {$box1 + $fontsize}]
     } else {
-        set x   [expr [lindex $box 0] ]
-        set y   [expr [lindex $box 3] - $fontsize - $pos * ($len - 2 * $fontsize)]
+        set x $box0
+        set y [expr {$box3 - $fontsize - $pos * ($len - 2 * $fontsize)}]
         # avoid collision a1 and h8 in the upper right square
         if { $pos && (($::board::_flip($w) && $c eq "h") || (!$::board::_flip($w) && $c eq "a")) } {
-            set x [expr $x + $fontsize]
+            set x [expr {$x + $fontsize}]
         }
     }
     $w.bd create text $x $y -fill $color \
@@ -1853,7 +1885,7 @@ proc ::board::innercoords {w} {
         return
     }
     # Use 20% of square for fontsize, but not larger than font_small
-    set fontSize [expr int($::board::_size($w) / 5) ]
+    set fontSize [expr {int($::board::_size($w) / 5) }]
     set size [font configure font_Small -size]
     if { $fontSize > $size } { set fontSize $size }
     if { ! $::board::_flip($w) } {
@@ -2127,7 +2159,7 @@ proc ::board::_animate {w} {
 
   # Schedule another animation update in a few milliseconds:
   if {$now < $end} {
-    after 5 "::board::_animate $w"
+    after 5 [list ::board::_animate $w]
   } else {
     $w.bd delete tmp_animate
   }

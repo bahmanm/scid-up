@@ -209,8 +209,8 @@ proc ::preport::makeReportWin {args} {
     }
     wm resizable $w 0 0
     # Set up geometry for middle of screen:
-    set x [winfo screenwidth $w]; set x [expr $x - 400]; set x [expr $x / 2]
-    set y [winfo screenheight $w]; set y [expr $y - 20]; set y [expr $y / 2]
+    set x [winfo screenwidth $w]; set x [expr {$x - 400}]; set x [expr {$x / 2}]
+    set y [winfo screenheight $w]; set y [expr {$y - 20}]; set y [expr {$y / 2}]
     wm geometry $w +$x+$y
     wm deiconify $w
     grab $w.b.cancel

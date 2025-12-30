@@ -241,7 +241,10 @@ proc search::headerCreateFrame { w } {
   bind $f.demin <FocusOut> +checkDates
   bind $f.demax <FocusOut> +checkDates
   ttk::button $f.dlyear -textvar ::tr(YearToToday) -style Pad0.Small.TButton -command {
-    set sEventDateMin "[expr [::utils::date::today year]-1].[::utils::date::today month].[::utils::date::today day]"
+    set todayYear [::utils::date::today year]
+    set todayMonth [::utils::date::today month]
+    set todayDay [::utils::date::today day]
+    set sEventDateMin "[expr {$todayYear - 1}].$todayMonth.$todayDay"
     set sEventDateMax [::utils::date::today]
   }
   ::utils::tooltip::Set $f.dlyear $::tr(YearToTodayTooltip)
@@ -277,7 +280,10 @@ proc search::headerCreateFrame { w } {
   bind $f.emin <FocusOut> +checkDates
   bind $f.emax <FocusOut> +checkDates
   ttk::button $f.lyear -textvar ::tr(YearToToday) -style Pad0.Small.TButton -command {
-    set sDateMin "[expr [::utils::date::today year]-1].[::utils::date::today month].[::utils::date::today day]"
+    set todayYear [::utils::date::today year]
+    set todayMonth [::utils::date::today month]
+    set todayDay [::utils::date::today day]
+    set sDateMin "[expr {$todayYear - 1}].$todayMonth.$todayDay"
     set sDateMax [::utils::date::today]
   }
   ::utils::tooltip::Set $f.lyear $::tr(YearToTodayTooltip)
@@ -615,7 +621,7 @@ proc ::search::getSearchOptions {dest_list} {
 		lappend search "-delo" $range
 		if {$::sIgnoreCol == "Yes"} {
 			lassign $range elo_min elo_max
-			lappend search "-delo|" [list [expr -1 * $elo_max] [expr -1 * $elo_min]]
+			lappend search "-delo|" [list [expr {-1 * $elo_max}] [expr {-1 * $elo_min}]]
 		}
 	}
 

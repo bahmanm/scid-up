@@ -232,7 +232,7 @@ proc ::preferences::internationalization { w } {
     ttk::label $w.n.nlb -text [tr OptionsNumbers]
     ttk::combobox $w.n.number -width 9 -textvar ::newNumbers -values $numList -state readonly -font font_Fixed \
         -postcommand [list ::preferences::configureComboboxListboxFont $w.n.number font_Fixed]
-    bind $w.n.number <<ComboboxSelected>> "::preferences::numbers $w.n.number"
+    bind $w.n.number <<ComboboxSelected>> [list ::preferences::numbers $w.n.number]
     pack $w.n.nlb $w.n.number -side left -padx "0 5"
     pack $w.n $w.tp  -side top -anchor w
 }

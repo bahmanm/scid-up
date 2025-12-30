@@ -905,10 +905,10 @@ namespace eval inputengine {
             if {$::inputengine::StoreClock == 1} {
                if { ($::inputengine::oldWhiteClock != $::inputengine::NoClockTime) && \
                     ($::inputengine::WhiteClock    != $::inputengine::NoClockTime) } {
-                  set wHrs [expr $::inputengine::WhiteClock / 60 / 60]
-                  set wMin [expr ($::inputengine::WhiteClock - $wHrs*60*60) / 60 ]
-                  set wSec [expr ($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) ]
-                  set timediff [expr $::inputengine::oldWhiteClock - $::inputengine::WhiteClock]
+                  set wHrs [expr {$::inputengine::WhiteClock / 60 / 60}]
+                  set wMin [expr {($::inputengine::WhiteClock - $wHrs*60*60) / 60 }]
+                  set wSec [expr {($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) }]
+                  set timediff [expr {$::inputengine::oldWhiteClock - $::inputengine::WhiteClock}]
                   set ::inputengine::oldWhiteClock $::inputengine::WhiteClock
                   sc_pos setComment "\[%ct $wHrs:$wMin:$wSec\] \[%emt $timediff\]"
                }
@@ -922,10 +922,10 @@ namespace eval inputengine {
             if {$::inputengine::StoreClock == 1} {
                if { ($::inputengine::oldBlackClock != $::inputengine::NoClockTime) && \
                     ($::inputengine::BlackClock    != $::inputengine::NoClockTime) } {
-                  set bHrs [expr $::inputengine::BlackClock / 60 / 60]
-                  set bMin [expr ($::inputengine::BlackClock - $bHrs*60*60) / 60 ]
-                  set bSec [expr ($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) ]
-                  set timediff [expr $::inputengine::oldBlackClock - $::inputengine::BlackClock]
+                  set bHrs [expr {$::inputengine::BlackClock / 60 / 60}]
+                  set bMin [expr {($::inputengine::BlackClock - $bHrs*60*60) / 60 }]
+                  set bSec [expr {($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) }]
+                  set timediff [expr {$::inputengine::oldBlackClock - $::inputengine::BlackClock}]
                   set ::inputengine::oldBlackClock $::inputengine::BlackClock
                   sc_pos setComment "\[%ct $bHrs:$bMin:$bSec\] \[%emt $timediff\]"
                }
@@ -945,9 +945,9 @@ namespace eval inputengine {
             regsub -all {[A-Za-z:# ]} $event "" ::inputengine::WhiteClock
 
             # calculate a sensible format
-            set wHrs [expr $::inputengine::WhiteClock / 60 / 60]
-            set wMin [expr ($::inputengine::WhiteClock - $wHrs*60*60) / 60 ]
-            set wSec [expr ($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) ]
+            set wHrs [expr {$::inputengine::WhiteClock / 60 / 60}]
+            set wMin [expr {($::inputengine::WhiteClock - $wHrs*60*60) / 60 }]
+            set wSec [expr {($::inputengine::WhiteClock - $wHrs*60*60 - $wMin * 60) }]
 
             if {$wHrs > 0} {
                .inputengineconsole.wClock configure -text "$wHrs:$wMin:$wSec (EXT)"
@@ -956,7 +956,7 @@ namespace eval inputengine {
             }
 
             ###---### Is this enough to set game clocks for all possible occurrences?
-            catch { ::gameclock::setSec 1 [expr -1*$::inputengine::WhiteClock] }
+            catch { ::gameclock::setSec 1 [expr {-1*$::inputengine::WhiteClock}] }
           } \
           "Time Black:" {
             if { ($::inputengine::oldBlackClock == $::inputengine::NoClockTime) } {
@@ -964,9 +964,9 @@ namespace eval inputengine {
             }
             regsub -all {[A-Za-z:# ]} $event "" ::inputengine::BlackClock
 
-            set bHrs [expr $::inputengine::BlackClock / 60 / 60]
-            set bMin [expr ($::inputengine::BlackClock - $bHrs*60*60) / 60 ]
-            set bSec [expr ($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) ]
+            set bHrs [expr {$::inputengine::BlackClock / 60 / 60}]
+            set bMin [expr {($::inputengine::BlackClock - $bHrs*60*60) / 60 }]
+            set bSec [expr {($::inputengine::BlackClock - $bHrs*60*60 - $bMin * 60) }]
 
             if {$bHrs > 0} {
                .inputengineconsole.bClock configure -text "$bHrs:$bMin:$bSec (EXT)"
@@ -975,7 +975,7 @@ namespace eval inputengine {
             }
 
             ###---### Is this enough to set game clocks for all possible occurrences?
-            catch { ::gameclock::setSec 2 [expr -1*$::inputengine::BlackClock] }
+            catch { ::gameclock::setSec 2 [expr {-1*$::inputengine::BlackClock}] }
           } \
           "Wrong move performed:" {
              # This event can only be used if there is a possibility to

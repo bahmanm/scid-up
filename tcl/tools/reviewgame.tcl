@@ -510,11 +510,11 @@ proc ::reviewgame::isGoodScore {engine player} {
   global ::reviewgame::margin
   if { ![::board::isFlipped .main.board] } {
     # if player plays white
-    if {$player >= [expr $engine - $margin]} {
+    if {$player >= [expr {$engine - $margin}]} {
       return 1
     }
   } else  {
-    if {$player <= [expr $engine + $margin]} {
+    if {$player <= [expr {$engine + $margin}]} {
       return 1
     }
   }
@@ -683,7 +683,7 @@ proc ::reviewgame::stopAnalyze { { move "" } } {
   set pv [lindex $::analysis(multiPV$::reviewgame::engineSlot) 0]
   set analysisEngine(score,$sequence) [lindex $pv 1]
   if { $sequence == 1 } { ;# change score to white perspective
-      set analysisEngine(score,$sequence) [expr 0 - $analysisEngine(score,$sequence)]
+      set analysisEngine(score,$sequence) [expr {0 - $analysisEngine(score,$sequence)}]
   }
   set analysisEngine(moves,$sequence) [lindex $pv 2]
   

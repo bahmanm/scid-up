@@ -39,7 +39,7 @@ proc ::gbrowser::new {base gnum {ply -1}} {
     set moveTag m$m
     $t insert end [::trans $i] $moveTag
     $t insert end " "
-    $t tag bind $moveTag <ButtonRelease-1> "::gbrowser::update $n $m"
+    $t tag bind $moveTag <ButtonRelease-1> [list ::gbrowser::update $n $m]
     $t tag bind $moveTag <Any-Enter> \
         "$t tag configure $moveTag -foreground red
     $t configure -cursor hand2"

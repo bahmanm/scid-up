@@ -331,8 +331,10 @@ proc progressWindow { title text {button ""} {cancelCmdPrefix {progressBarCancel
   if {$button == ""} { grid remove $w.f.cancel }
 
   # Set up geometry for middle of screen:
-  set x [expr ([winfo screenwidth $w] - 400) / 2]
-  set y [expr ([winfo screenheight $w] - 40) / 2]
+  set screenW [winfo screenwidth $w]
+  set screenH [winfo screenheight $w]
+  set x [expr {($screenW - 400) / 2}]
+  set y [expr {($screenH - 40) / 2}]
   wm geometry $w +$x+$y
   grab $w
 
@@ -458,9 +460,10 @@ proc CreateSelectDBWidget {{w} {varname} {ref_base ""} {readOnly 1}} {
   grid $w.lb -sticky news
   grid columnconfigure $w 0 -weight 1
 
-  bind $w.lb <<ComboboxSelected>> "
-    set $varname \[ string index \[$w.lb get\] $tr_prefix_len \]
-  "
+  bind $w.lb <<ComboboxSelected>> [list apply {{w varName prefixLen} {
+    upvar #0 $varName var
+    set var [string index [$w get] $prefixLen]
+  } ::} $w.lb $varname $tr_prefix_len]
   $w.lb current $selected
   event generate $w.lb <<ComboboxSelected>>
 }
@@ -495,7 +498,7 @@ proc format_clock_from_seconds {seconds} {
     set res ""
     if { $seconds < 0 } {
         set res "-"
-        set seconds [expr abs($seconds)]
+        set seconds [expr {abs($seconds)}]
     }
     append res [format_clock [format "%d:%02d:%02d" \
         [expr {$seconds / 3600}] \
@@ -560,9 +563,9 @@ namespace eval gameclock {
     # -clock 1 is the white clock on the main board
     # -clock 2 is the black clock on the main board
     set sec $data(counter$n)
-    set h [format "%d" [expr abs($sec) / 60 / 60] ]
-    set m [format "%02d" [expr (abs($sec) / 60) % 60] ]
-    set s [format "%02d" [expr abs($sec) % 60] ]
+    set h [format "%d" [expr {abs($sec) / 60 / 60}] ]
+    set m [format "%02d" [expr {(abs($sec) / 60) % 60}] ]
+    set s [format "%02d" [expr {abs($sec) % 60}] ]
     if {$n == 1} { set ::gamePlayers(clockW) "$h:$m:$s" }
     if {$n == 2} { set ::gamePlayers(clockB) "$h:$m:$s" }
 
@@ -571,12 +574,12 @@ namespace eval gameclock {
 
     set w [$data(id$n) cget -width ]
     set h [$data(id$n) cget -height ]
-    set cx [ expr $w / 2 ]
-    set cy [ expr $h / 2 ]
+    set cx [expr {$w / 2 }]
+    set cy [expr {$h / 2 }]
     if {$w < $h} {
-      set size [ expr $w - 15 ]
+      set size [expr {$w - 15 }]
     } else  {
-      set size [ expr $h - 15 ]
+      set size [expr {$h - 15 }]
     }
 
     if { $sec > 0 && $data(showfallen$n) } {
@@ -587,7 +590,7 @@ namespace eval gameclock {
 
     if {$color == "white"} {set fg "black"} else {set fg "white"}
 
-    foreach divisor {30 1800 21600} length "[expr $size/2 * 0.8] [expr $size/2 * 0.7] [expr $size/2 * 0.4]" \
+    foreach divisor {30 1800 21600} length "[expr {$size/2 * 0.8}] [expr {$size/2 * 0.7}] [expr {$size/2 * 0.4}]" \
         width {1 2 3} {
           set angle [expr {$sec * acos(-1) / $divisor}]
           set x [expr {$cx + $length * sin($angle)}]
@@ -596,9 +599,9 @@ namespace eval gameclock {
         }
     # draw a digital clock
     if {$data(digital$n)} {
-      set m [format "%02d" [expr abs($sec) / 60] ]
-      set s [format "%02d" [expr abs($sec) % 60] ]
-      $data(id$n) create text $cx [expr $cy + $size/4 ] -text "$m:$s" -anchor center -fill $color -tag aig$n
+      set m [format "%02d" [expr {abs($sec) / 60}] ]
+      set s [format "%02d" [expr {abs($sec) % 60}] ]
+      $data(id$n) create text $cx [expr {$cy + $size/4 }] -text "$m:$s" -anchor center -fill $color -tag aig$n
     }
   }
   ################################################################################
@@ -612,7 +615,7 @@ namespace eval gameclock {
   }
   ################################################################################
   proc getSec { n } {
-    return [expr 0 - $::gameclock::data(counter$n)]
+    return [expr {0 - $::gameclock::data(counter$n)}]
   }
   ################################################################################
   proc setSec { n value } {
@@ -621,7 +624,7 @@ namespace eval gameclock {
   }
   ################################################################################
   proc add { n value } {
-    set ::gameclock::data(counter$n) [ expr $::gameclock::data(counter$n) - $value ]
+    set ::gameclock::data(counter$n) [expr {$::gameclock::data(counter$n) - $value }]
     ::gameclock::draw $n
   }
 
@@ -649,9 +652,9 @@ namespace eval gameclock {
   ################################################################################
   proc storeTimeComment { color } {
     set sec [::gameclock::getSec $color]
-    set h [format "%d" [expr abs($sec) / 60 / 60] ]
-    set m [format "%02d" [expr (abs($sec) / 60) % 60] ]
-    set s [format "%02d" [expr abs($sec) % 60] ]
+    set h [format "%d" [expr {abs($sec) / 60 / 60}] ]
+    set m [format "%02d" [expr {(abs($sec) / 60) % 60}] ]
+    set s [format "%02d" [expr {abs($sec) % 60}] ]
     set time "$h:$m:$s"
 
     #Replace %clk if present, otherwise prepend it
@@ -869,11 +872,12 @@ namespace eval html {
     puts $f "<script type=\"text/javascript\">"
     puts $f "// <!\[CDATA\["
     puts $f "movesArray = new Array("
-    for {set i 0} {$i<[llength $dt]} {incr i} {
-      array set elt [lindex $dt $i]
-      puts -nonewline $f "\"$elt(fen) $elt(prev) $elt(next)\""
-      if {$i < [expr [llength $dt] -1]} { puts $f "," }
-    }
+	    set dtLastIdx [expr {[llength $dt] - 1}]
+	    for {set i 0} {$i<[llength $dt]} {incr i} {
+	      array set elt [lindex $dt $i]
+	      puts -nonewline $f "\"$elt(fen) $elt(prev) $elt(next)\""
+	      if {$i < $dtLastIdx} { puts $f "," }
+	    }
     puts $f ");"
     puts $f "var current = 0;"
     puts $f "var prefix = \"$prefix\";"
@@ -941,11 +945,11 @@ namespace eval html {
       } else {
         while { $prevdepth > $elt(depth) } {
             puts $f "<span class=\"VC\">\]</span></div>"
-            set prevdepth [expr $prevdepth - 1]
+            set prevdepth [expr {$prevdepth - 1}]
         }
         while { $prevdepth < $elt(depth) } {
             puts $f "<div class=\"var\"><span class=\"VC\">\[</span>"
-            set prevdepth [expr $prevdepth + 1]
+            set prevdepth [expr {$prevdepth + 1}]
         }
       }
       set prevvarnumber $elt(var)
@@ -962,7 +966,7 @@ namespace eval html {
     }
     while { $prevdepth > 0 } {
         puts $f "<span class=\"VC\">\]</span></div>"
-        set prevdepth [expr $prevdepth - 1]
+        set prevdepth [expr {$prevdepth - 1}]
     }
 
     puts $f "<br /><span class=\"VH\">$result</span>"
@@ -977,7 +981,7 @@ namespace eval html {
   }
   ################################################################################
   proc colorSq {sq} {
-    if { [expr $sq % 2] == 1 && [expr int($sq / 8) %2 ] == 0 || [expr $sq % 2] == 0 && [expr int($sq / 8) %2 ] == 1 } {
+    if { [expr {$sq % 2}] == 1 && [expr {int($sq / 8) %2 }] == 0 || [expr {$sq % 2}] == 0 && [expr {int($sq / 8) %2 }] == 1 } {
       return "bs"
     } else {
       return "ws"
@@ -1074,7 +1078,7 @@ namespace eval html {
         }
         #update the "next" token
         array set elt [lindex $data $lastIdx]
-        set elt(next) [expr $idx + 1]
+        set elt(next) [expr {$idx + 1}]
         lset data $lastIdx [array get elt]
         #update the "previous" token
         set prev $lastIdx
@@ -1096,7 +1100,7 @@ namespace eval html {
     if {$prev != -2} {
       set elt(prev) $prev
     } else  {
-      set elt(prev) [expr $idx-1]
+      set elt(prev) [expr {$idx-1}]
     }
 
     set nag [sc_pos getNags]
@@ -1115,7 +1119,7 @@ namespace eval html {
     set elt(depth) [sc_var level]
     set elt(var) [sc_var number]
     if {![sc_pos isAt vend]} {
-      set elt(next) [expr $idx +1 ]
+      set elt(next) [expr {$idx +1 }]
     } else  {
       set elt(next) -1
     }
@@ -1144,7 +1148,7 @@ namespace eval html {
       }
 
       if {$dots && $m != ""} {
-        set elt(move) "[expr $mn -1]. ... $m"
+        set elt(move) "[expr {$mn -1}]. ... $m"
       } else  {
         set elt(move) $m
       }

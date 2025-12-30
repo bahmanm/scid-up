@@ -47,7 +47,7 @@ image create photo e20 -height 20 -width 20
 set x 0
 foreach p {wp wn wb wr wq wk bp bn bb br bq bk} {
   image create photo ${p}20 -width 20 -height 20
-  ${p}20 copy p20 -from $x 0 [expr $x + 19] 19
+  ${p}20 copy p20 -from $x 0 [expr {$x + 19}] 19
   incr x 20
 }
 

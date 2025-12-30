@@ -142,7 +142,7 @@ proc mergeGame {base gnum} {
       -command [list apply {{w} { catch {grab release $w}; destroy $w }} $w]
   packbuttons right $w.b.cancel $w.b.ok
   grab $w
-  updateMergeGame $w [expr $merge(ply) / 2]
+  updateMergeGame $w [expr {$merge(ply) / 2}]
 }
 
 proc updateMergeGame {{w} {n_moves}} {
@@ -150,7 +150,7 @@ proc updateMergeGame {{w} {n_moves}} {
   if {! [winfo exists $w]} { return }
 
   # Update widgets
-  set widget [expr $merge(ply) / 2]
+  set widget [expr {$merge(ply) / 2}]
   $w.b.m$widget state !pressed
   $w.b.m$n_moves state pressed
   set merge(ply) [expr {$n_moves * 2}];

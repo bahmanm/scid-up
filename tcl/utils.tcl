@@ -31,6 +31,6 @@ proc ::utils::thousands {n {kilo 0}} {
 proc ::utils::percentFormat {num denom} {
   # Ensure denominator is not zero:
   if {$denom == 0} {set denom 1}
-  return "[::utils::thousands $num] ([expr $num * 100 / $denom]%)"
+  return "[::utils::thousands $num] ([expr {$num * 100 / $denom}]%)"
 }
 

@@ -64,7 +64,8 @@ $m add command -label ToolsOpenBaseAsTree -command ::file::openBaseAsTree
 menu $m.recenttrees
 $m add cascade -label ToolsOpenRecentBaseAsTree -menu $m.recenttrees
 $m add separator
-set ::menuFileRecentIdx [expr [$m index end] +1]
+set menuEndIdx [$m index end]
+set ::menuFileRecentIdx [expr {$menuEndIdx + 1}]
 $m add command -label FileExit -accelerator "Ctrl+Q" -command ::file::Exit
 
 
@@ -94,7 +95,8 @@ menu $m.copygames
     }
   }
   $m.copygames add separator
-  set ::menuDBCopyGamesIdx [expr [$m.copygames index end] +1]
+  set copygamesEndIdx [$m.copygames index end]
+  set ::menuDBCopyGamesIdx [expr {$copygamesEndIdx + 1}]
 $m add cascade -label CopyAllGames -menu $m.copygames
 menu $m.exportfilter
   $m.exportfilter add command -label ToolsExpFilterPGN \
@@ -129,7 +131,8 @@ menu $m.spell
   $m.spell add command -label AddEloRatings -command {allocateRatings}
 $m add cascade -label FileMaintName -menu $m.spell
 $m add separator
-set ::menuDbSwitchIdx [expr [$m index end] +1]
+set menuEndIdx [$m index end]
+set ::menuDbSwitchIdx [expr {$menuEndIdx + 1}]
 
 
 ### Edit menu:
@@ -273,7 +276,8 @@ menu $m.language
   }
 $m add cascade -label OptionsLanguage -menu $m.language
 menu $m.theme -tearoff 1
-set ::menuThemeListIdx [expr [$m.theme index end] +1]
+set themeEndIdx [$m.theme index end]
+set ::menuThemeListIdx [expr {$themeEndIdx + 1}]
 $m add cascade -label OptionsTheme -menu $m.theme
 menu $m.savelayout
 menu $m.restorelayout
@@ -290,7 +294,10 @@ menu $m.export
 $m add cascade -label OptionsExport -menu $m.export
 $m add separator
 $m add checkbutton -label FullScreen -variable optionFullScreen \
-  -command { wm attributes . -fullscreen [expr ![wm attributes . -fullscreen]] }
+  -command {
+    set fullscreen [wm attributes . -fullscreen]
+    wm attributes . -fullscreen [expr {!$fullscreen}]
+  }
 $m add checkbutton -label OptionsWindowsDock -variable windowsDock
 $m add cascade -label OptionsWindowsSaveLayout -menu $m.savelayout
 $m add cascade -label OptionsWindowsRestoreLayout -menu $m.restorelayout
@@ -394,7 +401,7 @@ proc updateMenuStates {{menuname}} {
       $m.file delete $::menuFileRecentIdx $idx2
       set nrecent [::recentFiles::show $m.file $::menuFileRecentIdx]
       if {$nrecent > 0} {
-        $m.file insert [expr $::menuFileRecentIdx + $nrecent] separator
+        $m.file insert [expr {$::menuFileRecentIdx + $nrecent}] separator
       }
     }
   {.menu.db} {
@@ -668,7 +675,8 @@ proc readThemePkgFile { fullname } {
     if {$fullname ne "" && $fullname != $::ThemePackageFile } {
         set count [llength [ttk::style theme names]]
         set ret [ catch { ::safeSourceStyle $fullname } ]
-        set newthemes [expr [llength [ttk::style theme names]] - $count]
+        set newCount [llength [ttk::style theme names]]
+        set newthemes [expr {$newCount - $count}]
         if { $ret == 0 && $newthemes > 0  } {
             menuUpdateThemes
             set ::ThemePackageFile $fullname

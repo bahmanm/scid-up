@@ -993,7 +993,7 @@ proc ::tooltip::tagTip {w tag} {
         set G(AFTERID) [after $G(DELAY) \
             [namespace code [list show $w $tooltip($w,t_$tag) cursor]]]
         # clear the 'Enter' binding. it is restored by `conditionally-hide` below.
-        $w tag bind $tag <Enter> ""
+        $w tag bind $tag <Enter> {}
     }
 }
 

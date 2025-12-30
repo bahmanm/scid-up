@@ -167,7 +167,7 @@ proc ::windows::commenteditor::createWin { {focus_if_exists 1} } {
 		bind $w_.nf.text <KeyRelease> [list ::windows::commenteditor::storeNAGs_]
 		bind $w_.cf.txtframe.text <KeyPress>   [list ::windows::commenteditor::notifyCancel_]
 		bind $w_.cf.txtframe.text <KeyRelease> [list ::windows::commenteditor::notify_ 1000]
-	bind $w_.cf.txtframe.text <<Modified>> "::windows::commenteditor::storeComment_"
+	bind $w_.cf.txtframe.text <<Modified>> [list ::windows::commenteditor::storeComment_]
 
 	set ::windows::commenteditor::isOpen 1
 	$w_.cf.txtframe.text edit modified false

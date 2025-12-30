@@ -222,9 +222,12 @@ proc ::file::finder::Refresh {{newdir ""}} {
   if {[llength $flist] != 0} {
     foreach i {Type Size Mod Name Path} v {type size mod name path} {
       $t tag configure s$i -font font_SmallBold
-      $t tag bind s$i <1> "set ::file::finder::data(sort) $v; ::file::finder::Refresh -fast"
-      $t tag bind s$i <Any-Enter> "$t tag config s$i -foreground red"
-      $t tag bind s$i <Any-Leave> "$t tag config s$i -foreground {}"
+      $t tag bind s$i <1> [list apply {{v} {
+        set ::file::finder::data(sort) $v
+        ::file::finder::Refresh -fast
+      } ::} $v]
+      $t tag bind s$i <Any-Enter> [list $t tag config s$i -foreground red]
+      $t tag bind s$i <Any-Leave> [list $t tag config s$i -foreground {}]
     }
     $t insert end "$::tr(FinderFiles)\n" {center bold}
     $t insert end " "
@@ -263,9 +266,9 @@ proc ::file::finder::Refresh {{newdir ""}} {
       set fullpath $data(dir)/$dir/$tail
     }
     
-    $t tag bind f$path <ButtonRelease-1> "::file::Open [list $fullpath]"
+    $t tag bind f$path <ButtonRelease-1> [list ::file::Open $fullpath]
     # Bind right button to popup a contextual menu:
-    $t tag bind f$path <ButtonPress-$::MB3> "::file::finder::contextMenu .finder.t.text [list $fullpath] %x %y %X %Y"
+    $t tag bind f$path <ButtonPress-$::MB3> [list ::file::finder::contextMenu .finder.t.text $fullpath %x %y %X %Y]
     
     $t tag bind f$path <Any-Enter> \
         "$t tag configure [list f$path] -background $hc"

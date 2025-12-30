@@ -52,8 +52,8 @@ proc setupBoard {} {
   ::board::new $w.l.bd
   ::board::coords $w.l.bd
   for {set i 0} { $i < 64 } { incr i } {
-    ::board::bind $w.l.bd $i <B1-Motion>       "dragBoardPiece  $w.l.bd %X %Y $i"
-    ::board::bind $w.l.bd $i <ButtonRelease-1> "setupBoardPiece $w.l.bd %X %Y"
+    ::board::bind $w.l.bd $i <B1-Motion> [list dragBoardPiece $w.l.bd %X %Y $i]
+    ::board::bind $w.l.bd $i <ButtonRelease-1> [list setupBoardPiece $w.l.bd %X %Y]
   }
   grid $w.l.bd -sticky news
   grid rowconfigure $w.l.bd 0 -weight 1

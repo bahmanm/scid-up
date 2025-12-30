@@ -203,9 +203,12 @@ proc ::tourney::refresh {{option ""}} {
     $t insert end "\t" title
     foreach i {Date Players Games Elo Site Event} {
       $t tag configure s$i -font font_SmallBold
-      $t tag bind s$i <1> "set ::tourney::sort $i; ::tourney::refresh"
-      $t tag bind s$i <Any-Enter> "$t tag config s$i -foreground red"
-      $t tag bind s$i <Any-Leave> "$t tag config s$i -foreground {}"
+      $t tag bind s$i <1> [list apply {{i} {
+        set ::tourney::sort $i
+        ::tourney::refresh
+      } ::} $i]
+      $t tag bind s$i <Any-Enter> [list $t tag config s$i -foreground red]
+      $t tag bind s$i <Any-Leave> [list $t tag config s$i -foreground {}]
       if { $i == "Event" } { set tab ":" } else { set tab "\t" }
       $t insert end $tab title
       $t insert end [tr TmtSort$i] [list s$i title]

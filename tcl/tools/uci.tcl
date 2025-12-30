@@ -247,9 +247,9 @@ namespace eval uci {
                         set side [lindex [split $analysis(fen$n)] 1]
                     }
                     if { $side == "b"} {
-                        set uciInfo(tmp_score$n) [ expr 0.0 - $uciInfo(tmp_score$n) ]
+                        set uciInfo(tmp_score$n) [expr {0.0 - $uciInfo(tmp_score$n) }]
                         if { $uciInfo(scoremate$n) } {
-                            set uciInfo(scoremate$n) [ expr 0 - $uciInfo(scoremate$n) ]
+                            set uciInfo(scoremate$n) [expr {0 - $uciInfo(scoremate$n) }]
                             if { $uciInfo(tmp_score$n) < 0 } {
                                 set uciInfo(tmp_score$n) [ expr {$uciInfo(tmp_score$n) - 1.0} ]
                             }
@@ -316,7 +316,7 @@ namespace eval uci {
                 set toBeFormatted 0
             }
             
-            set idx [ expr $uciInfo(multipv$n) -1 ]
+            set idx [expr {$uciInfo(multipv$n) -1 }]
             
             # was if $analyze etc..
             if { $idx < $analysis(multiPVCount$n) } {
@@ -469,7 +469,7 @@ namespace eval uci {
         flush $pipe
         
         # Give a few seconds for the engine to output its options, then automatically close it.
-        after 5000  "::uci::closeUCIengine $n 0"
+        after 5000 [list ::uci::closeUCIengine $n 0]
     }
     
 ################################################################################

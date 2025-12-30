@@ -55,7 +55,10 @@ proc keyboardShortcuts {w} {
 	bind $w <Control-S> { ::gameAdd }
 
 	# Toggle fullscreen
-	bind $w <F11> { wm attributes . -fullscreen [expr ![wm attributes . -fullscreen]] }
+	bind $w <F11> {
+		set fullscreen [wm attributes . -fullscreen]
+		wm attributes . -fullscreen [expr {!$fullscreen}]
+	}
 
 	# Open the enter/create variation dialog
 	# TODO: <v> is not intuitive: <space> or <up> <down> may be better

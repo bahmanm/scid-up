@@ -41,14 +41,14 @@ proc ::tip::show {{n -1}} {
 
   set ntips [llength $tiplist]
   if {$n < 0} {
-    set n [expr int(double($ntips) * rand())]
+    set n [expr {int(double($ntips) * rand())}]
   }
-  set prev [expr $n - 1]
-  if {$prev < 0} {set prev [expr $ntips - 1]}
-  set next [expr ($n + 1) % $ntips]
+  set prev [expr {$n - 1}]
+  if {$prev < 0} {set prev [expr {$ntips - 1}]}
+  set next [expr {($n + 1) % $ntips}]
   $w.b.prev configure -command [list ::tip::show $prev]
   $w.b.next configure -command [list ::tip::show $next]
-  set tip "<center><b>$::tr(Tip) [expr $n + 1]:</b></center><br><br>"
+  set tip "<center><b>$::tr(Tip) [expr {$n + 1}]:</b></center><br><br>"
   append tip [string trim [lindex $tiplist $n]]
   ::htext::display $w.text $tip "" 0
 }

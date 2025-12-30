@@ -319,7 +319,7 @@ proc ::win::undockWindow { wnd srctab {title ""} } {
 
 	#HACK: In Linux (tk8.6.8) without "after idle after 1"
 	#      sometimes the geometry is not restored correctly.
-	after idle after 1 "::win::restoreWinGeometry $wnd"
+	after idle after 1 [list ::win::restoreWinGeometry $wnd]
 }
 
 ################################################################################
@@ -934,8 +934,10 @@ proc ::docking::manage_motion_ {src_noteb x y} {
 		return
 	}
 
-	set localX [expr $x-[winfo rootx $dest_noteb]]
-	set localY [expr $y-[winfo rooty $dest_noteb]]
+		set rootx [winfo rootx $dest_noteb]
+		set rooty [winfo rooty $dest_noteb]
+		set localX [expr {$x - $rootx}]
+		set localY [expr {$y - $rooty}]
 	set dest_pos [$dest_noteb identify tab $localX $localY]
 	if {$dest_pos eq ""} { set dest_pos "end" }
 
@@ -1078,9 +1080,11 @@ proc ::docking::layout_save_pw {pw} {
 
   # record sash position for each panes
   set sashpos {}
-  for {set i 0} {$i < [ expr [llength [$pw panes]] -1]} {incr i} {
-    lappend sashpos [$pw sashpos $i]
-  }
+	  set paneCount [llength [$pw panes]]
+	  set lastSashIndex [expr {$paneCount - 1}]
+	  for {set i 0} {$i < $lastSashIndex} {incr i} {
+	    lappend sashpos [$pw sashpos $i]
+	  }
   lappend ret [list $pw [$pw cget -orient ] $sashpos ]
 
   foreach p [$pw panes] {
@@ -1140,12 +1144,13 @@ proc ::docking::layout_restore_pw { data } {
       }
       # build a new pw
       ttk::panedwindow $pw -orient $orient
-      set parent [string range $pw 0 [expr [string last "." $pw ]-1 ] ]
-      if { $parent eq "" } {
-        pack $pw -fill both -expand true
-      } else {
-        ::docking::insert_pane_ $parent end $pw
-      }
+	      set lastDot [string last "." $pw]
+	      set parent [string range $pw 0 [expr {$lastDot - 1}]]
+	      if { $parent eq "" } {
+	        pack $pw -fill both -expand true
+	      } else {
+	        ::docking::insert_pane_ $parent end $pw
+	      }
     }
   }
 }
