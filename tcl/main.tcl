@@ -164,10 +164,10 @@ proc updateStatusBar {} {
         return
     }
 
-    if {[info exists ::playMode]} {
-        set pInfo [eval "$::playMode info"]
+    if {[info exists ::interactionHandler]} {
+        set pInfo [eval "$::interactionHandler info"]
         if {[llength $pInfo] != 4} {
-            ::board::setInfoAlert .main.board "Playing..." [tr Stop] "red" {{*}$::playMode stop}
+            ::board::setInfoAlert .main.board "Playing..." [tr Stop] "red" {{*}$::interactionHandler stop}
         } else {
             ::board::setInfoAlert .main.board {*}pInfo
         }
@@ -928,7 +928,7 @@ proc addMoveUCI {{moveUCI} {animate "-animate"}} {
         if {$moveUCI eq "0000" || ($k1 == "k"  &&  $k2 == "k")} { set moveUCI "null" }
     }
 
-    if {[info exists ::playMode] && [eval "$::playMode premove {$moveUCI}"]} { return 0 } ;# not player's turn
+    if {[info exists ::interactionHandler] && [eval "$::interactionHandler premove {$moveUCI}"]} { return 0 } ;# not player's turn
 
     if {! [::move::Follow $moveUCI] && ! [addMoveEx $moveUCI]} {
         return 0
@@ -946,8 +946,8 @@ proc addMoveUCI {{moveUCI} {animate "-animate"}} {
 
 proc suggestMove {} {
     if {! $::suggestMoves} { return 0}
-    if {[info exists ::playMode]} {
-        return [eval "$::playMode suggestMove"]
+    if {[info exists ::interactionHandler]} {
+        return [eval "$::interactionHandler suggestMove"]
     }
     return 1
 }
@@ -1206,9 +1206,9 @@ proc undoFeature {action} {
     }
 }
 
-proc setPlayMode { callback } {
-    set ::playMode "$callback"
-    if {$::playMode == ""} { unset ::playMode }
+proc setInteractionHandler { callback } {
+    set ::interactionHandler "$callback"
+    if {$::interactionHandler == ""} { unset ::interactionHandler }
     ::notify::PosChanged
 }
 

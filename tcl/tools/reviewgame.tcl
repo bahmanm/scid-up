@@ -33,7 +33,7 @@ namespace eval reviewgame {
 #   - Starts a UCI engine in slot `::reviewgame::engineSlot` (if available).
 #   - Creates and configures toplevel `::reviewgame::window`.
 #   - Reads current game tags via `sc_game tags get`.
-#   - Sets play-mode callback via `::setPlayMode`.
+#   - Sets the global interaction handler via `::setInteractionHandler`.
 #   - Binds window events (destroy/help) and initialises session counters.
 #   - Calls `::reviewgame::resetValues` and enters `::reviewgame::mainLoop`.
 ################################################################################
@@ -133,7 +133,7 @@ proc ::reviewgame::start {} {
   set ::reviewgame::movesLikePlayer 0
   set ::reviewgame::movesLikeEngine 0
   set ::reviewgame::numberMovesPlayed 0
-  ::setPlayMode "::reviewgame::callback"
+  ::setInteractionHandler "::reviewgame::callback"
   ::reviewgame::resetValues
   ::reviewgame::mainLoop
 }
@@ -218,7 +218,7 @@ proc ::reviewgame::showSolution {} {
 #   - Sets `::reviewgame::bailout` and resets `::reviewgame::sequence`.
 #   - Stops any in-flight analysis (`::reviewgame::stopAnalyze`).
 #   - Closes `::reviewgame::window` via `::win::closeWindow`.
-#   - Resets play mode via `::setPlayMode ""`.
+#   - Resets the global interaction handler via `::setInteractionHandler ""`.
 #   - Attempts to close the UCI engine in slot `::reviewgame::engineSlot`.
 ################################################################################
 proc ::reviewgame::endTraining {} {
@@ -232,7 +232,7 @@ proc ::reviewgame::endTraining {} {
   focus .
   bind $w <Destroy> {}
   ::win::closeWindow $w
-  ::setPlayMode ""
+  ::setInteractionHandler ""
   
   catch { ::uci::closeUCIengine $::reviewgame::engineSlot }
 }

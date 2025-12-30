@@ -323,7 +323,7 @@ namespace eval tactics {
         createToplevelFinalize $w
 
         setInfoEngine "---"
-        ::setPlayMode "::tactics::callback"
+        ::setInteractionHandler "::tactics::callback"
         ::tactics::loadNextGame
     }
     proc callback {cmd args} {
@@ -346,7 +346,7 @@ namespace eval tactics {
         sc_filter reset $::tactics::baseId dbfilter full
         catch { ::uci::closeUCIengine $::tactics::engineSlot }
 
-        ::setPlayMode ""
+        ::setInteractionHandler ""
         ::board::flipAuto .main.board
         updateStatusBar
         updateTitle

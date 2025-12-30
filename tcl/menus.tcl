@@ -414,7 +414,7 @@ proc updateMenuStates {{menuname}} {
   {.menu.play} {
       set n [$m.play index end]
       set st normal
-      if {[info exists ::playMode]} { set st disabled }
+      if {[info exists ::interactionHandler]} { set st disabled }
       for {set i 0} {$i <= $n} {incr i} {
         catch { $m.play entryconfig $i -state $st }
       }
