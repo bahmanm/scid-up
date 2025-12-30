@@ -106,6 +106,30 @@ proc ::scid_test::widgets::defineTextWidget {path} {
     return $path
 }
 
+proc ::scid_test::widgets::defineEntryWidget {path} {
+    variable created
+
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::scid_test::widgets::dispatchEntry $path
+    lappend created $path
+    return $path
+}
+
+proc ::scid_test::widgets::defineComboboxWidget {path} {
+    variable created
+
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::scid_test::widgets::dispatchCombobox $path
+    lappend created $path
+    return $path
+}
+
 proc ::scid_test::widgets::dispatch {path subcmd args} {
     variable state
     variable text
@@ -154,6 +178,32 @@ proc ::scid_test::widgets::dispatch {path subcmd args} {
             error "Widget $path subcommand $subcmd not stubbed"
         }
     }
+}
+
+proc ::scid_test::widgets::dispatchEntry {path subcmd args} {
+    variable text
+
+    if {$subcmd eq "get"} {
+        if {![info exists text($path)]} {
+            return ""
+        }
+        return $text($path)
+    }
+
+    return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
+}
+
+proc ::scid_test::widgets::dispatchCombobox {path subcmd args} {
+    variable state
+
+    if {$subcmd eq "current"} {
+        if {![info exists state($path,-current)]} {
+            error "Widget $path current index is not set (use ::scid_test::widgets::setState $path -current <n>)"
+        }
+        return $state($path,-current)
+    }
+
+    return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
 }
 
 proc ::scid_test::widgets::dispatchText {path subcmd args} {

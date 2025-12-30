@@ -1,0 +1,459 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespace exists prior to sourcing the module under test.
+namespace eval ::preferences {}
+namespace eval ::win {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows preferences.tcl]
+
+namespace eval ::preferences_test {
+    variable stubbedCommands {}
+
+    variable gridCalls {}
+    variable winCalls {}
+    variable winCreateWindowCalls {}
+    variable winMakeVisibleCalls {}
+    variable updateLocaleCalls 0
+    variable setterCalls {}
+    variable grabCalls {}
+    variable afterCalls {}
+
+    variable canvasCreated {}
+    variable canvasXviewCalls {}
+    variable canvasYviewCalls {}
+}
+
+proc ::preferences_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::preferences_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::preferences_test::setup {} {
+    ::preferences_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::preferences_test::gridCalls {}
+    set ::preferences_test::winCalls {}
+    set ::preferences_test::winCreateWindowCalls {}
+    set ::preferences_test::winMakeVisibleCalls {}
+    set ::preferences_test::updateLocaleCalls 0
+    set ::preferences_test::setterCalls {}
+    set ::preferences_test::grabCalls {}
+    set ::preferences_test::afterCalls {}
+
+    set ::preferences_test::canvasCreated {}
+    set ::preferences_test::canvasXviewCalls {}
+    set ::preferences_test::canvasYviewCalls {}
+}
+
+proc ::preferences_test::cleanup {} {
+    ::preferences_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    foreach w $::preferences_test::canvasCreated {
+        catch {rename $w ""}
+    }
+    set ::preferences_test::canvasCreated {}
+
+    catch {unset ::preferences::aktConfig}
+    catch {unset ::menuLabel}
+    catch {unset ::language}
+    catch {unset ::locale}
+    catch {unset ::spellCheckFile}
+    catch {unset ::autoplayDelay}
+    catch {unset ::tempdelay}
+    catch {unset ::translatePieces}
+    catch {unset ::newNumbers}
+}
+
+proc ::preferences_test::defineCanvasWidget {path} {
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::preferences_test::dispatchCanvas $path
+    lappend ::preferences_test::canvasCreated $path
+    return $path
+}
+
+proc ::preferences_test::dispatchCanvas {path subcmd args} {
+    switch -- $subcmd {
+        xview {
+            lappend ::preferences_test::canvasXviewCalls [list $path xview {*}$args]
+            return
+        }
+        yview {
+            lappend ::preferences_test::canvasYviewCalls [list $path yview {*}$args]
+            return
+        }
+        default {
+            error "Canvas widget $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+# ---- Tests ----
+
+test preferences-replaceConfig-forgets-old-and-grids-new-1.0 {replaceConfig hides the previous config and shows the selected one} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set w .preferences.c
+    ::preferences_test::defineCanvasWidget $w
+
+    set ::preferences::aktConfig "$w.f.0"
+
+    ::preferences_test::stubCommand grid {args} {
+        lappend ::preferences_test::gridCalls $args
+        return
+    }
+
+    # Act
+    ::preferences::replaceConfig 3 $w
+
+    # Assert
+    list \
+        $::preferences_test::gridCalls \
+        $::preferences::aktConfig \
+        $::preferences_test::canvasXviewCalls \
+        $::preferences_test::canvasYviewCalls
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {{{forget .preferences.c.f.0} {.preferences.c.f.3 -row 0 -column 1 -sticky news -pady {5 0} -padx {5 0}}} .preferences.c.f.3 {{.preferences.c xview moveto 0}} {{.preferences.c yview moveto 0}}}
+
+
+test preferences-updateScrollBar-uses-required-size-1.0 {updateScrollBar updates the canvas scrollregion based on the embedded frame size} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set w .preferences.c
+    ::scid_test::widgets::defineWidget $w
+
+    ::preferences_test::stubCommand winfo {subcmd args} {
+        lappend ::preferences_test::winCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            reqwidth { return 120 }
+            reqheight { return 80 }
+            default { error "winfo $subcmd not stubbed in this test" }
+        }
+    }
+
+    # Act
+    ::preferences::updateScrollBar $w
+
+    # Assert
+    list \
+        $::preferences_test::winCalls \
+        [::scid_test::widgets::getState $w -scrollregion] \
+        [::scid_test::widgets::getState $w -width] \
+        [::scid_test::widgets::getState $w -height]
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {{{reqwidth .preferences.c.f} {reqheight .preferences.c.f}} {0 0 120 80} 120 80}
+
+
+test preferences-Open-when-already-open-makes-visible-1.0 {Open focuses an existing preferences window without rebuilding it} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set ::language "E"
+    array set ::menuLabel {E,ConfigureScid "Configure Scid"}
+
+    ::preferences_test::stubCommand ::win::createWindow {w title} {
+        lappend ::preferences_test::winCreateWindowCalls [list $w $title]
+        return 0
+    }
+    ::preferences_test::stubCommand ::win::makeVisible {w} {
+        lappend ::preferences_test::winMakeVisibleCalls $w
+        return
+    }
+
+    # Act
+    ::preferences::Open
+
+    # Assert
+    list $::preferences_test::winCreateWindowCalls $::preferences_test::winMakeVisibleCalls
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {{{.preferences {Configure Scid}}} .preferences}
+
+
+test preferences-checkFileDir-invalid-path-sets-error-style-1.0 {checkFileDir marks invalid input and does not invoke the setter} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set entry .resDialog.1.file
+    ::scid_test::widgets::defineEntryWidget $entry
+
+    set missingPath [file join [::scid_test::tempDir] "does-not-exist.txt"]
+    $entry insert end $missingPath
+
+    ::preferences_test::stubCommand grab {w} {
+        error "grab should not be called for invalid paths"
+    }
+    ::preferences_test::stubCommand winfo {subcmd args} {
+        error "winfo should not be called for invalid paths"
+    }
+    ::preferences_test::stubCommand ::preferences_test::setter {value} {
+        error "setter should not be called for invalid paths"
+    }
+
+    # Act
+    ::preferences::checkFileDir $entry ::preferences_test::setter isfile ::spellCheckFile
+
+    # Assert
+    ::scid_test::widgets::getState $entry -style
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {Error.TEntry}
+
+
+test preferences-checkFileDir-valid-path-invokes-setter-and-grabs-1.0 {checkFileDir applies normal style, grabs the toplevel, and invokes the setter on change} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set entry .resDialog.1.file
+    ::scid_test::widgets::defineEntryWidget $entry
+
+    set path [file join [::scid_test::tempDir] "spellcheck.txt"]
+    set fh [open $path w]
+    close $fh
+
+    set ::spellCheckFile ""
+    $entry insert end $path
+
+    ::preferences_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "toplevel"} { error "winfo $subcmd not stubbed in this test" }
+        return ".resDialog"
+    }
+    ::preferences_test::stubCommand grab {w} {
+        lappend ::preferences_test::grabCalls $w
+        return
+    }
+    ::preferences_test::stubCommand ::preferences_test::setter {value} {
+        lappend ::preferences_test::setterCalls $value
+        return
+    }
+
+    # Act
+    ::preferences::checkFileDir $entry ::preferences_test::setter isfile ::spellCheckFile
+
+    # Assert
+    list \
+        [::scid_test::widgets::getState $entry -style] \
+        $::preferences_test::grabCalls \
+        [file tail [lindex $::preferences_test::setterCalls 0]]
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {TEntry .resDialog spellcheck.txt}
+
+
+test preferences-checkFileDir-unchanged-value-noop-1.0 {checkFileDir does not invoke the setter when the value is unchanged} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set entry .resDialog.1.file
+    ::scid_test::widgets::defineEntryWidget $entry
+
+    set path [file join [::scid_test::tempDir] "same.txt"]
+    set fh [open $path w]
+    close $fh
+
+    set ::spellCheckFile $path
+    $entry insert end $path
+
+    ::preferences_test::stubCommand winfo {subcmd args} {
+        error "winfo should not be called when unchanged"
+    }
+    ::preferences_test::stubCommand grab {w} {
+        error "grab should not be called when unchanged"
+    }
+    ::preferences_test::stubCommand ::preferences_test::setter {value} {
+        error "setter should not be called when unchanged"
+    }
+
+    # Act
+    ::preferences::checkFileDir $entry ::preferences_test::setter isfile ::spellCheckFile
+
+    # Assert
+    ::scid_test::widgets::getState $entry -style
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {TEntry}
+
+
+test preferences-validateautoplay-non-digit-resets-1.0 {validateautoplay rejects non-digits and resets the temporary delay} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set ::autoplayDelay 5000
+    set ::tempdelay "abc"
+
+    # Act
+    set ok [::preferences::validateautoplay]
+
+    # Assert
+    list $ok $::tempdelay $::autoplayDelay
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {0 1 5000}
+
+
+test preferences-validateautoplay-updates-autoplayDelay-1.0 {validateautoplay updates autoplayDelay in milliseconds for valid digits} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set ::autoplayDelay 0
+    set ::tempdelay 2
+
+    # Act
+    set ok [::preferences::validateautoplay]
+
+    # Assert
+    list $ok $::autoplayDelay
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {1 2000}
+
+
+test preferences-validateautoplay-clamps-zero-1.0 {validateautoplay clamps a zero delay to 0.1} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set ::autoplayDelay 0
+    set ::tempdelay 0
+
+    # Act
+    set ok [::preferences::validateautoplay]
+
+    # Assert
+    list $ok $::autoplayDelay
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {1 0.1}
+
+
+test preferences-numbers-updates-locale-and-calls-updateLocale-1.0 {numbers updates the numeric locale format and triggers updateLocale} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set combo .preferences.n.number
+    ::scid_test::widgets::defineComboboxWidget $combo
+    ::scid_test::widgets::setState $combo -current 2
+
+    array set ::locale {numeric ".,"}
+
+    ::preferences_test::stubCommand updateLocale {} {
+        incr ::preferences_test::updateLocaleCalls
+        return
+    }
+
+    # Act
+    ::preferences::numbers $combo
+
+    # Assert
+    list $::locale(numeric) $::preferences_test::updateLocaleCalls
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {,. 1}
+
+
+test preferences-configureComboboxListboxFont-noop-when-missing-1.0 {configureComboboxListboxFont returns immediately when the combobox does not exist} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    ::preferences_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::preferences_test::stubCommand after {args} {
+        error "after should not be called when the combobox does not exist"
+    }
+
+    # Act
+    ::preferences::configureComboboxListboxFont .missing font_Fixed
+
+    # Assert
+    return ok
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {ok}
+
+
+test preferences-configureComboboxListboxFont-schedules-idle-config-1.0 {configureComboboxListboxFont schedules the popdown listbox font configuration} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    ::preferences_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 1
+    }
+    ::preferences_test::stubCommand after {args} {
+        lappend ::preferences_test::afterCalls $args
+        return
+    }
+
+    # Act
+    ::preferences::configureComboboxListboxFont .preferences.n.number font_Fixed
+
+    # Assert
+    set ::preferences_test::afterCalls
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {{idle {::preferences::configureComboboxListboxFont_ .preferences.n.number font_Fixed}}}
+
+
+test preferences-configureComboboxListboxFont_-configures-first-listbox-1.0 {configureComboboxListboxFont_ configures the first Listbox found under the popdown} -setup {
+    ::preferences_test::setup
+} -body {
+    # Arrange
+    set combo .preferences.n.number
+    set popdown .popdown
+    set listbox .popdown.list
+
+    ::scid_test::widgets::defineWidget $listbox
+
+    ::preferences_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists { return 1 }
+            rootx { return 10 }
+            rooty { return 20 }
+            height { return 5 }
+            containing { return ".popdown" }
+            class {
+                set w [lindex $args 0]
+                if {$w eq ".popdown"} { return "Toplevel" }
+                if {$w eq ".popdown.list"} { return "Listbox" }
+                return "Frame"
+            }
+            children {
+                set w [lindex $args 0]
+                if {$w eq ".popdown"} { return [list ".popdown.list"] }
+                return {}
+            }
+            default {
+                error "winfo $subcmd not stubbed in this test"
+            }
+        }
+    }
+
+    # Act
+    ::preferences::configureComboboxListboxFont_ $combo font_Fixed
+
+    # Assert
+    ::scid_test::widgets::getState $listbox -font
+} -cleanup {
+    ::preferences_test::cleanup
+} -result {font_Fixed}
+
+
+cleanupTests
