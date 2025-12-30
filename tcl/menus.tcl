@@ -216,7 +216,6 @@ $m add separator
 menu $m.training
   $m.training add command -label ToolsTrainOpenings -command ::opening::config
   $m.training add command -label ToolsTrainTactics -command ::tactics::config
-  $m.training add command -label ToolsTrainReviewGame -command ::reviewgame::start
   $m.training add command -label ToolsTrainCalvar -command ::calvar::config
 $m add cascade -label ToolsTraining -menu $m.training
 
@@ -240,7 +239,7 @@ $m add command -label WindowsGraph -command ::tools::graphs::score::Refresh
 
 ### Tools menu:
 set m .menu.tools
-menu $m
+menu $m -postcommand "updateMenuStates $m"
 .menu add cascade -label Tools -menu $m
 $m  add command -label ToolsConfigureEngines -command ::enginelist::choose
 $m  add command -label ToolsStartEngine1 \
@@ -248,6 +247,7 @@ $m  add command -label ToolsStartEngine1 \
 $m  add command -label ToolsStartEngine2 \
     -command "::enginewin::start 2" -accelerator "F3"
 $m  add command -label ToolsAnalysis -command "makeAnalysisWin 1"
+$m  add command -label ToolsTrainReviewGame -command ::reviewgame::start
 $m add separator
 $m add checkbutton -label ToolsFilterGraph \
     -accelerator "Ctrl+Shift+G" -variable filterGraph -command tools::graphs::filter::Open
@@ -418,6 +418,11 @@ proc updateMenuStates {{menuname}} {
       for {set i 0} {$i <= $n} {incr i} {
         catch { $m.play entryconfig $i -state $st }
       }
+    }
+  {.menu.tools} {
+      set st normal
+      if {[info exists ::interactionHandler]} { set st disabled }
+      menuConfig $m.tools ToolsTrainReviewGame entryconfig -state $st
     }
   {.menu.game} {
     set isReadOnly [sc_base isReadOnly $::curr_db]
