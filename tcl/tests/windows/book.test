@@ -1,0 +1,622 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::book {}
+namespace eval ::win {}
+namespace eval ::docking {}
+namespace eval ::utils {}
+namespace eval ::utils::tooltip {}
+namespace eval ::windows {}
+namespace eval ::windows::gamelist {}
+namespace eval ::ttk {}
+
+# Minimal translation array for code paths that reference `$::tr(...)`.
+if {![info exists ::tr]} { array set ::tr {} }
+if {![info exists ::tr(Book)]} { set ::tr(Book) "Book" }
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows book.tcl]
+
+namespace eval ::book_test {
+    variable stubbedCommands {}
+
+    variable scBookCalls {}
+    variable packCalls {}
+    variable focusCalls {}
+    variable messageBoxCalls {}
+    variable winCalls {}
+
+    variable scMoveCalls {}
+    variable scVarCalls {}
+    variable updateBoardCalls {}
+
+    variable bindCalls {}
+
+    variable comboboxCalls
+    array set comboboxCalls {}
+
+    variable comboboxValues
+    array set comboboxValues {}
+
+    variable comboboxCurrent
+    array set comboboxCurrent {}
+
+    variable refreshCalls {}
+
+    variable randValue 0.0
+    variable scBookMovesCallCount 0
+}
+
+proc ::book_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::book_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::book_test::defineCombobox {path args} {
+    variable comboboxCalls
+    variable comboboxValues
+    variable comboboxCurrent
+
+    if {[llength [info commands $path]]} {
+        error "Combobox command already exists: $path"
+    }
+
+    set comboboxCalls($path) {}
+    set comboboxValues($path) {}
+    set comboboxCurrent($path) 0
+
+    # Extract values if provided.
+    set idx [lsearch -exact $args "-values"]
+    if {$idx != -1 && ($idx + 1) < [llength $args]} {
+        set comboboxValues($path) [lindex $args [expr {$idx + 1}]]
+    }
+
+    interp alias {} $path {} ::book_test::dispatchCombobox $path
+    return $path
+}
+
+proc ::book_test::dispatchCombobox {path subcmd args} {
+    variable comboboxCalls
+    variable comboboxValues
+    variable comboboxCurrent
+
+    lappend comboboxCalls($path) [list $subcmd {*}$args]
+
+    switch -- $subcmd {
+        current {
+            if {[llength $args] == 0} {
+                return $comboboxCurrent($path)
+            }
+            set comboboxCurrent($path) [lindex $args 0]
+            return
+        }
+        get {
+            set idx $comboboxCurrent($path)
+            if {![info exists comboboxValues($path)]} {
+                return ""
+            }
+            return [lindex $comboboxValues($path) $idx]
+        }
+        default {
+            error "Combobox $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::book_test::setup {} {
+    ::book_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    # Arrange
+    set ::book_test::scBookCalls {}
+    set ::book_test::packCalls {}
+    set ::book_test::focusCalls {}
+    set ::book_test::messageBoxCalls {}
+    set ::book_test::winCalls {}
+
+    set ::book_test::scMoveCalls {}
+    set ::book_test::scVarCalls {}
+    set ::book_test::updateBoardCalls {}
+
+    set ::book_test::bindCalls {}
+
+    catch {array unset ::book_test::comboboxCalls}
+    array set ::book_test::comboboxCalls {}
+
+    catch {array unset ::book_test::comboboxValues}
+    array set ::book_test::comboboxValues {}
+
+    catch {array unset ::book_test::comboboxCurrent}
+    array set ::book_test::comboboxCurrent {}
+
+    set ::book_test::refreshCalls {}
+
+    set ::book_test::randValue 0.0
+    set ::book_test::scBookMovesCallCount 0
+
+    if {![info exists ::tr(OtherBookMoves)]} { set ::tr(OtherBookMoves) "OtherBookMoves" }
+    if {![info exists ::tr(OtherBookMovesTooltip)]} { set ::tr(OtherBookMovesTooltip) "OtherBookMovesTooltip" }
+    if {![info exists ::tr(Cancel)]} { set ::tr(Cancel) "Cancel" }
+    if {![info exists ::tr(Movesloaded)]} { set ::tr(Movesloaded) "Movesloaded" }
+    if {![info exists ::tr(BookPartiallyLoaded)]} { set ::tr(BookPartiallyLoaded) "BookPartiallyLoaded" }
+
+    set ::scidBooksDir [file join [::scid_test::tempDir] books]
+
+    set ::book::isOpen 0
+    set ::book::isReadonly 0
+    set ::book::currentBook ""
+    set ::book::currentTuningBook ""
+    set ::book::cancelBookExport 0
+    set ::book::exportCount 0
+    set ::book::exportMax 3000
+    set ::book::hashList {}
+    set ::book::oppMovesVisible 0
+
+    # Stubs commonly required by the procedures under test.
+    ::book_test::stubCommand sc_book {subcmd args} {
+        lappend ::book_test::scBookCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            close {
+                return
+            }
+            load {
+                # Return value indicates read-only state.
+                return 0
+            }
+            moves {
+                # Return a 1-item list containing the moves list.
+                return [list {}]
+            }
+            movesupdate {
+                return
+            }
+            default {
+                error "sc_book $subcmd not stubbed in book tests"
+            }
+        }
+    }
+
+    ::book_test::stubCommand focus {w} {
+        lappend ::book_test::focusCalls $w
+        return
+    }
+
+    ::book_test::stubCommand pack {args} {
+        lappend ::book_test::packCalls $args
+        return
+    }
+
+    # Provide a deterministic rand() for `::book::getMove`.
+    ::book_test::stubCommand ::tcl::mathfunc::rand {} {
+        return $::book_test::randValue
+    }
+
+    # Minimal stubs for windowing calls used by `::book::open` in early-return paths.
+    ::book_test::stubCommand ::createToplevel {w} {
+        lappend ::book_test::winCalls [list createToplevel $w]
+        return
+    }
+
+    ::book_test::stubCommand ::setTitle {w title} {
+        lappend ::book_test::winCalls [list setTitle $w $title]
+        return
+    }
+
+    ::book_test::stubCommand ::win::closeWindow {w} {
+        lappend ::book_test::winCalls [list closeWindow $w]
+        return
+    }
+
+    ::book_test::stubCommand wm {subcmd args} {
+        lappend ::book_test::winCalls [list wm $subcmd {*}$args]
+        return
+    }
+
+    ::book_test::stubCommand ttk::frame {w args} {
+        lappend ::book_test::winCalls [list ttk::frame $w {*}$args]
+        return $w
+    }
+
+    ::book_test::stubCommand ttk::combobox {w args} {
+        lappend ::book_test::winCalls [list ttk::combobox $w {*}$args]
+        ::book_test::defineCombobox $w {*}$args
+        return $w
+    }
+
+    ::book_test::stubCommand ttk::button {w args} {
+        lappend ::book_test::winCalls [list ttk::button $w {*}$args]
+        ::scid_test::widgets::defineWidget $w
+        return $w
+    }
+
+    ::book_test::stubCommand autoscrollText {orient frame text class} {
+        lappend ::book_test::winCalls [list autoscrollText $orient $frame $text $class]
+        ::scid_test::widgets::defineWidget $frame
+        ::scid_test::widgets::defineWidget $text
+        return
+    }
+
+    ::book_test::stubCommand bind {w sequence script} {
+        lappend ::book_test::bindCalls [list $w $sequence $script]
+        return
+    }
+
+    ::book_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists { return 0 }
+            default { error "winfo $subcmd not stubbed in book tests" }
+        }
+    }
+
+    ::book_test::stubCommand tk_messageBox {args} {
+        set ::book_test::messageBoxCalls $args
+        return "ok"
+    }
+
+    ::book_test::stubCommand glob {args} {
+        # Default: no books found.
+        return {}
+    }
+
+    ::book_test::stubCommand ::utils::tooltip::Set {args} { return }
+
+    ::book_test::stubCommand ::windows::gamelist::Refresh {} { return }
+    ::book_test::stubCommand updateTitle {} { return }
+    ::book_test::stubCommand progressWindow {args} { return }
+    ::book_test::stubCommand updateProgressWindow {args} {
+        lappend ::book_test::winCalls [list updateProgressWindow {*}$args]
+        return
+    }
+    ::book_test::stubCommand closeProgressWindow {} { return }
+
+    ::book_test::stubCommand updateBoard {args} {
+        lappend ::book_test::updateBoardCalls $args
+        return
+    }
+
+    ::book_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            hash { return 1 }
+            moves { return {} }
+            default { error "sc_pos $subcmd not stubbed in book tests" }
+        }
+    }
+
+    ::book_test::stubCommand sc_move {subcmd args} {
+        lappend ::book_test::scMoveCalls [list $subcmd {*}$args]
+        return
+    }
+
+    ::book_test::stubCommand sc_var {subcmd args} {
+        lappend ::book_test::scVarCalls [list $subcmd {*}$args]
+        return
+    }
+}
+
+proc ::book_test::cleanup {} {
+    ::book_test::restoreStubs
+
+    # Remove any widget command doubles or combobox aliases created by a test.
+    ::scid_test::widgets::reset
+    catch {
+        foreach cb [array names ::book_test::comboboxCalls] {
+            catch {rename $cb ""}
+        }
+    }
+
+    unset -nocomplain ::scidBooksDir
+
+    catch {unset ::book::lastBook}
+}
+
+# ---- Tests ----
+
+test book-scBookOpen-main-closes-previous-1.0 {scBookOpen closes a previously opened main book in the same slot} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::currentBook "prev.bin"
+
+    ::book_test::stubCommand sc_book {subcmd args} {
+        lappend ::book_test::scBookCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            close -
+            movesupdate { return }
+            load { return 1 }
+            moves { return [list {}] }
+            default { error "sc_book $subcmd not stubbed in book tests" }
+        }
+    }
+
+    # Act
+    ::book::scBookOpen "new.bin" $::book::bookSlot
+
+    # Assert
+    list $::book::currentBook $::book::isReadonly $::book_test::scBookCalls
+} -cleanup {
+    ::book_test::cleanup
+} -match glob -result {new.bin 1 {{close 0} {load */books/new.bin 0}}}
+
+
+test book-scBookOpen-tuning-closes-previous-1.0 {scBookOpen closes a previously opened tuning book in the same slot} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::currentTuningBook "prev.bin"
+
+    ::book_test::stubCommand sc_book {subcmd args} {
+        lappend ::book_test::scBookCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            close -
+            movesupdate { return }
+            load { return 0 }
+            moves { return [list {}] }
+            default { error "sc_book $subcmd not stubbed in book tests" }
+        }
+    }
+
+    # Act
+    ::book::scBookOpen "new.bin" $::book::bookTuningSlot
+
+    # Assert
+    list $::book::currentTuningBook $::book::isReadonly $::book_test::scBookCalls
+} -cleanup {
+    ::book_test::cleanup
+} -match glob -result {new.bin 0 {{close 2} {load */books/new.bin 2}}}
+
+
+test book-getMove-empty-book-returns-empty-1.0 {getMove returns "" when the book has no moves} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set move [::book::getMove "a.bin" "fen" $::book::bookSlot]
+
+    # Assert
+    set move
+} -cleanup {
+    ::book_test::cleanup
+} -result {}
+
+
+test book-getMove-selects-by-probability-1.0 {getMove selects a move based on cumulative probability} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    ::book_test::stubCommand sc_book {subcmd args} {
+        lappend ::book_test::scBookCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            load { return 0 }
+            close { return }
+            moves { return [list {e4 50% d4 50%}] }
+            default { error "sc_book $subcmd not stubbed in book tests" }
+        }
+    }
+
+    # Act
+    set ::book_test::randValue 0.10
+    set a [::book::getMove "a.bin" "fen" $::book::bookSlot]
+
+    set ::book_test::randValue 0.60
+    set b [::book::getMove "a.bin" "fen" $::book::bookSlot]
+
+    # Assert
+    list $a $b
+} -cleanup {
+    ::book_test::cleanup
+} -result {e4 d4}
+
+
+test book-togglePositionsDisplay-toggles-and-packs-1.0 {togglePositionsDisplay toggles visibility and packs/unpacks the secondary view} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::oppMovesVisible 0
+
+    # Act
+    ::book::togglePositionsDisplay
+    set afterShow $::book::oppMovesVisible
+
+    ::book::togglePositionsDisplay
+    set afterHide $::book::oppMovesVisible
+
+    # Assert
+    list $afterShow $afterHide $::book_test::packCalls
+} -cleanup {
+    ::book_test::cleanup
+} -result {1 0 {{.bookWin.f.fscroll1 -expand yes -fill both} {forget .bookWin.f.fscroll1}}}
+
+
+test book-closeMainBook-noop-when-empty-1.0 {closeMainBook is a no-op when no book is open} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::currentBook ""
+    set ::book::isOpen 1
+
+    # Act
+    ::book::closeMainBook
+
+    # Assert
+    list $::book::currentBook $::book::isOpen $::book_test::scBookCalls $::book_test::focusCalls
+} -cleanup {
+    ::book_test::cleanup
+} -result {{} 1 {} {}}
+
+
+test book-closeMainBook-closes-and-resets-1.0 {closeMainBook closes the main book slot and clears state} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::currentBook "a.bin"
+    set ::book::isOpen 1
+
+    # Act
+    ::book::closeMainBook
+
+    # Assert
+    list \
+        $::book::isOpen \
+        $::book::currentBook \
+        $::book_test::focusCalls \
+        $::book_test::scBookCalls
+} -cleanup {
+    ::book_test::cleanup
+} -result {0 {} . {{close 0}}}
+
+
+test book-open-no-books-shows-error-and-closes-1.0 {open shows an error and closes the window when no books are found} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::lastBook ""
+
+    ::book_test::stubCommand glob {args} {
+        return {}
+    }
+
+    # Act
+    ::book::open
+
+    # Assert
+    list $::book::isOpen $::book::currentBook $::book_test::messageBoxCalls $::book_test::winCalls
+} -cleanup {
+    ::book_test::cleanup
+} -match glob -result {0 {} *No books found* {*closeWindow .bookWin*}}
+
+
+test book-open-success-wires-ui-and-runs-bookSelect-1.0 {open wires the UI, binds events, and runs an initial bookSelect} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    ::book_test::stubCommand glob {args} {
+        return [list \
+            [file join $::scidBooksDir a.bin] \
+            [file join $::scidBooksDir b.bin] \
+        ]
+    }
+
+    ::book_test::stubCommand ::book::refresh {} {
+        lappend ::book_test::refreshCalls refresh
+        return
+    }
+
+    set ::book::lastBook ""
+
+    # Act
+    ::book::open "b.bin"
+
+    # Assert
+    set comboCalls $::book_test::comboboxCalls(.bookWin.f.combo)
+
+    set hasComboboxBind [expr {[lsearch -exact $::book_test::bindCalls [list .bookWin.f.combo <<ComboboxSelected>> ::book::bookSelect]] >= 0}]
+    set hasDestroyBind [expr {[lsearch -exact $::book_test::bindCalls [list .bookWin <Destroy> ::book::closeMainBook]] >= 0}]
+
+    list \
+        $::book::isOpen \
+        $::book::currentBook \
+        $::book::lastBook \
+        [expr {[lsearch -exact $comboCalls {current 1}] >= 0}] \
+        $hasComboboxBind \
+        $hasDestroyBind \
+        $::book_test::refreshCalls
+} -cleanup {
+    ::book_test::cleanup
+} -result {1 b.bin b.bin 1 1 1 refresh}
+
+
+test book-book2pgn-adds-mainline-and-variations-1.0 {book2pgn adds the first move to the main line and others as variations} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::cancelBookExport 0
+    set ::book::exportCount 0
+    set ::book::exportMax 3000
+    set ::book::hashList {}
+
+    set ::book_test::scBookMovesCallCount 0
+    ::book_test::stubCommand sc_book {subcmd args} {
+        lappend ::book_test::scBookCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            moves {
+                if {$::book_test::scBookMovesCallCount == 0} {
+                    incr ::book_test::scBookMovesCallCount
+                    return [list {e4 60% d4 40%}]
+                }
+                return [list {}]
+            }
+            default {
+                return
+            }
+        }
+    }
+
+    # Act
+    ::book::book2pgn
+
+    # Assert
+    list $::book_test::scMoveCalls $::book_test::scVarCalls $::book_test::updateBoardCalls
+} -cleanup {
+    ::book_test::cleanup
+} -result {{{addSan e4} back {addSan d4}} {create exit} -pgn}
+
+
+test book-export-partial-message-1.0 {export shows the partial-load message when exportCount reaches exportMax} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::exportMax 2
+
+    ::book_test::stubCommand ::book::book2pgn {} {
+        set ::book::exportCount 2
+        return
+    }
+
+    # Act
+    ::book::export
+
+    # Assert
+    set msgIdx [lsearch -exact $::book_test::messageBoxCalls -message]
+    set msg [lindex $::book_test::messageBoxCalls [expr {$msgIdx + 1}]]
+
+    list $msg $::book::hashList $::book_test::updateBoardCalls
+} -cleanup {
+    ::book_test::cleanup
+} -result {{Movesloaded  2
+BookPartiallyLoaded} {} -pgn}
+
+
+test book-export-complete-message-1.0 {export shows the complete-load message when exportCount is below exportMax} -setup {
+    ::book_test::setup
+} -body {
+    # Arrange
+    set ::book::exportMax 2
+
+    ::book_test::stubCommand ::book::book2pgn {} {
+        set ::book::exportCount 1
+        return
+    }
+
+    # Act
+    ::book::export
+
+    # Assert
+    set msgIdx [lsearch -exact $::book_test::messageBoxCalls -message]
+    set msg [lindex $::book_test::messageBoxCalls [expr {$msgIdx + 1}]]
+
+    list $msg $::book::hashList $::book_test::updateBoardCalls
+} -cleanup {
+    ::book_test::cleanup
+} -result {{Movesloaded  1} {} -pgn}
+
+
+cleanupTests
