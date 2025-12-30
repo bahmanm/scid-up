@@ -16,6 +16,7 @@
 
 #include "crosstab.h"
 #include "dstring.h"
+#include <cstdio>
 
 // Expected differences in rating according to performance
 // from 50% to 100%:
@@ -608,7 +609,7 @@ Crosstable::PrintTable (DString * dstr, crosstableModeT mode, uint playerLimit, 
 
     char stemp [100];
     if (GameCount > 1) {
-        sprintf (stemp, "%u game%s: %s%u %s%u %s%u",
+        std::snprintf(stemp, sizeof(stemp), "%u game%s: %s%u %s%u %s%u",
                  GameCount, strPlural (GameCount),
                  OutputFormat == CROSSTABLE_LaTeX ? "{\\tt +}" : "+",
                  ResultCount[RESULT_White],
@@ -618,7 +619,7 @@ Crosstable::PrintTable (DString * dstr, crosstableModeT mode, uint playerLimit, 
                  ResultCount[RESULT_Black]);
         dstr->Append (stemp);
         if (ResultCount[RESULT_None] > 0) {
-            sprintf (stemp, " %s%u", 
+            std::snprintf(stemp, sizeof(stemp), " %s%u", 
                      OutputFormat == CROSSTABLE_LaTeX ? "{\\tt *}" : "*",
                      ResultCount[RESULT_None]);
             dstr->Append (stemp);
@@ -650,15 +651,15 @@ Crosstable::PrintPlayer (DString * dstr, playerDataT * pdata)
 {
     char stemp[1000];
     if (OutputFormat == CROSSTABLE_Hypertext) {
-        sprintf (stemp, "<pi %s>", pdata->name);
+        std::snprintf(stemp, sizeof(stemp), "<pi %s>", pdata->name);
         dstr->Append (stemp);
     }
-    sprintf (stemp, "%-*s ", LongestNameLen, pdata->name);
+    std::snprintf(stemp, sizeof(stemp), "%-*s ", LongestNameLen, pdata->name);
     dstr->Append (StartCol, stemp, EndCol);
 
     if (PrintRatings) {
         if (pdata->elo) {
-            sprintf (stemp, "%4u ", pdata->elo);
+            std::snprintf(stemp, sizeof(stemp), "%4u ", pdata->elo);
         } else {
             if (OutputFormat == CROSSTABLE_Html) {
                 strcpy (stemp, "  -  ");
@@ -674,34 +675,34 @@ Crosstable::PrintPlayer (DString * dstr, playerDataT * pdata)
 
     if (PrintTitles) {
         if (OutputFormat == CROSSTABLE_Html && !strCompare(pdata->title,"")) {
-            sprintf (stemp, " -  ");
+            std::snprintf(stemp, sizeof(stemp), " -  ");
         } else {
-            sprintf (stemp, "%3s ", pdata->title);
+            std::snprintf(stemp, sizeof(stemp), "%3s ", pdata->title);
         }
         dstr->Append (StartCol, stemp, EndCol);
     }
     if (PrintAges) {
         if (pdata->ageInYears == 0) {
             if (OutputFormat == CROSSTABLE_Html) {
-                sprintf (stemp, " -  ");
+                std::snprintf(stemp, sizeof(stemp), " -  ");
             } else {
                 strCopy (stemp, "    ");
             }
         } else {
-            sprintf (stemp, "%3d ", pdata->ageInYears);
+            std::snprintf(stemp, sizeof(stemp), "%3d ", pdata->ageInYears);
         }
         dstr->Append (StartCol, stemp, EndCol);
     }
     if (PrintCountries) {
         if (OutputFormat == CROSSTABLE_Html && !strCompare(pdata->country,"")) {
-            sprintf (stemp, " -  ");
+            std::snprintf(stemp, sizeof(stemp), " -  ");
         } else {
-            sprintf (stemp, "%-3s ", pdata->country);
+            std::snprintf(stemp, sizeof(stemp), "%-3s ", pdata->country);
         }
         dstr->Append (StartCol, stemp, EndCol);
     }
     if (PrintFlags && OutputFormat == CROSSTABLE_Hypertext) {
-        sprintf (stemp, "<img flag_%s>",  pdata->country[0] ? pdata->country : "unkown");
+        std::snprintf(stemp, sizeof(stemp), "<img flag_%s>",  pdata->country[0] ? pdata->country : "unkown");
         dstr->Append (StartCol, stemp, EndCol);
     }
     if (OutputFormat == CROSSTABLE_Hypertext) { dstr->Append ("</pi>"); }
@@ -722,9 +723,9 @@ Crosstable::PrintPerformance (DString * dstr, playerDataT * pdata)
         if (pdata->elo) {
             int change = RatingChange (pdata->elo, oppAvgRating, 
                                        percentage, pdata->oppEloCount);
-            sprintf (stemp, "%4d %+3d", performance, change);
+            std::snprintf(stemp, sizeof(stemp), "%4d %+3d", performance, change);
         } else {
-            sprintf (stemp, "%4d    ", performance);
+            std::snprintf(stemp, sizeof(stemp), "%4d    ", performance);
         }
         dstr->Append ("   ", StartRightCol, stemp, EndRightCol);
     }
@@ -738,7 +739,7 @@ Crosstable::PrintScorePercentage (DString * dstr, playerDataT * pdata)
     uint per_score;
 
     per_score = ( pdata->gameCount > 0) ? pdata->score * 500 / pdata->gameCount : 0;
-    sprintf (stemp, "%3d%c%1d%%", per_score / 10 , DecimalPointChar, per_score % 10);
+    std::snprintf(stemp, sizeof(stemp), "%3d%c%1d%%", per_score / 10 , DecimalPointChar, per_score % 10);
     dstr->Append (" ", StartRightCol, stemp, EndRightCol);
 }
 
@@ -860,31 +861,31 @@ Crosstable::PrintAllPlayAll (DString * dstr, uint playerLimit)
         }
         previousScore = pdata->score;
 
-        sprintf (stemp, "%*u: ", PlayerNumWidth, player+1);
+        std::snprintf(stemp, sizeof(stemp), "%*u: ", PlayerNumWidth, player+1);
         dstr->Append (StartRow, StartRightCol, stemp, EndRightCol);
 
         PrintPlayer (dstr, pdata);
 
         if (OutputFormat == CROSSTABLE_LaTeX) {
-            sprintf (stemp, " %2u%c%c ", pdata->score / 2, DecimalPointChar,
+            std::snprintf(stemp, sizeof(stemp), " %2u%c%c ", pdata->score / 2, DecimalPointChar,
                      (pdata->score & 1 ? '5' : '0'));
             dstr->Append (StartRightCol, stemp, EndRightCol);
-            sprintf (stemp, " %2u  ", pdata->gameCount);
+            std::snprintf(stemp, sizeof(stemp), " %2u  ", pdata->gameCount);
             dstr->Append (StartRightCol, stemp, EndRightCol);
         } else {
             if (ThreeWin) {
-	      sprintf (stemp, " %2u%c%c  ",
+	      std::snprintf(stemp, sizeof(stemp), " %2u%c%c  ",
 		       pdata->score / 2, DecimalPointChar,
 		       (pdata->score & 1 ? '5' : '0'));
             } else {
-	      sprintf (stemp, " %2u%c%c / %2u  ",
+	      std::snprintf(stemp, sizeof(stemp), " %2u%c%c / %2u  ",
 		       pdata->score / 2, DecimalPointChar,
 		       (pdata->score & 1 ? '5' : '0'), pdata->gameCount);
             }
             dstr->Append (StartRightCol, stemp, EndRightCol);
         }
         if (PrintTiebreaks) {
-            sprintf (stemp, "%3u%c%02u ", pdata->tiebreak / 4,
+            std::snprintf(stemp, sizeof(stemp), "%3u%c%02u ", pdata->tiebreak / 4,
                      DecimalPointChar, (pdata->tiebreak % 4) * 25);
             dstr->Append (StartRightCol, stemp, EndRightCol);
         }
@@ -900,10 +901,10 @@ Crosstable::PrintAllPlayAll (DString * dstr, uint playerLimit)
                 if (clash != NULL) {
                     if (OutputFormat == CROSSTABLE_Hypertext) {
                         if (CurrentGame == clash->gameNum)
-                            sprintf(stemp, "<green><g_%u>%c</g></green>",
+                            std::snprintf(stemp, sizeof(stemp), "<green><g_%u>%c</g></green>",
                                     clash->gameNum, RESULT_CHAR[clash->result]);
                         else
-                            sprintf(stemp, "<blue><g_%u>%c</g></blue>",
+                            std::snprintf(stemp, sizeof(stemp), "<blue><g_%u>%c</g></blue>",
                                     clash->gameNum, RESULT_CHAR[clash->result]);
                         dstr->Append (stemp);
                     } else {
@@ -922,7 +923,7 @@ Crosstable::PrintAllPlayAll (DString * dstr, uint playerLimit)
 
         if (PrintTallies) {
             dstr->Append(StartCol);
-            sprintf(stemp, "  (+%u -%u =%u)", pdata->n_won, pdata->n_loss, pdata->n_draw);
+            std::snprintf(stemp, sizeof(stemp), "  (+%u -%u =%u)", pdata->n_won, pdata->n_loss, pdata->n_draw);
             dstr->Append(stemp);
             dstr->Append(EndCol);
         }
@@ -1010,7 +1011,7 @@ Crosstable::PrintSwiss (DString * dstr, uint playerLimit)
         if (OutputFormat == CROSSTABLE_LaTeX) {
             dstr->Append (" \\multicolumn{1}{c}{\\bf ", round, "} & ");
         } else {
-            sprintf (stemp, " %s%*d ", SwissColors ? " " : "",
+            std::snprintf(stemp, sizeof(stemp), " %s%*d ", SwissColors ? " " : "",
                      PlayerNumWidth, round);
             dstr->Append (StartBoldCol, stemp, EndBoldCol);
         }
@@ -1045,31 +1046,31 @@ Crosstable::PrintSwiss (DString * dstr, uint playerLimit)
         }
         previousScore = pdata->score;
 
-        sprintf (stemp, "%*u: ", PlayerNumWidth, player+1);
+        std::snprintf(stemp, sizeof(stemp), "%*u: ", PlayerNumWidth, player+1);
         dstr->Append (StartRow, StartRightCol, stemp, EndRightCol);
 
         PrintPlayer (dstr, pdata);
 
         if (OutputFormat == CROSSTABLE_LaTeX) {
-            sprintf (stemp, " %2u%c%c ", pdata->score / 2, DecimalPointChar,
+            std::snprintf(stemp, sizeof(stemp), " %2u%c%c ", pdata->score / 2, DecimalPointChar,
                      (pdata->score & 1 ? '5' : '0'));
             dstr->Append (StartRightCol, stemp, EndRightCol);
-            sprintf (stemp, " %2u  ", pdata->gameCount);
+            std::snprintf(stemp, sizeof(stemp), " %2u  ", pdata->gameCount);
             dstr->Append (StartRightCol, stemp, EndRightCol);
         } else {
             if (ThreeWin) {
-	      sprintf (stemp, " %2u%c%c  ",
+	      std::snprintf(stemp, sizeof(stemp), " %2u%c%c  ",
 		       pdata->score / 2, DecimalPointChar,
 		       (pdata->score & 1 ? '5' : '0'));
             } else {
-	      sprintf (stemp, " %2u%c%c / %2u  ",
+	      std::snprintf(stemp, sizeof(stemp), " %2u%c%c / %2u  ",
 		       pdata->score / 2, DecimalPointChar,
 		       (pdata->score & 1 ? '5' : '0'), pdata->gameCount);
             }
             dstr->Append (StartRightCol, stemp, EndRightCol);
         }
         if (PrintTiebreaks) {
-            sprintf (stemp, "%2u%c%c ", pdata->tiebreak / 2,
+            std::snprintf(stemp, sizeof(stemp), "%2u%c%c ", pdata->tiebreak / 2,
                      DecimalPointChar, (pdata->tiebreak & 1 ? '5' : '0'));
             dstr->Append (StartRightCol, stemp, EndRightCol);
         }
@@ -1083,20 +1084,20 @@ Crosstable::PrintSwiss (DString * dstr, uint playerLimit)
                 if (PlayerNumWidth == 3) { dstr->AddChar ('.'); }
                 if (SwissColors) { dstr->AddChar ('.'); }
             } else {
-                if (OutputFormat == CROSSTABLE_Hypertext) {
-                    if (CurrentGame == clash->gameNum)
-                      sprintf (stemp, "<green><g_%u>", clash->gameNum);
-                    else
-                      sprintf (stemp, "<blue><g_%u>", clash->gameNum);
-                    dstr->Append (stemp);
-                }
-                if (SwissColors) {
-                    sprintf (stemp, "%*d%c%s", PlayerNumWidth,
+                    if (OutputFormat == CROSSTABLE_Hypertext) {
+                        if (CurrentGame == clash->gameNum)
+                      std::snprintf(stemp, sizeof(stemp), "<green><g_%u>", clash->gameNum);
+                        else
+                      std::snprintf(stemp, sizeof(stemp), "<blue><g_%u>", clash->gameNum);
+                        dstr->Append (stemp);
+                    }
+                    if (SwissColors) {
+                    std::snprintf(stemp, sizeof(stemp), "%*d%c%s", PlayerNumWidth,
                              InvertedIndex[clash->opponent] + 1,
                              clash->color == WHITE ? 'w' : 'b',
                              resultStr[clash->result]);
                 } else {
-                    sprintf (stemp, "%*d%s", PlayerNumWidth,
+                    std::snprintf(stemp, sizeof(stemp), "%*d%s", PlayerNumWidth,
                              InvertedIndex[clash->opponent] + 1,
                              resultStr[clash->result]);
                 }
@@ -1115,7 +1116,7 @@ Crosstable::PrintSwiss (DString * dstr, uint playerLimit)
 
         if (PrintTallies) {
             dstr->Append (StartCol);
-            sprintf (stemp, "  (+%u -%u =%u)", pdata->n_won, pdata->n_loss, pdata->n_draw);
+            std::snprintf(stemp, sizeof(stemp), "  (+%u -%u =%u)", pdata->n_won, pdata->n_loss, pdata->n_draw);
             dstr->Append (stemp);
             dstr->Append (EndCol);
         }
@@ -1190,17 +1191,17 @@ Crosstable::PrintKnockout (DString * dstr, uint playerLimit)
                     clash = clash->next;
                 }
                 if (clash != NULL) {
-                    if (OutputFormat == CROSSTABLE_Hypertext) {
-                        if (CurrentGame == clash->gameNum)
-                            sprintf (stemp, "<green><g_%u>%c</g></green>",
-                                     clash->gameNum,
-                                     RESULT_CHAR[clash->result]);
-                        else
-                            sprintf (stemp, "<blue><g_%u>%c</g></blue>",
-                                     clash->gameNum,
-                                     RESULT_CHAR[clash->result]);
-                        dstr->Append (stemp);
-                    } else {
+                        if (OutputFormat == CROSSTABLE_Hypertext) {
+                            if (CurrentGame == clash->gameNum)
+                                std::snprintf(stemp, sizeof(stemp), "<green><g_%u>%c</g></green>",
+                                         clash->gameNum,
+                                         RESULT_CHAR[clash->result]);
+                            else
+                                std::snprintf(stemp, sizeof(stemp), "<blue><g_%u>%c</g></blue>",
+                                         clash->gameNum,
+                                         RESULT_CHAR[clash->result]);
+                            dstr->Append (stemp);
+                        } else {
                         dstr->AddChar (RESULT_CHAR[clash->result]);
                     }
                     clash = clash->next;
@@ -1212,13 +1213,13 @@ Crosstable::PrintKnockout (DString * dstr, uint playerLimit)
             dstr->Append (" ", EndCol);
 
             if (OutputFormat == CROSSTABLE_LaTeX) {
-                sprintf (stemp, " %2u%c%c ", score / 2, DecimalPointChar,
+                std::snprintf(stemp, sizeof(stemp), " %2u%c%c ", score / 2, DecimalPointChar,
                          (score & 1 ? '5' : '0'));
                 dstr->Append (StartRightCol, stemp, EndRightCol);
-                sprintf (stemp, " %2u  ", nGames);
+                std::snprintf(stemp, sizeof(stemp), " %2u  ", nGames);
                 dstr->Append (StartRightCol, stemp, EndRightCol);
             } else {
-                sprintf (stemp, "%2u%c%c / %2u   ",
+                std::snprintf(stemp, sizeof(stemp), "%2u%c%c / %2u   ",
                          score / 2, DecimalPointChar,
                          (score & 1 ? '5' : '0'), nGames);
                 dstr->Append (StartRightCol, stemp, EndRightCol);

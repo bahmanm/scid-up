@@ -22,6 +22,8 @@
 #include "sqmove.h"
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <string>
 #include <vector>
 
 namespace {
@@ -2504,77 +2506,87 @@ errorT Position::ReadFromFENorUCI(std::string_view str) {
     return MakeCoordMoves(str.data(), str.size());
 }
 
-void Position::PrintFEN(char* str) const {
+void Position::PrintFEN(char* str, size_t len) const {
     ASSERT(str != NULL);
-    uint emptyRun, iRank, iFyle;
-    for (iRank = 0; iRank < 8; iRank++) {
+    if (len == 0) {
+        return;
+    }
+
+    std::string fen;
+    fen.reserve(128);
+
+    for (uint iRank = 0; iRank < 8; iRank++) {
         const pieceT* pBoard = &(Board[(7 - iRank) * 8]);
-        emptyRun = 0;
+        uint emptyRun = 0;
         if (iRank > 0) {
-            *str++ = '/';
+            fen.push_back('/');
         }
-        for (iFyle = 0; iFyle < 8; iFyle++, pBoard++) {
+        for (uint iFyle = 0; iFyle < 8; iFyle++, pBoard++) {
             if (*pBoard != EMPTY) {
                 if (emptyRun) {
-                    *str++ = (byte)emptyRun + '0';
+                    fen.push_back(static_cast<char>(emptyRun + '0'));
                 }
                 emptyRun = 0;
-                *str++ = PIECE_CHAR[*pBoard];
+                fen.push_back(PIECE_CHAR[*pBoard]);
             } else {
                 emptyRun++;
             }
         }
         if (emptyRun) {
-            *str++ = (byte)emptyRun + '0';
+            fen.push_back(static_cast<char>(emptyRun + '0'));
         }
     }
 
-    *str++ = ' ';
-    *str++ = (ToMove == WHITE ? 'w' : 'b');
+    fen.push_back(' ');
+    fen.push_back(ToMove == WHITE ? 'w' : 'b');
 
-    // Add the castling flags and EP flag as well:
-    *str++ = ' ';
-    const auto no_flags = str;
+    // Castling flags.
+    fen.push_back(' ');
+    const auto no_flags_len = fen.size();
     if (validCastlingFlag(WHITE, true)) {
         auto rook_sq = castleRookSq(WHITE, true);
-        *str++ = isChess960() && rook_sq != find_castle_rook(WHITE, H1)
-                     ? toupper(square_FyleChar(rook_sq))
-                     : 'K';
+        fen.push_back(isChess960() && rook_sq != find_castle_rook(WHITE, H1)
+                          ? static_cast<char>(toupper(square_FyleChar(rook_sq)))
+                          : 'K');
     }
     if (validCastlingFlag(WHITE, false)) {
         auto rook_sq = castleRookSq(WHITE, false);
-        *str++ = isChess960() && rook_sq != find_castle_rook(WHITE, A1)
-                     ? toupper(square_FyleChar(rook_sq))
-                     : 'Q';
+        fen.push_back(isChess960() && rook_sq != find_castle_rook(WHITE, A1)
+                          ? static_cast<char>(toupper(square_FyleChar(rook_sq)))
+                          : 'Q');
     }
     if (validCastlingFlag(BLACK, true)) {
         auto rook_sq = castleRookSq(BLACK, true);
-        *str++ = isChess960() && rook_sq != find_castle_rook(BLACK, H8)
-                     ? square_FyleChar(rook_sq)
-                     : 'k';
+        fen.push_back(isChess960() && rook_sq != find_castle_rook(BLACK, H8)
+                          ? square_FyleChar(rook_sq)
+                          : 'k');
     }
     if (validCastlingFlag(BLACK, false)) {
         auto rook_sq = castleRookSq(BLACK, false);
-        *str++ = isChess960() && rook_sq != find_castle_rook(BLACK, A8)
-                     ? square_FyleChar(rook_sq)
-                     : 'q';
+        fen.push_back(isChess960() && rook_sq != find_castle_rook(BLACK, A8)
+                          ? square_FyleChar(rook_sq)
+                          : 'q');
     }
-    if (str == no_flags) {
-        *str++ = '-';
+    if (fen.size() == no_flags_len) {
+        fen.push_back('-');
     }
-    *str++ = ' ';
 
-    // Now the EP target square:
+    // EP target square.
+    fen.push_back(' ');
     if (EPTarget == NULL_SQUARE) {
-        *str++ = '-';
+        fen.push_back('-');
     } else {
-        *str++ = square_FyleChar(EPTarget);
-        *str++ = square_RankChar(EPTarget);
+        fen.push_back(square_FyleChar(EPTarget));
+        fen.push_back(square_RankChar(EPTarget));
     }
 
-    // Also print the Halfmove and ply counters:
-    *str++ = ' ';
-    sprintf(str, "%d %d", HalfMoveClock, (PlyCounter / 2) + 1);
+    // Halfmove clock and fullmove number.
+    fen.push_back(' ');
+    fen.append(std::to_string(HalfMoveClock));
+    fen.push_back(' ');
+    fen.append(std::to_string((PlyCounter / 2) + 1));
+
+    std::snprintf(str, len, "%s", fen.c_str());
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2623,12 +2635,12 @@ Position::DumpHtmlBoard (DString * dstr, uint style, const char * dir, bool flip
             dstr->Append ("  <td><img border=0 ");
             if (width > 0) {
                 char temp[40];
-                sprintf (temp, "width=%u ", width);
+                std::snprintf(temp, sizeof(temp), "width=%u ", width);
                 dstr->Append (temp);
             }
             if (height > 0) {
                 char temp[40];
-                sprintf (temp, "height=%u ", height);
+                std::snprintf(temp, sizeof(temp), "height=%u ", height);
                 dstr->Append (temp);
             }
             dstr->Append ("src=\"");

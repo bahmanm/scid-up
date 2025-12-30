@@ -43,6 +43,7 @@
 #include "dbasepool.h"
 #include "ui.h"
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <numeric>
@@ -194,7 +195,7 @@ inline int
 appendUintResult (Tcl_Interp * ti, uint i)
 {
     char temp [20];
-    sprintf (temp, "%u", i);
+    std::snprintf(temp, sizeof(temp), "%u", i);
     AppendResult (ti, temp, NULL);
     return TCL_OK;
 }
@@ -207,7 +208,7 @@ inline uint
 appendUintElement (Tcl_Interp * ti, uint i)
 {
     char temp[20];
-    sprintf (temp, "%u", i);
+    std::snprintf(temp, sizeof(temp), "%u", i);
     AppendElement (ti, temp);
     return TCL_OK;
 }
@@ -220,7 +221,7 @@ inline int
 setUintWidthResult (Tcl_Interp * ti, uint i, uint width)
 {
     char temp [20];
-    sprintf (temp, "%0*u", width, i);
+    std::snprintf(temp, sizeof(temp), "%0*u", width, i);
     Tcl_SetObjResult (ti, Tcl_NewStringObj(temp, -1));
     return TCL_OK;
 }
@@ -1699,7 +1700,7 @@ sc_filter_stats (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     uint percentScore = results[RESULT_White] * 2 + results[RESULT_Draw] +
         results[RESULT_None];
     percentScore = total ? percentScore * 500 / total : 0;
-    sprintf (temp, "%7u %7u %7u %7u   %3u%c%u%%",
+    std::snprintf(temp, sizeof(temp), "%7u %7u %7u %7u   %3u%c%u%%",
              total,
              results[RESULT_White],
              results[RESULT_Draw],
@@ -2389,7 +2390,7 @@ sc_game_crosstable (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     }
 
     char stemp[1000];
-    sprintf (stemp, "%s%s%s, ", g->GetEventStr(), newlineStr, g->GetSiteStr());
+    std::snprintf(stemp, sizeof(stemp), "%s%s%s, ", g->GetEventStr(), newlineStr, g->GetSiteStr());
     AppendResult (ti, stemp, NULL);
     date_DecodeToString (firstSeenDate, stemp);
     strTrimDate (stemp);
@@ -2408,7 +2409,7 @@ sc_game_crosstable (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
         appendUintResult (ti, avgElo);
         uint category = ctable->FideCategory (avgElo);
         if (category > 0  &&  mode == CROSSTABLE_AllPlayAll) {
-            sprintf (stemp, "  (%s %u)",
+            std::snprintf(stemp, sizeof(stemp), "  (%s %u)",
                      translate (ti, "Category", "Category"), category);
             AppendResult (ti, stemp, NULL);
         }
@@ -2680,35 +2681,37 @@ sc_game_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     }
 
     const char * gameStr = translate (ti, "game");
-    sprintf (temp, "%c%s %u:  <pi %s>%s</pi>", toupper(gameStr[0]),
+    std::snprintf(temp, sizeof(temp), "%c%s %u:  <pi %s>%s</pi>", toupper(gameStr[0]),
              gameStr + 1, db->gameNumber + 1,
              db->game->GetWhiteStr(), db->game->GetWhiteStr());
     if (auto whCountry = db->game->FindExtraTag("WhiteCountry"))
-        sprintf(temp + std::strlen(temp), " (%s)", whCountry);
+        std::snprintf(temp + std::strlen(temp), sizeof(temp) - std::strlen(temp),
+                      " (%s)", whCountry);
 
     AppendResult (ti, temp, NULL);
     eloT elo = db->game->GetWhiteElo();
     if (elo != 0) {
-        sprintf (temp, " <red>%u</red>", elo);
+        std::snprintf(temp, sizeof(temp), " <red>%u</red>", elo);
         AppendResult (ti, temp, NULL);
     }
-    sprintf (temp, "  --  <pi %s>%s</pi>",
+    std::snprintf(temp, sizeof(temp), "  --  <pi %s>%s</pi>",
              db->game->GetBlackStr(), db->game->GetBlackStr());
     if (auto blCountry = db->game->FindExtraTag("BlackCountry"))
-        sprintf(temp + std::strlen(temp), " (%s)", blCountry);
+        std::snprintf(temp + std::strlen(temp), sizeof(temp) - std::strlen(temp),
+                      " (%s)", blCountry);
 
     AppendResult (ti, temp, NULL);
     elo = db->game->GetBlackElo();
     if (elo != 0) {
-        sprintf (temp, " <red>%u</red>", elo);
+        std::snprintf(temp, sizeof(temp), " <red>%u</red>", elo);
         AppendResult (ti, temp, NULL);
     }
 
     if (hideNextMove) {
-        sprintf (temp, "<br>(%s: %s)",
+        std::snprintf(temp, sizeof(temp), "<br>(%s: %s)",
                  translate (ti, "Result"), translate (ti, "hidden"));
     } else {
-        sprintf (temp, "<br>%s <red>(%u)</red>",
+        std::snprintf(temp, sizeof(temp), "<br>%s <red>(%u)</red>",
                  RESULT_LONGSTR[db->game->GetResult()],
                  (db->game->GetNumHalfMoves() + 1) / 2);
     }
@@ -2784,7 +2787,8 @@ sc_game_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
                               translate (ti, "twin"), ")</run></blue>", NULL);
         }
     }
-    sprintf (temp, "<br><gray><run ::crosstab::Open>%s:  %s</run> (%s)</gray><br>",
+    std::snprintf(temp, sizeof(temp),
+                  "<br><gray><run ::crosstab::Open>%s:  %s</run> (%s)</gray><br>",
              db->game->GetSiteStr(),
              db->game->GetEventStr(),
              db->game->GetRoundStr());
@@ -2810,8 +2814,8 @@ sc_game_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
         strAppend (temp, ")");
         printNags = false;
     } else {
-        sprintf (temp, "<run ::move::Back>%u.%s%s</run>",
-                 prevMoveCount, toMove==WHITE ? ".." : "", tempTrans);//san);
+        std::snprintf(temp, sizeof(temp), "<run ::move::Back>%u.%s%s</run>",
+	                 prevMoveCount, toMove==WHITE ? ".." : "", tempTrans);//san);
         printNags = true;
     }
     AppendResult (ti, translate (ti, "LastMove", "Last move"), NULL);
@@ -2843,13 +2847,13 @@ sc_game_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
         strAppend (temp, ")");
         printNags = false;
     } else if (hideNextMove) {
-        sprintf (temp, "%u.%s(", moveCount, toMove==WHITE ? "" : "..");
+        std::snprintf(temp, sizeof(temp), "%u.%s(", moveCount, toMove==WHITE ? "" : "..");
         strAppend (temp, translate (ti, "hidden"));
         strAppend (temp, ")");
         printNags = false;
     } else {
-        sprintf (temp, "<run ::move::Forward>%u.%s%s</run>",
-                 moveCount, toMove==WHITE ? "" : "..", tempTrans);//san);
+        std::snprintf(temp, sizeof(temp), "<run ::move::Forward>%u.%s%s</run>",
+	                 moveCount, toMove==WHITE ? "" : "..", tempTrans);//san);
         printNags = true;
     }
     AppendResult (ti, "   ", translate (ti, "NextMove", "Next"), NULL);
@@ -2876,13 +2880,13 @@ sc_game_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     if (showMaterialValue) {
         uint mWhite = db->game->GetCurrentPos()->MaterialValue (WHITE);
         uint mBlack = db->game->GetCurrentPos()->MaterialValue (BLACK);
-        sprintf (temp, "    <gray>(%u-%u", mWhite, mBlack);
+        std::snprintf(temp, sizeof(temp), "    <gray>(%u-%u", mWhite, mBlack);
         AppendResult (ti, temp, NULL);
         if (mWhite > mBlack) {
-            sprintf (temp, ":+%u", mWhite - mBlack);
+            std::snprintf(temp, sizeof(temp), ":+%u", mWhite - mBlack);
             AppendResult (ti, temp, NULL);
         } else if (mBlack > mWhite) {
-            sprintf (temp, ":-%u", mBlack - mWhite);
+            std::snprintf(temp, sizeof(temp), ":-%u", mBlack - mWhite);
             AppendResult (ti, temp, NULL);
         }
         AppendResult (ti, ")</gray>", NULL);
@@ -2899,14 +2903,14 @@ sc_game_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             db->game->GetSAN (s);
             strcpy(tempTrans, s);
             transPieces(tempTrans);
-            sprintf (temp, "   <run sc_var enter %u; updateBoard -animate>v%u",
-                     vnum, vnum+1);
+            std::snprintf(temp, sizeof(temp), "   <run sc_var enter %u; updateBoard -animate>v%u",
+	                     vnum, vnum+1);
             AppendResult (ti, "<green>", temp, "</green>: ", NULL);
             if (s[0] == 0) {
-                sprintf (temp, "<darkblue>(empty)</darkblue>");
+                std::snprintf(temp, sizeof(temp), "<darkblue>(empty)</darkblue>");
             } else {
-                sprintf (temp, "<darkblue>%u.%s%s</darkblue>",
-                         moveCount, toMove == WHITE ? "" : "..", tempTrans);//s);
+                std::snprintf(temp, sizeof(temp), "<darkblue>%u.%s%s</darkblue>",
+	                         moveCount, toMove == WHITE ? "" : "..", tempTrans);//s);
             }
             AppendResult (ti, temp, NULL);
             byte * firstNag = db->game->GetNextNags();
@@ -2981,7 +2985,7 @@ sc_game_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     }
     if (showFEN) {
         char boardStr [200];
-        db->game->GetCurrentPos()->PrintFEN (boardStr);
+        db->game->GetCurrentPos()->PrintFEN(boardStr, sizeof(boardStr));
         AppendResult (ti, "<br><gray>", boardStr, "</gray>", NULL);
     }
     return TCL_OK;
@@ -3219,11 +3223,11 @@ sc_game_moves (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     for (uint i = plyCount; i > 0; i--, count++) {
         char move [20];
         if (sanFormat) {
-            move[0] = 0;
-            if (printMoves  &&  (count % 2 == 0)) {
-                sprintf (move, "%u.", (count / 2) + 1);
-            }
-            strAppend (move, moveStrings[i - 1]);
+	            move[0] = 0;
+	            if (printMoves  &&  (count % 2 == 0)) {
+	                std::snprintf(move, sizeof(move), "%u.", (count / 2) + 1);
+	            }
+	            strAppend (move, moveStrings[i - 1]);
         } else {
             strCopy (move, moveStrings [i - 1]);
         }
@@ -3658,13 +3662,13 @@ UI_res_t sc_base_gamesummary(const scidBaseT& base, UI_handle_t ti, int argc,
             uint moveCount = g->GetCurrentPos()->GetFullMoveCount();
             char san [20];
             g->GetSAN (san);
-            if (san[0] != 0) {
-                char temp[40];
-                if (toMove == WHITE) {
-                    sprintf (temp, "%u.%s", moveCount, san);
-                } else {
-                    strCopy (temp, san);
-                }
+	            if (san[0] != 0) {
+	                char temp[40];
+	                if (toMove == WHITE) {
+	                    std::snprintf(temp, sizeof(temp), "%u.%s", moveCount, san);
+	                } else {
+	                    strCopy (temp, san);
+	                }
                 byte * nags = g->GetNextNags();
                 if (*nags != 0) {
                     for (uint nagCount = 0 ; nags[nagCount] != 0; nagCount++) {
@@ -4627,7 +4631,7 @@ sc_pos (ClientData cd, Tcl_Interp * ti, int argc, const char ** argv)
         break;
 
     case POS_FEN:
-        db->game->GetCurrentPos()->PrintFEN (boardStr);
+        db->game->GetCurrentPos()->PrintFEN(boardStr, sizeof(boardStr));
         AppendResult (ti, boardStr, NULL);
         break;
 
@@ -5474,13 +5478,14 @@ static UI_res_t sc_name_elo(UI_handle_t ti, const SpellChecker& sp, int argc,
 	if (auto vElo = sp.getPlayerElo(playerName)) {
 		for (uint year = startYear; year < YEAR_MAX; year++) {
 			for (uint month = 1; month < 13; month++) {
-				if (eloT elo = vElo->getElo(DATE_MAKE(year, month, 15))) {
-					char temp[500];
-					sprintf(temp, "%4u.%02u", year, (month - 1) * 100 / 12);
-					res.push_back(temp);
-					sprintf(temp, "%4u", elo);
-					res.push_back(temp);
-				}
+					if (eloT elo = vElo->getElo(DATE_MAKE(year, month, 15))) {
+						char temp[500];
+						std::snprintf(temp, sizeof(temp), "%4u.%02u", year,
+						              (month - 1) * 100 / 12);
+						res.push_back(temp);
+						std::snprintf(temp, sizeof(temp), "%4u", elo);
+						res.push_back(temp);
+					}
 			}
 		}
 	}
@@ -5737,7 +5742,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
         const PlayerInfo* pInfo = spChecker->getPlayerInfo(playerName);
         if (pInfo) { AppendResult (ti, "  ", pInfo->GetComment(), newline, NULL); }
     }
-    sprintf (temp, "  %s%u%s %s (%s: %u)",
+    std::snprintf(temp, sizeof(temp), "  %s%u%s %s (%s: %u)",
              htextOutput ? "<red><run sc_name info -faA {}; ::windows::stats::Refresh>" : "",
              totalcount[STATS_ALL],
              htextOutput ? "</run></red>" : "",
@@ -5787,7 +5792,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             + whitescore[STATS_ALL][RESULT_None];
         percent = score * 5000 / whitecount[STATS_ALL];
     }
-    sprintf (temp, fmt,
+    std::snprintf(temp, sizeof(temp), fmt,
              htextOutput ? "<tt>" : "",
              wbtWidth,
              translate (ti, "White:"),
@@ -5814,7 +5819,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             + blackscore[STATS_ALL][RESULT_None];
         percent = score * 5000 / blackcount[STATS_ALL];
     }
-    sprintf (temp, fmt,
+    std::snprintf(temp, sizeof(temp), fmt,
              htextOutput ? "<tt>" : "",
              wbtWidth,
              translate (ti, "Black:"),
@@ -5841,7 +5846,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             + bothscore[STATS_ALL][RESULT_None];
         percent = score * 5000 / totalcount[STATS_ALL];
     }
-    sprintf (temp, fmt,
+    std::snprintf(temp, sizeof(temp), fmt,
              htextOutput ? "<tt>" : "",
              wbtWidth,
              translate (ti, "Total:"),
@@ -5874,7 +5879,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             + whitescore[STATS_FILTER][RESULT_None];
         percent = score * 5000 / whitecount[STATS_FILTER];
     }
-    sprintf (temp, fmt,
+    std::snprintf(temp, sizeof(temp), fmt,
              htextOutput ? "<tt>" : "",
              wbtWidth,
              translate (ti, "White:"),
@@ -5894,7 +5899,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             + blackscore[STATS_FILTER][RESULT_None];
         percent = score * 5000 / blackcount[STATS_FILTER];
     }
-    sprintf (temp, fmt,
+    std::snprintf(temp, sizeof(temp), fmt,
              htextOutput ? "<tt>" : "",
              wbtWidth,
              translate (ti, "Black:"),
@@ -5914,7 +5919,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             + bothscore[STATS_FILTER][RESULT_None];
         percent = score * 5000 / totalcount[STATS_FILTER];
     }
-    sprintf (temp, fmt,
+    std::snprintf(temp, sizeof(temp), fmt,
              htextOutput ? "<tt>" : "",
              wbtWidth,
              translate (ti, "Total:"),
@@ -5942,7 +5947,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             + whitescore[STATS_OPP][RESULT_None];
             percent = score * 5000 / whitecount[STATS_OPP];
         }
-        sprintf (temp, fmt,
+        std::snprintf(temp, sizeof(temp), fmt,
                  htextOutput ? "<tt>" : "",
                  wbtWidth,
                  translate (ti, "White:"),
@@ -5969,7 +5974,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
                 + blackscore[STATS_OPP][RESULT_None];
             percent = score * 5000 / blackcount[STATS_OPP];
         }
-        sprintf (temp, fmt,
+        std::snprintf(temp, sizeof(temp), fmt,
                  htextOutput ? "<tt>" : "",
                  wbtWidth,
                  translate (ti, "Black:"),
@@ -5996,7 +6001,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
                 + bothscore[STATS_OPP][RESULT_None];
             percent = score * 5000 / totalcount[STATS_OPP];
     }
-        sprintf (temp, fmt,
+        std::snprintf(temp, sizeof(temp), fmt,
                  htextOutput ? "<tt>" : "",
                  wbtWidth,
                  translate (ti, "Total:"),
@@ -6052,7 +6057,7 @@ sc_name_info (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
                 if (htextOutput) {
                     AppendResult (ti, "</run></blue>", NULL);
                 }
-                sprintf (temp, ":%3u (%u%%)", mostPlayed,
+                std::snprintf(temp, sizeof(temp), ":%3u (%u%%)", mostPlayed,
                          ecoScore[color][mostPlayedIdx] * 50 / mostPlayed);
                 AppendResult (ti, temp, NULL);
                 ecoCount[color][mostPlayedIdx] = 0;
@@ -6522,7 +6527,7 @@ UI_res_t sc_name_spellcheck (UI_handle_t ti, scidBaseT& dbase, const SpellChecke
             }
             if (i==0) correctionCount++;
 
-            sprintf (tempStr, "%s\"%s\"\t>> \"%s\" (%u)",
+            std::snprintf(tempStr, sizeof(tempStr), "%s\"%s\"\t>> \"%s\" (%u)",
                               strAmbiguous,
                               origName,
                               corrections[i],
@@ -6558,7 +6563,7 @@ UI_res_t sc_name_spellcheck (UI_handle_t ti, scidBaseT& dbase, const SpellChecke
 
     // Now generate the return message:
     static const char* NAME_TYPE_STRING[] = {"player", "event", "site", "round"};
-    sprintf (tempStr, "Scid found %u %s name correction%s.\n",
+    std::snprintf(tempStr, sizeof(tempStr), "Scid found %u %s name correction%s.\n",
              correctionCount, NAME_TYPE_STRING[nt],
              strPlural (correctionCount));
     std::string res = tempStr;
@@ -7161,27 +7166,28 @@ sc_tree_stats (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
                               ? 0
                               : static_cast<int>(node.eloPerformance());
 
-        sprintf(temp, "  %3d%c%1d%%", score / 10, decimalPointChar, score % 10);
+        std::snprintf(temp, sizeof(temp), "  %3d%c%1d%%", score / 10,
+                      decimalPointChar, score % 10);
         dest.append(temp);
         if (avgElo == 0) {
             dest.append("      ");
         } else {
-            sprintf(temp, "  %4d", avgElo);
+            std::snprintf(temp, sizeof(temp), "  %4d", avgElo);
             dest.append(temp);
         }
         if (perf == 0) {
             dest.append("      ");
         } else {
-            sprintf(temp, "  %4d", perf);
+            std::snprintf(temp, sizeof(temp), "  %4d", perf);
             dest.append(temp);
         }
         if (avgYear == 0) {
             dest.append("      ");
         } else {
-            sprintf(temp, "  %4d", avgYear);
+            std::snprintf(temp, sizeof(temp), "  %4d", avgYear);
             dest.append(temp);
         }
-        sprintf(temp, "  %3d%%", pctDraws);
+        std::snprintf(temp, sizeof(temp), "  %3d%%", pctDraws);
         dest.append(temp);
     };
 
@@ -7207,7 +7213,7 @@ sc_tree_stats (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
             ecoStringT ecoStr;
             eco_ToExtendedString(eco, ecoStr);
             auto freq = long(1000ll * node.freq[0] / totals.freq[0]);
-            sprintf (temp, "\n%2u: %-6s %-5s %7u:%3ld%c%1ld%%",
+            std::snprintf(temp, sizeof(temp), "\n%2u: %-6s %-5s %7u:%3ld%c%1ld%%",
                      ++count,
                      hideMoves ? "---" : tempTrans,//node->san,
                      hideMoves ? "" : ecoStr,
@@ -7222,7 +7228,7 @@ sc_tree_stats (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
         // Print a totals line as well, if there are any moves in the tree:
         const char * totalString = translate (ti, "TreeTotal:", "TOTAL:");
         output.append("\n_______________________________________________________________\n");
-        sprintf (temp, "%-12s     %7u:100%c0%%",
+        std::snprintf(temp, sizeof(temp), "%-12s     %7u:100%c0%%",
                  totalString, totals.freq[0], decimalPointChar);
         output.append(temp);
         format_output(totals, output);
@@ -7514,7 +7520,7 @@ int sc_search_board(Tcl_Interp* ti, const scidBaseT* dbase, HFilter filter,
     if (gameNum != dbase->numGames()) {
         AppendResult (ti, errMsgSearchInterrupted(ti), "  ", NULL);
     }
-    sprintf (temp, "%lu / %lu  (%d%c%02d s)",
+    std::snprintf(temp, sizeof(temp), "%lu / %lu  (%d%c%02d s)",
              static_cast<unsigned long>(filter->size()),
              static_cast<unsigned long>(startFilterCount),
              centisecs / 100, decimalPointChar, centisecs % 100);
@@ -7924,7 +7930,7 @@ sc_search_material (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     if (gameNum != n) {
         AppendResult (ti, errMsgSearchInterrupted(ti), "  ", NULL);
     }
-    sprintf (temp, "%lu / %lu  (%d%c%02d s)",
+    std::snprintf(temp, sizeof(temp), "%lu / %lu  (%d%c%02d s)",
              static_cast<unsigned long>(filter->size()),
              static_cast<unsigned long>(startFilterCount),
              centisecs / 100, decimalPointChar, centisecs % 100);
@@ -8436,7 +8442,7 @@ sc_book_moves (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     }
     uint slot = strGetUnsigned (argv[2]);
     char boardStr[100];
-    db->game->GetCurrentPos()->PrintFEN(boardStr);
+    db->game->GetCurrentPos()->PrintFEN(boardStr, sizeof(boardStr));
 
     char moves[1024] = {};
     auto extra_info = polyglot_moves(moves, boardStr, slot);
@@ -8459,14 +8465,14 @@ sc_book_moves (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
 int
 sc_book_positions (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
 {
-		char moves[200] = "";
-		char boardStr[100];
+			char moves[200] = "";
+			char boardStr[100];
     if (argc != 3) {
         return errorResult (ti, "Usage: sc_book positions slot");
     }
-    uint slot = strGetUnsigned (argv[2]);
-		db->game->GetCurrentPos()->PrintFEN (boardStr);
-		polyglot_positions(moves, (const char *) boardStr, slot);
+	    uint slot = strGetUnsigned (argv[2]);
+			db->game->GetCurrentPos()->PrintFEN(boardStr, sizeof(boardStr));
+			polyglot_positions(moves, (const char *) boardStr, slot);
     AppendResult (ti, moves, NULL);
     return TCL_OK;
 }
