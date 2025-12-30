@@ -738,7 +738,6 @@ search/search.tcl
 search/board.tcl
 search/header.tcl
 search/material.tcl
-contrib/ezsmtp/ezsmtp.tcl
 tools/import.tcl
 tools/optable.tcl
 tools/preport.tcl
