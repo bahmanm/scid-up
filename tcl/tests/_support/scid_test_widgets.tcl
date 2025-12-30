@@ -21,6 +21,24 @@ namespace eval ::scid_test::widgets {
 
 	# Store `tag bind` calls per widget, indexed by ($path).
 	array set tagBindCalls {}
+
+	# Store `tag remove` calls per widget, indexed by ($path).
+	array set tagRemoveCalls {}
+
+	# Store `tag add` calls per widget, indexed by ($path).
+	array set tagAddCalls {}
+
+	# Store `tag nextrange` calls per widget, indexed by ($path).
+	array set tagNextRangeCalls {}
+
+	# Store configurable `tag nextrange` results, indexed by ($path,$tagName).
+	array set tagNextRangeResults {}
+
+	# Store `see` calls per widget, indexed by ($path).
+	array set seeCalls {}
+
+	# Store `yview` calls per widget, indexed by ($path).
+	array set yviewCalls {}
 }
 
 # Resets all widget doubles created via this helper.
@@ -31,6 +49,12 @@ proc ::scid_test::widgets::reset {} {
     variable text
     variable tagConfigureCalls
     variable tagBindCalls
+    variable tagRemoveCalls
+    variable tagAddCalls
+    variable tagNextRangeCalls
+    variable tagNextRangeResults
+    variable seeCalls
+    variable yviewCalls
 
     foreach w $created {
         catch {rename $w ""}
@@ -43,6 +67,12 @@ proc ::scid_test::widgets::reset {} {
     array unset text
     array unset tagConfigureCalls
     array unset tagBindCalls
+    array unset tagRemoveCalls
+    array unset tagAddCalls
+    array unset tagNextRangeCalls
+    array unset tagNextRangeResults
+    array unset seeCalls
+    array unset yviewCalls
 }
 
 # Defines a lightweight widget command double.
@@ -129,9 +159,30 @@ proc ::scid_test::widgets::dispatch {path subcmd args} {
 proc ::scid_test::widgets::dispatchText {path subcmd args} {
     variable tagConfigureCalls
     variable tagBindCalls
+    variable tagRemoveCalls
+    variable tagAddCalls
+    variable tagNextRangeCalls
+    variable tagNextRangeResults
+    variable seeCalls
+    variable yviewCalls
 
-    if {$subcmd ne "tag"} {
-        return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
+    switch -- $subcmd {
+        see {
+            # see <index>
+            lappend seeCalls($path) [lindex $args 0]
+            return
+        }
+        yview {
+            # yview moveto <fraction>
+            lappend yviewCalls($path) [list {*}$args]
+            return
+        }
+        tag {
+            # Continue below.
+        }
+        default {
+            return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
+        }
     }
 
     set tagSubcmd [lindex $args 0]
@@ -151,10 +202,43 @@ proc ::scid_test::widgets::dispatchText {path subcmd args} {
             lappend tagBindCalls($path) [list $tagName $sequence $script]
             return
         }
+        remove {
+            # tag remove <tagName> <start> <end>
+            set tagName [lindex $args 1]
+            set start [lindex $args 2]
+            set end [lindex $args 3]
+            lappend tagRemoveCalls($path) [list $tagName $start $end]
+            return
+        }
+        add {
+            # tag add <tagName> <start> <end>
+            set tagName [lindex $args 1]
+            set start [lindex $args 2]
+            set end [lindex $args 3]
+            lappend tagAddCalls($path) [list $tagName $start $end]
+            return
+        }
+        nextrange {
+            # tag nextrange <tagName> <startIndex> ?stopIndex?
+            set tagName [lindex $args 1]
+            set startIndex [lindex $args 2]
+            set stopIndex [lindex $args 3]
+            lappend tagNextRangeCalls($path) [list $tagName $startIndex $stopIndex]
+
+            if {[info exists tagNextRangeResults($path,$tagName)]} {
+                return $tagNextRangeResults($path,$tagName)
+            }
+            return {}
+        }
         default {
             error "Widget $path tag $tagSubcmd not stubbed"
         }
     }
+}
+
+proc ::scid_test::widgets::setTagNextRangeResult {path tagName range} {
+    variable tagNextRangeResults
+    set tagNextRangeResults($path,$tagName) $range
 }
 
 proc ::scid_test::widgets::setState {path opt val} {
@@ -197,6 +281,46 @@ proc ::scid_test::widgets::getTagBindCalls {path} {
         return {}
     }
     return $tagBindCalls($path)
+}
+
+proc ::scid_test::widgets::getTagRemoveCalls {path} {
+    variable tagRemoveCalls
+    if {![info exists tagRemoveCalls($path)]} {
+        return {}
+    }
+    return $tagRemoveCalls($path)
+}
+
+proc ::scid_test::widgets::getTagAddCalls {path} {
+    variable tagAddCalls
+    if {![info exists tagAddCalls($path)]} {
+        return {}
+    }
+    return $tagAddCalls($path)
+}
+
+proc ::scid_test::widgets::getTagNextRangeCalls {path} {
+    variable tagNextRangeCalls
+    if {![info exists tagNextRangeCalls($path)]} {
+        return {}
+    }
+    return $tagNextRangeCalls($path)
+}
+
+proc ::scid_test::widgets::getSeeCalls {path} {
+    variable seeCalls
+    if {![info exists seeCalls($path)]} {
+        return {}
+    }
+    return $seeCalls($path)
+}
+
+proc ::scid_test::widgets::getYviewCalls {path} {
+    variable yviewCalls
+    if {![info exists yviewCalls($path)]} {
+        return {}
+    }
+    return $yviewCalls($path)
 }
 
 proc ::scid_test::widgets::getSteps {path} {

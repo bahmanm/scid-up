@@ -1,0 +1,621 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::pgn {}
+namespace eval ::board {}
+namespace eval ::htext {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows pgn.tcl]
+
+namespace eval ::pgn_test {
+    variable stubbedCommands {}
+
+    variable chooseColorCalls {}
+    variable resetColorsCalls 0
+
+    variable setLanguageTempCalls {}
+    variable clipboardCalls {}
+    variable selectionCalls {}
+    variable scGameCalls {}
+
+    variable undoCalls {}
+    variable scVarCalls {}
+    variable updateBoardCalls {}
+
+    variable scPosCalls {}
+    variable scMoveCalls {}
+    variable boardCalls {}
+    variable destroyCalls {}
+
+    variable htextCalls {}
+    variable setTitleCalls {}
+    variable busyCalls {}
+    variable refreshCalls {}
+    variable updateCurrentMoveCalls {}
+}
+
+proc ::pgn_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::pgn_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::pgn_test::setup {} {
+    ::pgn_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::pgn_test::chooseColorCalls {}
+    set ::pgn_test::resetColorsCalls 0
+
+    set ::pgn_test::setLanguageTempCalls {}
+    set ::pgn_test::clipboardCalls {}
+    set ::pgn_test::selectionCalls {}
+    set ::pgn_test::scGameCalls {}
+
+    set ::pgn_test::undoCalls {}
+    set ::pgn_test::scVarCalls {}
+    set ::pgn_test::updateBoardCalls {}
+
+    set ::pgn_test::scPosCalls {}
+    set ::pgn_test::scMoveCalls {}
+    set ::pgn_test::boardCalls {}
+    set ::pgn_test::destroyCalls {}
+
+    set ::pgn_test::htextCalls {}
+    set ::pgn_test::setTitleCalls {}
+    set ::pgn_test::busyCalls {}
+    set ::pgn_test::refreshCalls {}
+    set ::pgn_test::updateCurrentMoveCalls 0
+
+    # Minimal translations accessed as `$::tr(...)`.
+    if {![info exists ::tr]} { array set ::tr {} }
+    set ::tr(PgnWindowTitle) "PGN %d"
+
+    # Minimal translation proc accessed as `tr ...` in unused paths.
+    ::pgn_test::stubCommand tr {key} { return $key }
+}
+
+proc ::pgn_test::cleanup {} {
+    ::pgn_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::pgnColor}
+    catch {unset ::language}
+    catch {unset ::pgn::showColor}
+    catch {unset ::pgn::symbolicNags}
+    catch {unset ::pgn::indentVars}
+    catch {unset ::pgn::indentComments}
+    catch {unset ::pgn::moveNumberSpaces}
+    catch {unset ::pgn::columnFormat}
+    catch {unset ::pgn::shortHeader}
+    catch {unset ::pgn::stripMarks}
+    catch {unset ::pgn::figurine}
+    catch {unset ::pgn::showPhoto}
+}
+
+# ---- Tests ----
+
+test pgn-ChooseColor-includes-initialcolor-1.0 {ChooseColor uses -initialcolor when existing colour is set and calls ResetColors on selection} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    set ::pgnColor(Current) #111111
+    ::pgn_test::stubCommand tk_chooseColor {args} {
+        set ::pgn_test::chooseColorCalls $args
+        return "#222222"
+    }
+    ::pgn_test::stubCommand ::pgn::ResetColors {} {
+        incr ::pgn_test::resetColorsCalls
+        return
+    }
+
+    # Act
+    ::pgn::ChooseColor Current Current
+
+    # Assert
+    list \
+        $::pgn_test::chooseColorCalls \
+        $::pgnColor(Current) \
+        $::pgn_test::resetColorsCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{-initialcolor #111111 -title {PGN Current color}} #222222 1}
+
+
+test pgn-ChooseColor-cancel-noop-1.0 {ChooseColor does not update colour or call ResetColors when chooser is cancelled} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    set ::pgnColor(Current) #111111
+    ::pgn_test::stubCommand tk_chooseColor {args} {
+        set ::pgn_test::chooseColorCalls $args
+        return ""
+    }
+    ::pgn_test::stubCommand ::pgn::ResetColors {} {
+        error "::pgn::ResetColors should not be called when chooser returns empty"
+    }
+
+    # Act
+    ::pgn::ChooseColor Current Current
+
+    # Assert
+    list $::pgnColor(Current) $::pgn_test::resetColorsCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{#111111} 0}
+
+
+test pgn-PgnClipboardCopy-copies-generated-pgn-1.0 {PgnClipboardCopy generates PGN and places it on the clipboard} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    set ::language "F"
+    set ::pgn::indentComments 1
+    set ::pgn::indentVars 0
+    set ::pgn::moveNumberSpaces 1
+
+    ::pgn_test::stubCommand setLanguageTemp {lang} {
+        lappend ::pgn_test::setLanguageTempCalls $lang
+        return
+    }
+    ::pgn_test::stubCommand sc_game {subcmd args} {
+        lappend ::pgn_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd ne "pgn"} { error "sc_game $subcmd not stubbed in this test" }
+        return "PGNSTR"
+    }
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::pgn_test::stubCommand text {path args} {
+        ::scid_test::widgets::defineTextWidget $path
+        return $path
+    }
+    ::pgn_test::stubCommand clipboard {subcmd args} {
+        lappend ::pgn_test::clipboardCalls [list $subcmd {*}$args]
+        return
+    }
+    ::pgn_test::stubCommand selection {subcmd args} {
+        lappend ::pgn_test::selectionCalls [list $subcmd {*}$args]
+        if {$subcmd eq "get"} { return "PGNSTR" }
+        return
+    }
+
+    # Act
+    ::pgn::PgnClipboardCopy
+
+    # Assert
+    list \
+        $::pgn_test::setLanguageTempCalls \
+        $::pgn_test::scGameCalls \
+        $::pgn_test::clipboardCalls \
+        $::pgn_test::selectionCalls \
+        [::scid_test::widgets::getText .tempFEN]
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{E F} {{pgn -width 75 -indentComments 1 -indentVariations 0 -space 1}} {clear {append PGNSTR}} {{own .tempFEN} get} PGNSTR}
+
+
+test pgn-deleteVar-invokes-undo-var-delete-and-update-1.0 {deleteVar saves undo, deletes variation, and refreshes the board} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::pgn_test::stubCommand undoFeature {subcmd} {
+        lappend ::pgn_test::undoCalls $subcmd
+        return
+    }
+    ::pgn_test::stubCommand sc_var {subcmd args} {
+        lappend ::pgn_test::scVarCalls [list $subcmd {*}$args]
+        return
+    }
+    ::pgn_test::stubCommand updateBoard {args} {
+        lappend ::pgn_test::updateBoardCalls $args
+        return
+    }
+
+    # Act
+    ::pgn::deleteVar
+
+    # Assert
+    list $::pgn_test::undoCalls $::pgn_test::scVarCalls $::pgn_test::updateBoardCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {save delete -pgn}
+
+
+test pgn-firstVar-invokes-undo-var-first-and-update-1.0 {firstVar saves undo, selects first variation, and refreshes the board} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::pgn_test::stubCommand undoFeature {subcmd} {
+        lappend ::pgn_test::undoCalls $subcmd
+        return
+    }
+    ::pgn_test::stubCommand sc_var {subcmd args} {
+        lappend ::pgn_test::scVarCalls [list $subcmd {*}$args]
+        return
+    }
+    ::pgn_test::stubCommand updateBoard {args} {
+        lappend ::pgn_test::updateBoardCalls $args
+        return
+    }
+
+    # Act
+    ::pgn::firstVar
+
+    # Assert
+    list $::pgn_test::undoCalls $::pgn_test::scVarCalls $::pgn_test::updateBoardCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {save first -pgn}
+
+
+test pgn-mainVar-invokes-undo-var-promote-and-update-1.0 {mainVar saves undo, promotes variation, and refreshes the board} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::pgn_test::stubCommand undoFeature {subcmd} {
+        lappend ::pgn_test::undoCalls $subcmd
+        return
+    }
+    ::pgn_test::stubCommand sc_var {subcmd args} {
+        lappend ::pgn_test::scVarCalls [list $subcmd {*}$args]
+        return
+    }
+    ::pgn_test::stubCommand updateBoard {args} {
+        lappend ::pgn_test::updateBoardCalls $args
+        return
+    }
+
+    # Act
+    ::pgn::mainVar
+
+    # Assert
+    list $::pgn_test::undoCalls $::pgn_test::scVarCalls $::pgn_test::updateBoardCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {save promote -pgn}
+
+
+test pgn-ShowBoard-not-flipped-1.0 {ShowBoard moves to the requested ply, reads the board, and restores the offset} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::pgn_test::stubCommand sc_pos {subcmd args} {
+        lappend ::pgn_test::scPosCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            pgnOffset { return 99 }
+            board { return [list ABCDEFG] }
+            default { error "sc_pos $subcmd not stubbed in this test" }
+        }
+    }
+    ::pgn_test::stubCommand sc_move {subcmd arg} {
+        lappend ::pgn_test::scMoveCalls [list $subcmd $arg]
+        return
+    }
+    ::pgn_test::stubCommand ::board::isFlipped {w} {
+        lappend ::pgn_test::boardCalls [list isFlipped $w]
+        return 0
+    }
+    ::pgn_test::stubCommand ::board::popup {w bd x y} {
+        lappend ::pgn_test::boardCalls [list popup $w $bd $x $y]
+        return
+    }
+
+    # Act
+    ::pgn::ShowBoard .pgnWin.text m_15 10 20
+
+    # Assert
+    list $::pgn_test::scMoveCalls $::pgn_test::boardCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{{pgn 15} {pgn 99}} {{isFlipped .main.board} {popup .pgnPopup ABCDEFG 10 20}}}
+
+
+test pgn-ShowBoard-flipped-reverses-board-1.0 {ShowBoard reverses the board string when the main board is flipped} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::pgn_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            pgnOffset { return 42 }
+            board { return [list ABCDEFG] }
+            default { error "sc_pos $subcmd not stubbed in this test" }
+        }
+    }
+    ::pgn_test::stubCommand sc_move {subcmd arg} {
+        lappend ::pgn_test::scMoveCalls [list $subcmd $arg]
+        return
+    }
+    ::pgn_test::stubCommand ::board::isFlipped {w} {
+        return 1
+    }
+    ::pgn_test::stubCommand ::board::popup {w bd x y} {
+        lappend ::pgn_test::boardCalls [list popup $w $bd $x $y]
+        return
+    }
+
+    # Act
+    ::pgn::ShowBoard .pgnWin.text m_3 1 2
+
+    # Assert
+    list $::pgn_test::scMoveCalls $::pgn_test::boardCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{{pgn 3} {pgn 42}} {{popup .pgnPopup GFEDCBA 1 2}}}
+
+
+test pgn-HideBoard-destroys-popup-1.0 {HideBoard destroys the popup window} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::pgn_test::stubCommand destroy {w} {
+        lappend ::pgn_test::destroyCalls $w
+        return
+    }
+
+    # Act
+    ::pgn::HideBoard
+
+    # Assert
+    set ::pgn_test::destroyCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {.pgnPopup}
+
+
+test pgn-ResetColors-noop-when-window-missing-1.0 {ResetColors returns immediately when the PGN window does not exist} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::pgn_test::stubCommand ::htext::init {w} {
+        error "::htext::init should not be called when .pgnWin does not exist"
+    }
+
+    # Act
+    ::pgn::ResetColors
+
+    # Assert
+    return ok
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {ok}
+
+
+test pgn-ResetColors-configures-current-tag-1.0 {ResetColors configures the Current tag background and refreshes the window} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    array set ::pgnColor {Current "#abcdef"}
+    ::scid_test::widgets::defineTextWidget .pgnWin.text
+
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".pgnWin"} { return 1 }
+        return 0
+    }
+    ::pgn_test::stubCommand ::htext::init {w} {
+        lappend ::pgn_test::htextCalls [list init $w]
+        return
+    }
+    ::pgn_test::stubCommand ::htext::updateRate {w rate} {
+        lappend ::pgn_test::htextCalls [list updateRate $w $rate]
+        return
+    }
+    ::pgn_test::stubCommand ::pgn::Refresh {args} {
+        lappend ::pgn_test::refreshCalls $args
+        return
+    }
+
+    # Act
+    ::pgn::ResetColors
+
+    # Assert
+    list \
+        [::scid_test::widgets::getTagConfigureCalls .pgnWin.text] \
+        $::pgn_test::htextCalls \
+        $::pgn_test::refreshCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{{Current -background #abcdef}} {{init .pgnWin.text} {updateRate .pgnWin.text 0}} 1}
+
+
+test pgn-Refresh-no-regenerate-calls-update-current-move-1.0 {Refresh without regeneration calls update_current_move and does not call sc_game pgn} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    set ::pgn::showColor 0
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".pgnWin"} { return 1 }
+        return 0
+    }
+    ::pgn_test::stubCommand sc_game {subcmd args} {
+        error "sc_game should not be called when pgnNeedsUpdate is 0"
+    }
+    ::pgn_test::stubCommand ::pgn::update_current_move {} {
+        incr ::pgn_test::updateCurrentMoveCalls
+        return
+    }
+
+    # Act
+    ::pgn::Refresh 0
+
+    # Assert
+    set ::pgn_test::updateCurrentMoveCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {1}
+
+
+test pgn-Refresh-regenerate-plain-inserts-text-1.0 {Refresh regenerates PGN and inserts plain text when showColor is false} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    ::scid_test::widgets::defineTextWidget .pgnWin.text
+
+    set ::pgn::showColor 0
+    set ::pgn::symbolicNags 1
+    set ::pgn::indentVars 0
+    set ::pgn::indentComments 1
+    set ::pgn::moveNumberSpaces 1
+    set ::pgn::columnFormat 0
+    set ::pgn::shortHeader 0
+    set ::pgn::stripMarks 1
+    set ::pgn::figurine 0
+    set ::pgn::showPhoto 0
+
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".pgnWin"} { return 1 }
+        return 0
+    }
+    ::pgn_test::stubCommand busyCursor {w} {
+        lappend ::pgn_test::busyCalls [list busy $w]
+        return
+    }
+    ::pgn_test::stubCommand unbusyCursor {w} {
+        lappend ::pgn_test::busyCalls [list unbusy $w]
+        return
+    }
+    ::pgn_test::stubCommand ::setTitle {w title} {
+        lappend ::pgn_test::setTitleCalls [list $w $title]
+        return
+    }
+    ::pgn_test::stubCommand sc_game {subcmd args} {
+        lappend ::pgn_test::scGameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            pgn { return "PGNSTR" }
+            number { return 7 }
+            default { error "sc_game $subcmd not stubbed in this test" }
+        }
+    }
+    ::pgn_test::stubCommand ::htext::display {w text} {
+        error "::htext::display should not be used when showColor is false"
+    }
+    ::pgn_test::stubCommand ::pgn::update_current_move {} {
+        incr ::pgn_test::updateCurrentMoveCalls
+        return
+    }
+
+    # Act
+    ::pgn::Refresh 1
+
+    # Assert
+    list \
+        $::pgn_test::scGameCalls \
+        $::pgn_test::setTitleCalls \
+        [::scid_test::widgets::getState .pgnWin.text -state] \
+        [::scid_test::widgets::getText .pgnWin.text] \
+        $::pgn_test::busyCalls \
+        $::pgn_test::updateCurrentMoveCalls
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{{pgn -symbols 1 -indentVar 0 -indentCom 1 -space 1 -format plain -column 0 -short 0 -markCodes 1 -unicode 0} number} {{.pgnWin {PGN 7}}} disabled PGNSTR {{busy .} {unbusy .}} 1}
+
+
+test pgn-update_current_move-noop-when-window-missing-1.0 {update_current_move does nothing when the PGN window does not exist} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    set ::pgn::showColor 1
+
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::pgn_test::stubCommand sc_pos {subcmd args} {
+        error "sc_pos should not be called when .pgnWin does not exist"
+    }
+
+    # Act
+    ::pgn::update_current_move
+
+    # Assert
+    return ok
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {ok}
+
+
+test pgn-update_current_move-tags-and-scrolls-when-range-found-1.0 {update_current_move tags the current move and scrolls it into view when a move range is found} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    set ::pgn::showColor 1
+
+    ::scid_test::widgets::defineTextWidget .pgnWin.text
+
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".pgnWin"} { return 1 }
+        return 0
+    }
+    ::pgn_test::stubCommand sc_pos {subcmd args} {
+        if {$subcmd ne "pgnOffset"} { error "sc_pos $subcmd not stubbed in this test" }
+        return 15
+    }
+
+    ::scid_test::widgets::setTagNextRangeResult .pgnWin.text m_15 {2.3 2.7}
+
+    # Act
+    ::pgn::update_current_move
+
+    # Assert
+    list \
+        [::scid_test::widgets::getTagRemoveCalls .pgnWin.text] \
+        [::scid_test::widgets::getTagNextRangeCalls .pgnWin.text] \
+        [::scid_test::widgets::getTagAddCalls .pgnWin.text] \
+        [::scid_test::widgets::getSeeCalls .pgnWin.text] \
+        [::scid_test::widgets::getYviewCalls .pgnWin.text]
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{{Current 1.0 end}} {{m_15 1.0 {}}} {{Current 2.3 2.7}} 2.7 {}}
+
+
+test pgn-update_current_move-scrolls-top-when-range-missing-1.0 {update_current_move scrolls to top when a move range cannot be found} -setup {
+    ::pgn_test::setup
+} -body {
+    # Arrange
+    set ::pgn::showColor 1
+
+    ::scid_test::widgets::defineTextWidget .pgnWin.text
+
+    ::pgn_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".pgnWin"} { return 1 }
+        return 0
+    }
+    ::pgn_test::stubCommand sc_pos {subcmd args} {
+        if {$subcmd ne "pgnOffset"} { error "sc_pos $subcmd not stubbed in this test" }
+        return 123
+    }
+
+    # Act
+    ::pgn::update_current_move
+
+    # Assert
+    list \
+        [::scid_test::widgets::getTagRemoveCalls .pgnWin.text] \
+        [::scid_test::widgets::getTagNextRangeCalls .pgnWin.text] \
+        [::scid_test::widgets::getTagAddCalls .pgnWin.text] \
+        [::scid_test::widgets::getSeeCalls .pgnWin.text] \
+        [::scid_test::widgets::getYviewCalls .pgnWin.text]
+} -cleanup {
+    ::pgn_test::cleanup
+} -result {{{Current 1.0 end}} {{m_123 1.0 {}}} {} {} {{moveto 0}}}
+
+
+cleanupTests
