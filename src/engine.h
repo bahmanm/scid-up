@@ -113,8 +113,7 @@ private:
     int      MaxSearchTime; // Maximum search time in milliseconds.
     uint     MinDepthCheckTime; // will not check time before this depth is reached
     bool     Debug;         // If true, print debug info to stdout.
-    bool     PostInfo;      // If true, print post info to stdout.
-    bool     XBoardMode;    // If true, print info in xboard format.
+    bool     PostInfo;      // If true, print PV search info to stdout.
     bool     Pruning;       // If true, do futility pruning.
 #ifndef WINCE
     FILE *   LogFile;       // Output is to stdout and to this file.
@@ -192,7 +191,6 @@ public:
 #endif
         Debug = false;
         PostInfo = false;
-        XBoardMode = false;
         Pruning = false;
         RepStackSize = 0;
         TranTable = NULL;
@@ -231,8 +229,6 @@ public:
     void SetDebug (bool b) { Debug = b; }
     void SetPostMode (bool b) { PostInfo = b; }
     bool InPostMode (void) { return PostInfo; }
-    void SetXBoardMode (bool b) { XBoardMode = b; }
-    bool InXBoardMode (void) { return XBoardMode; }
     void SetPruning (bool b) { Pruning = b; }
 #ifndef WINCE
     void SetLogFile (FILE * fp) { LogFile = fp; }

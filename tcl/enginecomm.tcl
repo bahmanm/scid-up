@@ -27,7 +27,6 @@
 # message InfoConfig {
 #   enum Protocol {
 #     "uci";
-#     "xboard";
 #     "network";
 #   }
 #   Protocol protocol = 1;
@@ -159,11 +158,11 @@ proc ::engine::setLogCmd {id {recv ""} {send ""}} {
 }
 
 # Starts a new engine process or connects to a remote engine.
-# If protocols is not provided uses "uci" first and after 3s "xboard".
+# If protocols is not provided uses "uci".
 # If protocols is "network" opens a socket (indicated as host:port).
 # Messages from the engine will be sent to @p callback.
 # An exception is raised in case of error.
-proc ::engine::connect {id callback exe_or_host args {protocols {uci xboard}}} {
+proc ::engine::connect {id callback exe_or_host args {protocols {uci}}} {
     if {![info exists ::engconn(logSend_$id)]} {
         error "Set the log commands with ::engine::setLogCmd"
     }
@@ -281,7 +280,7 @@ proc ::engine::destroy_ {id {localReply ""}} {
 
     unset -nocomplain ::engconn(nextHandshake_$id)
 
-    # Functions that converts messages to uci or xboard.
+    # Functions that convert messages to UCI.
     unset -nocomplain ::engconn(SetOptions$id)
     unset -nocomplain ::engconn(NewGame$id)
     unset -nocomplain ::engconn(Go$id)
@@ -320,33 +319,13 @@ proc ::engine::handshake_ {id protocols} {
         set ::engconn(waitReply_$id) "hello"
         ::engine::rawsend $id "uci"
       }
-      "xboard" {
-        set ::engconn(SetOptions$id) [list ::xboard::sendOptions $id]
-        set ::engconn(NewGame$id) [list ::xboard::sendNewGame $id]
-        set ::engconn(Go$id) [list ::xboard::sendGo $id]
-        set ::engconn(StopGo$id) [list ::xboard::sendStopGo $id]
-        set ::engconn(parseline$id) "::xboard::parseline"
-
-        set ::engconn(waitReply_$id) "hello"
-        ::engine::rawsend $id "xboard"
-        ::engine::rawsend $id "protover 2"
-      }
       "network" {
       }
       default {
         error "Unknown engine protocol"
       }
     }
-    if {[llength $protocols] > 1} {
-        set next [list [lrange $protocols 1 end]]
-        set ::engconn(nextHandshake_$id) [after 2000 ::engine::handshake_ $id $next]
-    } else {
-        unset -nocomplain ::engconn(nextHandshake_$id)
-        if {$::engconn(protocol_$id) eq "xboard"} {
-            # Some XBoard engines do not respond to "protover" promptly.
-            after 2000 "::engine::done_ $id"
-        }
-    }
+    unset -nocomplain ::engconn(nextHandshake_$id)
 }
 
 # Accept a network connection and creates the corresponding channel.
@@ -471,7 +450,7 @@ proc ::engine::replyInfoConfig {id} {
         [list $::engconn(protocol_$id) $::engconn(netclients_$id) $::engconn(options_$id)]]
 }
 
-# Helper functions used by ::uci and ::xboard
+# Helper functions used by ::uci
 # Return the type of the option
 proc ::engine::updateOption {id name value} {
     set idx [lsearch -exact -index 0 $::engconn(options_$id) $name]
@@ -492,7 +471,6 @@ proc ::engine::rawsend {n msg} {
 }
 
 namespace eval uci {}
-namespace eval xboard {}
 
 proc ::uci::sendOptions {id msgData}  {
     foreach option $msgData {
@@ -505,28 +483,6 @@ proc ::uci::sendOptions {id msgData}  {
         }
     }
     ::engine::rawsend $id "isready"
-}
-
-proc ::xboard::sendOptions {id msgData} {
-    foreach option $msgData {
-        lassign $option name value
-        set type [::engine::updateOption $id $name $value]
-        if {$name in {memory cores egtpath} } {
-            ::engine::rawsend $id "$name $value"
-        } elseif {$value eq ""} {
-            ::engine::rawsend $id "option $name"
-        } else {
-            if {$type eq "check"} {
-                if {$value eq "true"} {
-                    set value 1
-                } else {
-                    set value 0
-                }
-            }
-            ::engine::rawsend $id "option $name=$value"
-        }
-    }
-    after 200 "::engine::done_ $id"
 }
 
 proc ::uci::sendNewGame {id msgData} {
@@ -550,23 +506,6 @@ proc ::uci::sendNewGame {id msgData} {
     ::engine::rawsend $id "isready"
 }
 
-proc ::xboard::sendNewGame {id msgData} {
-    ::engine::rawsend $id "new"
-    if {"chess960" in $msgData} {
-        ::engine::rawsend $id "variant fischerandom"
-    }
-    ::engine::rawsend $id "force"
-    ::engine::rawsend $id [expr {"post_pv" in $msgData ? "post" :"nopost"}]
-    ::engine::rawsend $id [expr {"ponder" in $msgData ? "hard" :"easy"}]
-    #TODO: ::engine::rawsend $id "computer"
-    #TODO: ::engine::rawsend $id "name ..."
-
-    if {[lsearch -index 0 $::engconn(options_$id) "ping"] != -1} {
-        ::engine::rawsend $id "ping 1"
-    } else {
-        after 500 "::engine::done_ $id"
-    }
-}
 
 proc ::uci::sendGo {id msgData} {
     lassign $msgData position limits
@@ -579,143 +518,8 @@ proc ::uci::sendGo {id msgData} {
     ::engine::rawsend $id "go $limits"
 }
 
-proc ::xboard::sendGo {id msgData} {
-    lassign $msgData position limits
-    #TODO: we need to reset the limits, but some engines, such as Crafty, do no support "new".
-    ::engine::rawsend $id "new"
-    foreach {limit} $limits {
-        lassign $limit limit_type limit_value
-        switch $limit_type {
-            "depth" { ::engine::rawsend $id "sd $limit_value" }
-            "movetime" { ::engine::rawsend $id "st $limit_value" }
-        }
-    }
-    regexp {^position(?: fen)? (.*?) moves(.*)$} $position -> fen moves
-    if {$fen eq "startpos"} {
-        set fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    }
-    ::engine::rawsend $id "setboard $fen"
-    ::engine::rawsend $id "force"
-    set usermove ""
-    if {[lsearch -index 0 $::engconn(options_$id) "usermove"] != -1} {
-        set usermove "usermove "
-    }
-    foreach move $moves {
-        ::engine::rawsend $id "$usermove$move"
-    }
-    ::engine::rawsend $id [expr {$limits eq "" ? "analyze" : "go"}]
-}
 
-proc ::xboard::sendStopGo {id} {
-    ::engine::rawsend $id "exit"
-    after 500 "::engine::done_ $id"
-}
 
-proc ::xboard::parseline {id line} {
-    if {[regexp {^\s*(\d+)\s+(-\d+|\d+)\s+(\d+)\s+(\d+)\s+(.*)$} $line -> depth score time nodes pv]} {
-        set scoreType "cp"
-        if {$score >= 100000} {
-            set scoreType mate
-            incr score -100000
-        } elseif {$score <= -100000} {
-            set scoreType mate
-            incr score 100000
-        }
-        set ::engconn(InfoPV_$id) [list 1 $depth {} $nodes {} {} {} $time $score $scoreType {} $pv]
-        return 0
-    }
-
-    if {[string match "move *" $line]} {
-        lassign [split $line] -> ::engconn(InfoBestMove_$id)
-        return 1
-    }
-
-    if {[string match "pong *" $line]} {
-        return 1
-    }
-
-    if {[string match "feature *" $line]} {
-        set line [string range $line 8 end]
-        foreach {feat name default} [regexp -all -inline {(\w+)\s*=\s*("[^"]*"|\d+)} $line] {
-            set default [string trim $default \"]
-            set type {}
-            set min {}
-            set max {}
-            set var {}
-            if {$name eq "option"} {
-                set internal 0
-                # everything before " -" is considered the name
-                lassign [regexp -inline {^(.*?)\s+-(\w+)\s*(.*)$} $default] -> name type extra
-                if {$type eq "check"} {
-                    set default [expr {$extra ? "true" : "false"}]
-                } elseif {$type eq "spin" || $type eq "slider"} {
-                    lassign [split $extra] default min max
-                } elseif {$type eq "string" || $type eq "file" || $type eq "path"} {
-                    set default $extra
-                } elseif {$type eq "combo"} {
-                    set var [split [string map [list " /// " \0] $extra] \0]
-                    set idx [lsearch $var {\**}]
-                    if {$idx >= 0} {
-                        set default [string range [lindex $var $idx] 1 end]
-                        lset var $idx $default
-                    } else {
-                        set default [lindex $var 0]
-                    }
-                } elseif {$type eq "button" || $type eq "save"} {
-                    set default ""
-                } else {
-                    # Unknown type: ignore
-                    set type ""
-                }
-            } else {
-                if {$name in {done ping setboard san usermove nps time reuse memory smp \
-                              variants name myname egt } } {
-                    set internal 1
-                    ::engine::rawsend $id "accepted $name"
-                } else {
-                    ::engine::rawsend $id "rejected $name"
-                    continue
-                }
-                if {$name eq "done"} {
-                    after cancel "::engine::done_ $id"
-                    if {$default} {
-                        return 1
-                    }
-                }
-                if {$name eq "time" || $name eq "reuse"} {
-                    set default [expr {! $default }]
-                }
-                if {$default == 0} {
-                    continue
-                }
-                if {$name eq "memory"} {
-                    set internal 0
-                    set type spin
-                    set default 1
-                    set min 1
-                    set max 2147483646
-                } elseif {$name eq "smp"} {
-                    set internal 0
-                    set name "cores"
-                    set type spin
-                    set default 1
-                    set min 1
-                    set max 2147483646
-                } else {
-                    set type "string"
-                }
-            }
-            if {$name ne "" && $type ne ""} {
-                lappend ::engconn(options_$id) \
-                    [list $name $default $type $default $min $max $var $internal]
-            }
-        }
-        return 0
-    }
-
-    #unknown
-    return 0
-}
 
 proc ::uci::parseline {id line} {
     if {[string match "info *" $line]} {

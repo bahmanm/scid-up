@@ -468,8 +468,7 @@ namespace eval uci {
         puts $pipe "uci"
         flush $pipe
         
-        # give a few seconds for the engine to output its options, then automatically kill it
-        # (to handle xboard engines)
+        # Give a few seconds for the engine to output its options, then automatically close it.
         after 5000  "::uci::closeUCIengine $n 0"
     }
     
@@ -1086,9 +1085,6 @@ namespace eval uci {
         # Some engines in analyze mode may not react as expected to "quit"
         # so ensure the engine exits analyze mode first:
         catch { puts $pipe "stop" ; puts $pipe "quit" }
-        #in case an xboard engine
-        catch { puts $pipe "exit" ; puts $pipe "quit" }
-        
         # last resort : try to kill the engine (TODO if Windows : no luck, welcome zombies !)
         # No longer try to kill the engine as :
         # - it does not work on Windows

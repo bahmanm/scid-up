@@ -2181,18 +2181,14 @@ Engine::Output (const char * format, ...)
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Engine::PrintPV
 //   Print the current depth, score and principal variation.
+//   This output format is the only supported format (legacy XBoard output has
+//   been removed).
 void
 Engine::PrintPV (uint depth, int score, const char * note)
 {
     if (! PostInfo) { return; }
     uint ms = Elapsed.MilliSecs();
-    if (XBoardMode  &&  ms < 50  &&  Ply < 6) { return; }
-
-    if (XBoardMode) {
-        Output (" %2u %6d %5u %9u  ",  depth, score, ms / 10, NodeCount);
-    } else {
-        Output (" %2u %-3s %+6d %5u %9u  ", depth, note, score, ms, NodeCount);
-    }
+    Output (" %2u %-3s %+6d %5u %9u  ", depth, note, score, ms, NodeCount);
 
     principalVarT * pv = &(PV[0]);
     uint i;
@@ -2278,4 +2274,3 @@ Engine::PerfTest (uint depth)
 //////////////////////////////////////////////////////////////////////
 //  EOF: engine.cpp
 //////////////////////////////////////////////////////////////////////
-
