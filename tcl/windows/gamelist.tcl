@@ -31,6 +31,23 @@
 ::options.store ::glist_Sort
 ::options.store ::glist_FindBar
 
+################################################################################
+# ::windows::gamelist::Open
+#   Opens (or reuses) a games list window for a database and filter.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Database slot. Optional; defaults to `sc_base current`.
+#   - filter: Filter identifier. Optional; defaults to `dbfilter` (or a new filter
+#     may be created when reusing a window).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a new `.glistWinN` window when needed.
+#   - May allocate a new filter via `sc_filter new`.
+#   - Updates global per-window state such as `::gamelistTitle($w)`,
+#     `::gamelistBase($w)`, and `::gamelistFilter($w)`.
+################################################################################
 proc ::windows::gamelist::Open { {base ""} {filter ""} } {
 	if {$base == ""} { set base [sc_base current] }
 	if { $filter == "" } {
@@ -71,6 +88,20 @@ proc ::windows::gamelist::Open { {base ""} {filter ""} } {
 	::windows::gamelist::createWin_ $w $base $filter
 }
 
+################################################################################
+# ::windows::gamelist::OpenTreeBest
+#   Opens a games list window wired to the TreeBestGames filter for a database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Database slot.
+#   - w: Window path to create/recreate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates (or recreates) the window `w` and populates it via `createWin_`.
+#   - Hides the buttons bar and enables positional mask mode for the window.
+################################################################################
 proc ::windows::gamelist::OpenTreeBest { {base} {w} } {
 	if {! [::win::createWindow $w ""]} {
 		::win::closeWindow $w
@@ -83,6 +114,21 @@ proc ::windows::gamelist::OpenTreeBest { {base} {w} } {
 	set ::gamelistPosMask($w) 1
 }
 
+################################################################################
+# ::windows::gamelist::Refresh
+# Visibility:
+#   Public.
+# Inputs:
+#   - moveup: When true, keeps the current game visible where possible. Optional;
+#     defaults to 1.
+#   - wlist: List of window paths to refresh. Optional; defaults to
+#     `::windows::gamelist::wins`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `update_` for each active window, and may switch a window to the
+#     current base if its base is no longer in use.
+################################################################################
 proc ::windows::gamelist::Refresh {{moveup 1} {wlist ""}} {
 	if {$wlist == ""} { set wlist $::windows::gamelist::wins }
 	foreach w $wlist {
@@ -95,6 +141,20 @@ proc ::windows::gamelist::Refresh {{moveup 1} {wlist ""}} {
 	}
 }
 
+################################################################################
+# ::windows::gamelist::DatabaseModified
+#   Refreshes windows whose underlying database and/or filters have changed.
+# Visibility:
+#   Public.
+# Inputs:
+#   - dbase: Database slot.
+#   - filter: Filter identifier. Optional; defaults to -1 to refresh
+#     unconditionally.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates affected games list windows via `update_` and `updateStats_`.
+################################################################################
 proc ::windows::gamelist::DatabaseModified {{dbase} {filter -1}} {
 	set wlist $::windows::gamelist::wins
 	foreach w $wlist {
@@ -111,9 +171,19 @@ proc ::windows::gamelist::DatabaseModified {{dbase} {filter -1}} {
 	}
 }
 
-# Returns the list of databases whose tree filter needs to be updated when
-# the position of the main board changes.
-# It must also disable commands that depend on the current position.
+################################################################################
+# ::windows::gamelist::listTreeBases
+#   Returns the databases whose tree filters should be updated on board changes.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Database slot to constrain results. Optional; defaults to all.
+# Returns:
+#   - A list of `{base filter progressbarSpec}` triples for windows which have the
+#     positional mask enabled.
+# Side effects:
+#   - Updates each matching window’s UI to indicate the tree filter is busy.
+################################################################################
 proc ::windows::gamelist::listTreeBases {{base ""}} {
 	set bases {}
 	foreach w $::windows::gamelist::wins {
@@ -127,6 +197,18 @@ proc ::windows::gamelist::listTreeBases {{base ""}} {
 	return $bases
 }
 
+################################################################################
+# ::windows::gamelist::FilterReset
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path (may be empty).
+#   - base: Database slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets the window’s effective filter to `full` and emits `::notify::filter`.
+################################################################################
 proc ::windows::gamelist::FilterReset {{w} {base}} {
 	set f "dbfilter"
 	if {$w != "" && $base == $::gamelistBase($w)}  { set f $::gamelistFilter($w) }
@@ -135,6 +217,18 @@ proc ::windows::gamelist::FilterReset {{w} {base}} {
 	::notify::filter $base $f
 }
 
+################################################################################
+# ::windows::gamelist::FilterNegate
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path (may be empty).
+#   - base: Database slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Negates the window’s effective filter and emits `::notify::filter`.
+################################################################################
 proc ::windows::gamelist::FilterNegate {{w} {base}} {
 	set f "dbfilter"
 	if {$w != "" && $base == $::gamelistBase($w)}  { set f $::gamelistFilter($w) }
@@ -143,6 +237,20 @@ proc ::windows::gamelist::FilterNegate {{w} {base}} {
 	::notify::filter $base $f
 }
 
+################################################################################
+# ::windows::gamelist::FilterExport
+#   Exports the current filter as PGN or LaTeX.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts for a destination path via `tk_getSaveFile`.
+#   - Shows a progress window and calls `sc_filter export`.
+#   - May show an error dialog via `ERROR::MessageBox`.
+################################################################################
 proc ::windows::gamelist::FilterExport {{w}} {
 	set ftype {
 	   { {PGN} {.pgn} }
@@ -168,8 +276,18 @@ proc ::windows::gamelist::FilterExport {{w}} {
 	if {$err && $::errorCode != $::ERROR::UserCancel} { ERROR::MessageBox }
 }
 
-# Returns text describing state of filter for specified
-# database, e.g. "no games" or "all / 400" or "1,043 / 2,057"
+################################################################################
+# ::windows::gamelist::filterText
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path. Optional; defaults to empty (uses `dbfilter`).
+#   - base: Database slot. Optional; defaults to `sc_base current`.
+# Returns:
+#   - A human-readable description of the filter size, e.g. “all / 400”.
+# Side effects:
+#   - None.
+################################################################################
 proc ::windows::gamelist::filterText {{w ""} {base -1}} {
 	if {$base == -1} { set base [sc_base current] }
 	set f "dbfilter"
@@ -181,8 +299,18 @@ proc ::windows::gamelist::filterText {{w ""} {base -1}} {
 	return [formatFilterText $filterSz $gameSz]
 }
 
-# Returns text describing state of filter for specified
-# database, e.g. "no games" or "all / 400" or "1,043 / 2,057"
+################################################################################
+# ::windows::gamelist::formatFilterText
+# Visibility:
+#   Public.
+# Inputs:
+#   - filterSz: Number of games in the filter.
+#   - gameSz: Total number of games in the database.
+# Returns:
+#   - A human-readable description of the filter size, e.g. “all / 400”.
+# Side effects:
+#   - None.
+################################################################################
 proc ::windows::gamelist::formatFilterText {filterSz gameSz} {
 	if {$gameSz == 0} { return $::tr(noGames) }
 	if {$gameSz == $filterSz} {
@@ -191,11 +319,38 @@ proc ::windows::gamelist::formatFilterText {filterSz gameSz} {
 	return "[::utils::thousands $filterSz 100000] / [::utils::thousands $gameSz 100000]"
 }
 
+################################################################################
+# ::windows::gamelist::GetBase
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path.
+# Returns:
+#   - The database slot for `w`, or an empty string if unknown.
+# Side effects:
+#   - None.
+################################################################################
 proc ::windows::gamelist::GetBase {{w}} {
 	if {[info exists ::gamelistBase($w)]} { return $::gamelistBase($w) }
 	return ""
 }
 
+################################################################################
+# ::windows::gamelist::SetBase
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path.
+#   - base: Database slot.
+#   - filter: Filter identifier. Optional; defaults to `dbfilter`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules release of the previous filter via `filterRelease_`.
+#   - Updates `::gamelistBase($w)` and `::gamelistFilter($w)`.
+#   - Triggers an immediate refresh via `DatabaseModified` or positional filter
+#     toggling via `searchpos_`.
+################################################################################
 proc ::windows::gamelist::SetBase {{w} {base} {filter "dbfilter"}} {
 	if {[lsearch -exact $::windows::gamelist::wins $w] == -1} { return }
 	after idle "::windows::gamelist::filterRelease_ $::gamelistBase($w) $::gamelistFilter($w)"
@@ -230,6 +385,21 @@ proc ::windows::gamelist::SetBase {{w} {base} {filter "dbfilter"}} {
 #
 # An empty search will reset the filter
 #
+################################################################################
+# ::windows::gamelist::Awesome
+#   Applies a header-search query string to the current filter.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path.
+#   - txt: Search text (supports “ + ” to OR multiple sub-queries).
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets and composes filters via `sc_filter compose/reset/search`.
+#   - Shows and closes a progress window for each sub-query.
+#   - Emits `::notify::filter` for the composed filter.
+################################################################################
 proc ::windows::gamelist::Awesome {{w} {txt}} {
 	if {[lsearch -exact $::windows::gamelist::wins $w] == -1} { return }
 
@@ -250,6 +420,18 @@ proc ::windows::gamelist::Awesome {{w} {txt}} {
 	::notify::filter $::gamelistBase($w) $filter
 }
 
+################################################################################
+# ::windows::gamelist::AweInit
+#   Initialises the Awesome-search parsing tables and range defaults.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Initialises global variables `awe_guess`, `awe_min`, and `awe_max`.
+################################################################################
 proc ::windows::gamelist::AweInit {} {
 	global awe_guess awe_min awe_max
 	set awe_guess {}
@@ -310,6 +492,18 @@ proc ::windows::gamelist::AweInit {} {
 	]
 }
 
+################################################################################
+# ::windows::gamelist::AweGuess
+# Visibility:
+#   Private.
+# Inputs:
+#   - txt: Awesome-search query text.
+# Returns:
+#   - A list of `{param value}` pairs, where `param` is a filter search option
+#     name (e.g. `-player`, `-elo`, `-eco`).
+# Side effects:
+#   - May call `AweInit` to initialise parsing tables on first use.
+################################################################################
 proc ::windows::gamelist::AweGuess {{txt}} {
 	global awe_guess
 	if {![info exists awe_guess]} { AweInit }
@@ -357,6 +551,18 @@ proc ::windows::gamelist::AweGuess {{txt}} {
 	return $res
 }
 
+################################################################################
+# ::windows::gamelist::AweParse
+#   Converts Awesome-search query text into `sc_filter search ... header` args.
+# Visibility:
+#   Private.
+# Inputs:
+#   - txt: Awesome-search query text.
+# Returns:
+#   - A single string suitable for `eval` with `sc_filter search ... header`.
+# Side effects:
+#   - None.
+################################################################################
 proc ::windows::gamelist::AweParse {{txt}} {
 	global awe_min awe_max
 	set res {}
@@ -379,6 +585,27 @@ proc ::windows::gamelist::AweParse {{txt}} {
 	return [join $res]
 }
 
+################################################################################
+# ::windows::gamelist::CopyGames
+#   Copies games from one database (and filter) into another database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Game list window path (may be empty).
+#   - srcBase: Source database slot.
+#   - dstBase: Destination database slot.
+#   - filter: Filter identifier. Optional; defaults to `dbfilter` (or the window’s
+#     current filter when `w` matches `srcBase`).
+#   - ask: When true, asks for confirmation unless copying to the clipbase.
+#     Optional; defaults to true.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows an informational message box for “no games” / “read-only target”.
+#   - Optionally prompts for confirmation via `tk_messageBox`.
+#   - Runs `sc_base copygames` under a progress window.
+#   - Emits `::notify::DatabaseModified` for the destination base.
+################################################################################
 proc ::windows::gamelist::CopyGames {{w} {srcBase} {dstBase} {filter "dbfilter"} {ask true}} {
 	if {$w != "" && $srcBase == $::gamelistBase($w)} { set filter $::gamelistFilter($w) }
 
@@ -411,6 +638,19 @@ proc ::windows::gamelist::CopyGames {{w} {srcBase} {dstBase} {filter "dbfilter"}
 	::notify::DatabaseModified $dstBase
 }
 
+################################################################################
+# ::windows::gamelist::ClearClipbase
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears the clipbase via `sc_clipbase clear`.
+#   - Refreshes any game list windows currently showing the clipbase.
+#   - Emits `::notify::DatabaseModified` (and possibly `::notify::GameChanged`).
+################################################################################
 proc ::windows::gamelist::ClearClipbase {} {
 	foreach w $::windows::gamelist::wins {
 		if {$::gamelistBase($w) == $::clipbase_db} {
@@ -425,6 +665,22 @@ proc ::windows::gamelist::ClearClipbase {} {
 #Private:
 set ::windows::gamelist::wins {}
 
+################################################################################
+# ::windows::gamelist::createWin_
+#   Creates and initialises a games list window instance.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Window path.
+#   - base: Database slot.
+#   - filter: Filter identifier (e.g. `dbfilter`, a composed filter, or `tree`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Initialises `::gamelist*($w)` global state.
+#   - Creates the window UI via `createMenu_` and `createGList_`.
+#   - Registers window-level bindings and adds `w` to `::windows::gamelist::wins`.
+################################################################################
 proc ::windows::gamelist::createWin_ { {w} {base} {filter} } {
 	set ::gamelistBase($w) $base
 	set ::gamelistFilter($w) $filter
@@ -463,6 +719,21 @@ proc ::windows::gamelist::createWin_ { {w} {base} {filter} } {
 	::windows::gamelist::Refresh 1 $w
 }
 
+################################################################################
+# ::windows::gamelist::createMenu_
+#   Builds the left-side buttons bar and its associated panels/menus for a
+#   games list window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures Tk widgets under `$w.buttons`, `$w.filter`, and
+#     `$w.stats`.
+#   - Registers bindings and tooltip entries.
+################################################################################
 proc ::windows::gamelist::createMenu_ {w} {
 	ttk::frame $w.buttons -padding {5 5 2 5}
 	ttk::button $w.buttons.filter -image tb_search_on -command "::windows::gamelist::menu_ $w filter"
@@ -542,6 +813,18 @@ proc ::windows::gamelist::createMenu_ {w} {
 	autoscrollBars y $w.stats.b $w.stats.b.c
 }
 
+################################################################################
+# ::windows::gamelist::createGList_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - (Re)creates the games list frame and initialises the embedded `glist`
+#     widget.
+################################################################################
 proc ::windows::gamelist::createGList_ {{w}} {
 	if {[winfo exists $w.games]} { destroy $w.games }
 	ttk::frame $w.games -borderwidth 0 -padding {8 5 5 2}
@@ -549,10 +832,22 @@ proc ::windows::gamelist::createGList_ {{w}} {
 	grid $w.games -row 0 -column 2 -sticky news
 }
 
+################################################################################
+# ::windows::gamelist::createExportMenu_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+#   - m: Menu widget path.
+# Returns:
+#   - The menu widget path `m`.
+# Side effects:
+#   - Rebuilds the menu entries, including copy targets for writable databases.
+################################################################################
 proc ::windows::gamelist::createExportMenu_ {{w} {m}} {
 	$m delete 0 end
 	$m add command -label [tr ToolsExpFilter] \
-        -command "::windows::gamelist::FilterExport $w"
+	        -command "::windows::gamelist::FilterExport $w"
 	set bases [lmap i [sc_base list] {
 		if { $i == $::gamelistBase($w) || [sc_base isReadOnly $i] } { continue }
 		list $i
@@ -566,6 +861,19 @@ proc ::windows::gamelist::createExportMenu_ {{w} {m}} {
 	return $m
 }
 
+################################################################################
+# ::windows::gamelist::menu_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+#   - button: Menu name (`filter` or `stats`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows/hides the chosen menu panel and adjusts pressed button state.
+#   - Emits `<<FindBarShow>>` / `<<FindBarHide>>` for filter toggling.
+################################################################################
 proc ::windows::gamelist::menu_ {{w} {button}} {
 	if {$::gamelistMenu($w) != ""} {
 		$w.buttons.$::gamelistMenu($w) state !pressed
@@ -582,6 +890,18 @@ proc ::windows::gamelist::menu_ {{w} {button}} {
 	}
 }
 
+################################################################################
+# ::windows::gamelist::filter_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+#   - type: Filter action selector (`r`, `b`, `h`, `m`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Dispatches to filter reset or opens the corresponding search tool.
+################################################################################
 proc ::windows::gamelist::filter_ {{w} {type}} {
 	if {$type == "r"} {
 		::windows::gamelist::FilterReset $w $::gamelistBase($w)
@@ -594,6 +914,19 @@ proc ::windows::gamelist::filter_ {{w} {type}} {
 	}
 }
 
+################################################################################
+# ::windows::gamelist::update_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+#   - moveUp: When true, resets certain selection/double-click state.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates filter UI indicators, window title, and export availability.
+#   - Refreshes the embedded `glist` widget.
+################################################################################
 proc ::windows::gamelist::update_ {{w} {moveUp}} {
 	set f $::gamelistFilter($w)
 	lassign [sc_filter sizes $::gamelistBase($w) $f] filterSz gameSz mainSz
@@ -618,6 +951,19 @@ proc ::windows::gamelist::update_ {{w} {moveUp}} {
 	glist.update $w.games $::gamelistBase($w) $::gamelistFilter($w) $moveUp
 }
 
+################################################################################
+# ::windows::gamelist::searchpos_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Toggles positional mask mode for the window and updates the composed filter
+#     (`tree` component).
+#   - Triggers tree-filter updates or cancellation and emits `::notify::filter`.
+################################################################################
 proc ::windows::gamelist::searchpos_ {{w}} {
 	if {$::gamelistPosMask($w) == 0} {
 		set ::gamelistPosMask($w) 1
@@ -633,6 +979,19 @@ proc ::windows::gamelist::searchpos_ {{w}} {
 	}
 }
 
+################################################################################
+# ::windows::gamelist::filterRelease_
+# Visibility:
+#   Private.
+# Inputs:
+#   - base: Database slot.
+#   - filter: Filter identifier (possibly composed).
+# Returns:
+#   - None.
+# Side effects:
+#   - Releases unused filter components via `sc_filter release` and emits
+#     `::notify::filter`.
+################################################################################
 proc ::windows::gamelist::filterRelease_ {{base} {filter}} {
 	if {! [sc_base inUse $base]} { return }
 	lassign [sc_filter components $base $filter] filter
@@ -646,6 +1005,21 @@ proc ::windows::gamelist::filterRelease_ {{base} {filter}} {
 	::notify::filter $base $filter
 }
 
+################################################################################
+# ::windows::gamelist::updateStats_
+#   Renders tree statistics for the current positional filter.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Game list window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Draws and binds items on the stats canvas (`$w.stats.b.c`).
+#   - May show per-move performance details in a message box.
+#   - Binds click handlers to add moves to the game and to toggle positional
+#     filtering when required.
+################################################################################
 proc ::windows::gamelist::updateStats_ { {w} } {
 	if {$::gamelistMenu($w) != "stats"} { return }
 	set stats {}
@@ -749,12 +1123,25 @@ proc ::windows::gamelist::updateStats_ { {w} } {
 
 
 ##########################################################################
-# June 2011: A new reusable and simplified gamelist widget
+################################################################################
 # glist.create
-#   Create a gamelist widget
-#   w: parent window of the gamelist widget
-#   layout: a string name that will be assigned to columns layout.
-#           layout will be saved and restored in successive glist.create calls.
+#   Creates a reusable games list (treeview) widget with a persistent layout.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Parent widget path.
+#   - layout: Layout name used to persist column/sort configuration.
+#   - reset_layout: When true, resets layout defaults. Optional; defaults to
+#     false.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures Tk widgets under `$w` (including `$w.glist` and the
+#     find-bar widgets).
+#   - Initialises and updates global layout state such as `::glist_ColOrder($layout)`
+#     and `::glist_Sort($layout)`.
+#   - Registers bindings for navigation, sorting, and context menus.
+################################################################################
 proc glist.create {{w} {layout} {reset_layout false}} {
   # Default values
   if {! [info exists ::glist_ColOrder($layout)] || $reset_layout} {
@@ -887,12 +1274,23 @@ proc glist.create {{w} {layout} {reset_layout false}} {
   glist.sortInit_ $w.glist $layout
 }
 
+################################################################################
 # glist.update
-#   Retrieve values from database and update the widget
-#   w: parent window of the gamelist (same value passed to for glist.create)
-#   base: the database from which retrieve values
-#   filter: returns only values in the specified filter
-#   moveUp: reset glist to show the first results
+#   Retrieves values from a database and updates an existing `glist` widget.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Parent widget path (as passed to `glist.create`).
+#   - base: Database slot from which to retrieve values.
+#   - filter: Filter identifier limiting the returned games.
+#   - moveUp: When true, resets the view to the start of the list. Optional;
+#     defaults to 1.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the find-bar size display and resets selection/scroll state.
+#   - Calls `glist.update_` to (re)load the visible rows.
+################################################################################
 proc glist.update {{w} {base} {filter} {moveUp 1}} {
   if {! [winfo exists $w.glist]} { return }
 
@@ -911,10 +1309,22 @@ proc glist.update {{w} {base} {filter} {moveUp 1}} {
   glist.update_ $w.glist $base
 }
 
-# Apply a full layout (appearance and sorting) to a gamelist
-# w: parent window of the gamelist (same value passed to for glist.create)
-# layout: name of the current layout
-# new_ly: name of the layout to apply (or DEFAULT)
+################################################################################
+# glist.layout_apply
+#   Applies a stored layout (column appearance and sorting) to a `glist` widget.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Parent widget path (as passed to `glist.create`).
+#   - layout: Name of the current layout key.
+#   - new_ly: Name of the layout to apply, or `DEFAULT`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys and recreates the widget subtree under `w`.
+#   - Updates global layout state such as `::glist_ColOrder($layout)`.
+#   - Rebuilds and reloads the games list.
+################################################################################
 proc glist.layout_apply {w layout new_ly} {
   if {$new_ly ne "DEFAULT"} {
     set ::glist_ColOrder($layout) $::glist_ColOrder($new_ly)
@@ -931,8 +1341,18 @@ proc glist.layout_apply {w layout new_ly} {
   glist.sortStore_ $w.glist $layout
 }
 
-# Save a full layout (appearance and sorting) as CustomN
-# layout: name of the current layout
+################################################################################
+# glist.layout_save
+#   Saves the current layout as a new `CustomN` layout preset.
+# Visibility:
+#   Public.
+# Inputs:
+#   - layout: Name of the current layout key.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates new `::glist_*($new_ly)` entries and appends to `::glist_Layouts`.
+################################################################################
 proc glist.layout_save {layout} {
   foreach elem [lsort -dictionary $::glist_Layouts] {
     regexp {^Custom(\d+)$} $elem -> n
@@ -964,6 +1384,18 @@ set glist_SortShortcuts { "N" "r" "m" "w" "W"
                     "???" "o" "???" "???" "E"
                     "y" "R" "i" "???" }
 
+################################################################################
+# glist.destroy_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Releases any sort-cache via `sc_base sortcache ... release`.
+#   - Unsets per-widget `::glist*($w)` state.
+################################################################################
 proc glist.destroy_ {{w}} {
   if {[info exists ::glistSortCache($w)]} {
     catch { sc_base sortcache $::glistBase($w) release $::glistSortCache($w) }
@@ -981,6 +1413,19 @@ proc glist.destroy_ {{w}} {
   unset ::glistFindBar($w)
 }
 
+################################################################################
+# glist.update_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - base: Database slot.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or replaces a sort-cache for the database when required.
+#   - Schedules and loads visible rows via `glist.loadvalues_`.
+################################################################################
 proc glist.update_ {{w} {base}} {
   if {! [info exists ::glistBase($w)] } {
     #Create a sortcache to speed up sorting
@@ -998,6 +1443,19 @@ proc glist.update_ {{w} {base}} {
   glist.loadvalues_ $w
 }
 
+################################################################################
+# glist.loadvalues_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Rebuilds the visible rows using `sc_base gameslist`.
+#   - Updates selection and “current” row highlighting.
+#   - Updates scroll state via `glist.yscroll_`.
+################################################################################
 proc glist.loadvalues_ {{w}} {
   set sel [$w selection]
   $w delete [$w children {}]
@@ -1025,6 +1483,19 @@ proc glist.loadvalues_ {{w}} {
   glist.yscroll_ $w {*}[$w yview]
 }
 
+################################################################################
+# glist.showfindbar_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - layout: Layout name used to persist find-bar visibility.
+#   - show: When non-empty, sets the persisted value. Optional.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows/hides the find-bar widgets and adjusts focus.
+################################################################################
 proc glist.showfindbar_ {{w} {layout} {show ""}} {
   if {$show ne ""} {
     set ::glist_FindBar($layout) $show
@@ -1036,21 +1507,49 @@ proc glist.showfindbar_ {{w} {layout} {show ""}} {
     grid $::glistFindBar($w) -row 0 -columnspan 2 -sticky news
     focus $::glistFindBar($w).text
     $::glistFindBar($w).text selection range 0 end
-  }
+	}
 }
 
+################################################################################
+# glist.findcurrentgame_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - gnum: Game number to locate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::glistFirst($w)` and scrolls to ensure the game is visible when
+#     found.
+################################################################################
 proc glist.findcurrentgame_ {{w} {gnum}} {
-  set r [sc_base gamelocation $::glistBase($w) $::glistFilter($w) $::glistSortStr($w) $gnum]
-  if {$r != "none"} {
-    set ::glistFirst($w) $r
-    glist.ybar_ $w scroll
-  }
+	set r [sc_base gamelocation $::glistBase($w) $::glistFilter($w) $::glistSortStr($w) $gnum]
+	if {$r != "none"} {
+		set ::glistFirst($w) $r
+		glist.ybar_ $w scroll
+	}
 }
 
+################################################################################
+# glist.findgame_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w_parent: Parent widget path (as passed to `glist.create`).
+#   - dir: Search direction (`0`/`1`) or the special value `awe` to run the
+#     Awesome search.
+# Returns:
+#   - None.
+# Side effects:
+#   - Executes either an Awesome search (updates filters) or a `gamelocation`
+#     lookup and adjusts scroll/selection accordingly.
+#   - Temporarily sets a busy cursor and performs `update idletasks`.
+################################################################################
 proc glist.findgame_ {{w_parent} {dir}} {
-  set w $w_parent.glist
-  set w_entryT $w_parent.find.text
-  set txt [$w_entryT get]
+	set w $w_parent.glist
+	set w_entryT $w_parent.find.text
+	set txt [$w_entryT get]
   $w_entryT configure -style {}
   if { $dir == "awe" } {
     ::windows::gamelist::Awesome [regexp -inline {^\.[^.]+} $w_parent] "$txt"
@@ -1083,20 +1582,47 @@ proc glist.findgame_ {{w_parent} {dir}} {
     }
     after idle glist.select_ $w [expr $r +1]
   }
-  unbusyCursor $w_parent
+	unbusyCursor $w_parent
 }
 
+################################################################################
+# glist.select_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - idx: Absolute row index, or `end`. Optional; defaults to 0.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the widget selection to the requested row.
+################################################################################
 proc glist.select_ {w {idx 0}} {
-  if {$idx != "end" && $idx > 0} {
-    set idx [expr int($idx - $::glistFirst($w) -1)]
-  }
-  $w selection set [lindex [$w children {}] $idx]
+	if {$idx != "end" && $idx > 0} {
+		set idx [expr int($idx - $::glistFirst($w) -1)]
+	}
+	$w selection set [lindex [$w children {}] $idx]
 }
 
+################################################################################
+# glist.movesel_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - cmd: Treeview navigation subcommand (e.g. `prev`/`next`).
+#   - scroll: Scroll delta used when selection moves outside the viewport.
+#   - select: Fallback selection index (`0`/`end`) used when navigation reaches
+#     the ends.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the selection and may trigger scrolling via `glist.ybar_`.
+################################################################################
 proc glist.movesel_ {{w} {cmd} {scroll} {select}} {
-  set sel [$w selection]
-  if {$sel == ""} { glist.select_ $w; return }
-  set newsel [$w $cmd $sel]
+	set sel [$w selection]
+	if {$sel == ""} { glist.select_ $w; return }
+	set newsel [$w $cmd $sel]
   if {$newsel == "" || [$w bbox $newsel] == ""} {
     glist.ybar_ $w scroll $scroll
   }
@@ -1104,18 +1630,46 @@ proc glist.movesel_ {{w} {cmd} {scroll} {select}} {
     after idle glist.select_ $w $select
   } else {
     $w selection set $newsel
-  }
+	}
 }
 
+################################################################################
+# glist.delflag_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - idx: Game number to toggle.
+# Returns:
+#   - None.
+# Side effects:
+#   - Toggles the deletion flag via `sc_base gameflag ... invert del`.
+#   - Emits `::notify::DatabaseModified` for the base.
+################################################################################
 proc glist.delflag_ {{w} {idx}} {
-  sc_base gameflag $::glistBase($w) $idx invert del
-  ::notify::DatabaseModified $::glistBase($w)
+	sc_base gameflag $::glistBase($w) $idx invert del
+	::notify::DatabaseModified $::glistBase($w)
 }
 
+################################################################################
+# glist.doubleclick_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - x: Mouse X coordinate.
+#   - y: Mouse Y coordinate.
+#   - layout: Layout name (used for menu/sort behaviours).
+# Returns:
+#   - None.
+# Side effects:
+#   - Depending on `::glistClickOp($w)`, may toggle delete, remove from filter, or
+#     load the selected game.
+################################################################################
 proc glist.doubleclick_ {{w} {x} {y} {layout}} {
-  if {[$w identify region $x $y] ne "heading"} {
-    foreach {idx ply} [split [$w identify item $x $y] "_"] {}
-    if {[info exists idx]} {
+	if {[$w identify region $x $y] ne "heading"} {
+		foreach {idx ply} [split [$w identify item $x $y] "_"] {}
+		if {[info exists idx]} {
       if {[info exists ::glistClickOp($w)]} {
         if {$::glistClickOp($w) == 1} {
           glist.delflag_ $w $idx;
@@ -1130,20 +1684,54 @@ proc glist.doubleclick_ {{w} {x} {y} {layout}} {
       ::file::SwitchToBase $::glistBase($w) 0
       ::game::Load $idx $ply
     }
-  }
+	}
 }
 
+################################################################################
+# glist.removeFromFilter_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - idx: Game number to remove.
+#   - dir: Optional direction selector (`-`, `+`, or empty). Optional.
+# Returns:
+#   - None.
+# Side effects:
+#   - Removes the game(s) from the active filter via `sc_filter remove`.
+#   - Emits `::notify::filter` for the base and filter component.
+#   - May scroll to the end when `dir` is `+`.
+################################################################################
 proc glist.removeFromFilter_ {{w} {idx} {dir ""}} {
-  if {$dir == ""} {
-    sc_filter remove $::glistBase($w) $::glistFilter($w) $idx
-  } else {
+	if {$dir == ""} {
+		sc_filter remove $::glistBase($w) $::glistFilter($w) $idx
+	} else {
     sc_filter remove $::glistBase($w) $::glistFilter($w) $idx $dir $::glistSortStr($w)
   }
   lassign [sc_filter components $::glistBase($w) $::glistFilter($w)] f
   ::notify::filter $::glistBase($w) $f
-  if {$dir == "+"} { glist.ybar_ $w moveto 1.0 }
+	if {$dir == "+"} { glist.ybar_ $w moveto 1.0 }
 }
 
+################################################################################
+# glist.popupmenu_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - x: Mouse X coordinate (widget-relative).
+#   - y: Mouse Y coordinate (widget-relative).
+#   - abs_x: Mouse X coordinate (screen-relative).
+#   - abs_y: Mouse Y coordinate (screen-relative).
+#   - layout: Layout name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Builds and displays either a game context menu or a header context menu.
+#   - May create/destroy menu widgets and update global layout state.
+#   - Menu actions may switch bases, load games, merge/copy/export, or adjust
+#     filtering/sorting.
+################################################################################
 proc glist.popupmenu_ {{w} {x} {y} {abs_x} {abs_y} {layout}} {
   if {[$w identify region $x $y] != "heading" } {
     event generate $w <ButtonPress-1> -x $x -y $y
@@ -1281,6 +1869,18 @@ proc glist.popupmenu_ {{w} {x} {y} {abs_x} {abs_y} {layout}} {
 }
 
 # Sorting
+################################################################################
+# glist.sortInit_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - layout: Layout name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::glistSortStr($w)` and sets sort indicator images on headings.
+################################################################################
 proc glist.sortInit_ {w {layout}} {
   set ::glistSortStr($w) ""
   set i 0
@@ -1293,6 +1893,21 @@ proc glist.sortInit_ {w {layout}} {
   }
 }
 
+################################################################################
+# glist.sortClickEvent_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - x: Mouse X coordinate.
+#   - y: Mouse Y coordinate.
+#   - event_state: Event state bitmask (used to detect Ctrl-click).
+#   - layout: Layout name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates sorting via `glist.sort_` based on the clicked column.
+################################################################################
 proc glist.sortClickEvent_ {w x y event_state layout} {
   set col [$w identify column $x $y]
   set col_idx [lsearch -exact $::glist_Headers [$w column $col -id] ]
@@ -1307,9 +1922,25 @@ proc glist.sortClickEvent_ {w x y event_state layout} {
   if {$control_click || ($i1 eq $col_idx && $i2 eq "")} {
     set clear 0
   }
-  glist.sort_ $w $col_idx $layout $clear
+	glist.sort_ $w $col_idx $layout $clear
 }
 
+################################################################################
+# glist.sort_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - col_idx: Column index within `::glist_Headers`.
+#   - layout: Layout name.
+#   - clear: When true, clears the existing sort chain first. Optional;
+#     defaults to 0.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::glist_Sort($layout)` and refreshes the visible list ordering.
+#   - Persists sort history in `::recentSort` via `glist.sortStore_`.
+################################################################################
 proc glist.sort_ {{w} {col_idx} {layout} {clear 0}} {
   if {[lindex $::glist_Sort($layout) 0] == 0 && $col_idx != 0} { set clear 1; }
   if {$clear} {
@@ -1334,9 +1965,21 @@ proc glist.sort_ {{w} {col_idx} {layout} {clear 0}} {
   glist.sortInit_ $w $layout
   glist.update_ $w $::glistBase($w)
   glist.sortStore_ $w $layout
-  unbusyCursor $w
+	unbusyCursor $w
 }
 
+################################################################################
+# glist.sortStore_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - layout: Layout name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::recentSort` with the current base filename and sort list.
+################################################################################
 proc glist.sortStore_ {w layout} {
   set file [sc_base filename $::glistBase($w)]
   if {[info exists ::recentSort]} {
@@ -1348,10 +1991,24 @@ proc glist.sortStore_ {w layout} {
       set ::recentSort [lreplace $::recentSort 0 1]
     }
   }
-  lappend ::recentSort $file $::glist_Sort($layout)
+	lappend ::recentSort $file $::glist_Sort($layout)
 }
 
 # Scrollbar
+################################################################################
+# glist.ybar_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - cmd: Scrollbar command (`scroll`/`moveto`) or mouse-wheel delta (`-1`/`+1`).
+#   - n: Amount or fraction, depending on `cmd`. Optional.
+#   - units: Unit selector (`units`/`pages`). Optional.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::glistFirst($w)` and schedules `glist.loadvalues_`.
+################################################################################
 proc glist.ybar_ {w cmd {n 0} {units ""}} {
   if { $cmd == "-1" || $cmd == "+1" } {
     #MouseWheel
@@ -1379,6 +2036,22 @@ proc glist.ybar_ {w cmd {n 0} {units ""}} {
   }
 }
 
+################################################################################
+# glist.yscroll_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - first: Normalised start fraction.
+#   - last: Normalised end fraction.
+# Returns:
+#   - The return value of the delegated scroll operation.
+# Side effects:
+#   - Keeps the embedded yview pinned at 0.0 and translates the widget-reported
+#     fractions into the external scrollbar’s fraction space.
+#   - May schedule additional loading when reaching the end of the currently
+#     loaded rows.
+################################################################################
 proc glist.yscroll_ {w first last} {
   # TODO: find a better way to prevent yview from moving the view off 0.0
   if {$first != 0} { return [$w yview moveto 0.0] }
@@ -1408,18 +2081,59 @@ proc glist.yscroll_ {w first last} {
 }
 
 #Drag and drop and changes in column's layout
+################################################################################
+# glist.insertcol_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - layout: Layout name.
+#   - col: Column index to insert.
+#   - after: Target treeview column token (e.g. `#3`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::glist_ColOrder($layout)` and refreshes `-displaycolumns`.
+################################################################################
 proc glist.insertcol_ {{w} {layout} {col} {after}} {
   set b [expr [string trimleft $after {#}]]
   set ::glist_ColOrder($layout) [linsert $::glist_ColOrder($layout) $b $col]
   $w configure -displaycolumns $::glist_ColOrder($layout)
 }
 
+################################################################################
+# glist.removecol_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - layout: Layout name.
+#   - col: Target treeview column token (e.g. `#3`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::glist_ColOrder($layout)` and refreshes `-displaycolumns`.
+################################################################################
 proc glist.removecol_ {{w} {layout} {col}} {
   set d [expr [string trimleft $col {#}] -1]
   set ::glist_ColOrder($layout) [lreplace $::glist_ColOrder($layout) $d $d]
   $w configure -displaycolumns $::glist_ColOrder($layout)
 }
 
+################################################################################
+# glist.press_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - x: Mouse X coordinate.
+#   - y: Mouse Y coordinate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Records state for a subsequent `glist.release_` to interpret resize/sort
+#     operations.
+################################################################################
 proc glist.press_ {{w} {x} {y}} {
   set ::glist_pressMode($w) ""
   set ::glist_activeHeading($w) ""
@@ -1436,6 +2150,19 @@ proc glist.press_ {{w} {x} {y}} {
   }
 }
 
+################################################################################
+# glist.persistResizedColumn_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - layout: Layout name.
+#   - col: Treeview column token (e.g. `#3`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::glist_ColWidth($layout)` for the resized column.
+################################################################################
 proc glist.persistResizedColumn_ {{w} {layout} {col}} {
   if {![winfo exists $w]} { return }
   if {$col eq ""} { return }
@@ -1447,6 +2174,23 @@ proc glist.persistResizedColumn_ {{w} {layout} {col}} {
   }
 }
 
+################################################################################
+# glist.release_
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: The treeview widget path (`$parent.glist`).
+#   - x: Mouse X coordinate.
+#   - y: Mouse Y coordinate.
+#   - event_state: Event state bitmask.
+#   - layout: Layout name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Persists column resizing and drag/drop reordering.
+#   - Performs sort changes on header clicks.
+#   - Clears transient press-state globals.
+################################################################################
 proc glist.release_ {{w} {x} {y} {event_state} {layout}} {
   set pressMode ""
   if {[info exists ::glist_pressMode($w)]} {
