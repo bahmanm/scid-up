@@ -113,7 +113,7 @@ private:
     int      MaxSearchTime; // Maximum search time in milliseconds.
     uint     MinDepthCheckTime; // will not check time before this depth is reached
     bool     Debug;         // If true, print debug info to stdout.
-    bool     PostInfo;      // If true, print post info to stdout.
+    bool     PostInfo;      // If true, print PV search info to stdout.
     bool     Pruning;       // If true, do futility pruning.
 #ifndef WINCE
     FILE *   LogFile;       // Output is to stdout and to this file.

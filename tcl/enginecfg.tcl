@@ -8,7 +8,10 @@
 
 ### Functions and sub-window for chess engine configuration.
 
-namespace eval enginecfg {}
+namespace eval enginecfg {
+    variable PROTOCOL_UCI_LOCAL 1
+    variable PROTOCOL_UCI_NET 2
+}
 
 # Return a list containing the engine's names sorted by last use.
 proc ::enginecfg::names {} {
@@ -139,7 +142,7 @@ proc ::enginecfg::dlgNewLocal {} {
     set fName [tk_getOpenFile -initialdir $::scidEnginesDir -filetypes $ftype]
     if {$fName eq ""} { return "" }
     set ::scidEnginesDir [file dirname $fName]
-    return [::enginecfg::add [list $fName $fName {} {} {} 0 {} 1 {}]]
+    return [::enginecfg::add [list $fName $fName {} {} {} 0 {} $::enginecfg::PROTOCOL_UCI_LOCAL {}]]
 }
 
 # Pop up a dialog box for the user to enter the url of a remote engine
@@ -160,7 +163,7 @@ proc ::enginecfg::dlgNewRemote {} {
     grab $w
     tkwait window $w
     if {$::enginecfg_dlgresult eq ""} { return "" }
-    return [::enginecfg::add [list $::enginecfg_dlgresult $::enginecfg_dlgresult {} {} {} 0 {} 2 {}]]
+    return [::enginecfg::add [list $::enginecfg_dlgresult $::enginecfg_dlgresult {} {} {} 0 {} $::enginecfg::PROTOCOL_UCI_NET {}]]
 }
 
 # TODO: no references to ::enginewin should exists in this file
@@ -348,9 +351,9 @@ proc ::enginecfg::setOptionFromWidget {id idx widget} {
 }
 
 # Creates the widgets for engine configuration, like the engine path, command
-    # line parameters, UCI protocol, etc...
+# line parameters, UCI protocol, etc...
 proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
-    lassign $engCfg name cmd args wdir elo time url uci
+    lassign $engCfg name cmd args wdir elo time url protocolFlag
     lassign $url scoreside notation pvwrap debugframe priority netport
 
     set w $configFrame.text
@@ -408,7 +411,7 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     $w window create end -window $w.wdirbtn -pady 2 -padx 2
 
     $w insert end "\n[tr EngineProtocol]:\t"
-    $w insert end [expr {$uci == 2 ? "network" : "uci"}]
+    $w insert end [expr {$protocolFlag == $::enginecfg::PROTOCOL_UCI_NET ? "network" : "uci"}]
 
     $w insert end "\n[tr EngineNotation]:\t"
     ttk::combobox $w.notation -state readonly -width 12 -values [list engine SAN "English SAN" figurine]

@@ -431,10 +431,10 @@ proc ::enginewin::connectEngine {id enginename} {
     ::enginewin::logEngine $id false
 
     set config [::enginecfg::get $enginename]
-    lassign $config name cmd args wdir elo time url uci options
+    lassign $config name cmd args wdir elo time url protocolFlag options
     # Update engine's last used time.
     set time [clock seconds]
-    set ::enginecfg::engConfig_$id [list $name $cmd $args $wdir $elo $time $url $uci {}]
+    set ::enginecfg::engConfig_$id [list $name $cmd $args $wdir $elo $time $url $protocolFlag {}]
 
     ::enginewin::updateDisplay $id ""
     ::enginewin::changeState $id closed
@@ -456,11 +456,10 @@ proc ::enginewin::connectEngine {id enginename} {
 
     update idletasks
 
-    switch $uci {
-      1 { set protocol "uci" }
-      2 { set protocol "network" }
-      default { error "Unsupported engine protocol flag: $uci" }
-    }
+    switch -- $protocolFlag \
+        $::enginecfg::PROTOCOL_UCI_LOCAL { set protocol "uci" } \
+        $::enginecfg::PROTOCOL_UCI_NET { set protocol "network" } \
+        default { error "Unsupported engine protocol flag: $protocolFlag" }
     if {[catch {
         if {$wdir != "" && $wdir != "."} {
             set oldwdir [pwd]

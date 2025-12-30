@@ -59,7 +59,7 @@ proc resetEngine {n} {
     set analysis(nodes$n) 0             ;# Number of (kilo)nodes searched
     set analysis(depth$n) 0             ;# Depth in ply
     set analysis(prev_depth$n) 0        ;# Previous depth
-    set analysis(time$n) 0              ;# Time in centisec (or sec; see below)
+    set analysis(time$n) 0              ;# Time in seconds
     set analysis(moves$n) ""            ;# PV (best line) output from engine
     set analysis(seldepth$n) 0
     set analysis(currmove$n) ""         ;# current move output from engine
@@ -71,14 +71,7 @@ proc resetEngine {n} {
     set analysis(cpuload$n) 0
     set analysis(movelist$n) {}         ;# Moves to reach current position
     set analysis(nonStdStart$n) 0       ;# Game has non-standard start
-    set analysis(has_analyze$n) 0       ;# Engine has analyze command
-    set analysis(has_setboard$n) 0      ;# Engine has setboard command
-    set analysis(send_sigint$n) 0       ;# Engine wants INT signal
-    set analysis(wants_usermove$n) 0    ;# Engine wants "usermove" before moves
-    set analysis(isCrafty$n) 0          ;# Engine appears to be Crafty
-    set analysis(wholeSeconds$n) 0      ;# Engine times in seconds not centisec
     set analysis(analyzeMode$n) 0       ;# Scid has started analyze mode
-    set analysis(invertScore$n) 1       ;# Score is for side to move, not white
     set analysis(automove$n) 0
     set analysis(automoveThinking$n) 0
     set analysis(automoveTime$n) 4000
@@ -88,14 +81,15 @@ proc resetEngine {n} {
     set analysis(logCount$n) 0          ;# Number of lines sent to log file
     set analysis(multiPV$n) {}          ;# multiPV list sorted : depth score moves
     set analysis(multiPVraw$n) {}       ;# same thing but with raw UCI moves
-    set analysis(uci$n) 0               ;# UCI engine
+    # Engine protocol flag (unused by the analysis UI for now; kept for debugging).
+    # 0 means unknown/not initialised.
+    set analysis(protocol$n) 0
     # UCI engine options in format ( name min max ). This is not engine config but its capabilities
     set analysis(uciOptions$n) {}
     # the number of lines in multiPV. If =1 then act the traditional way
     set analysis(multiPVCount$n) 1      ;# number of N-best lines
     set analysis(uciok$n) 0             ;# uciok sent by engine in response to uci command
     set analysis(name$n) ""             ;# engine name
-    set analysis(processInput$n) 0      ;# the time of the last processed event
     set analysis(waitForBestMove$n) 0
     set analysis(waitForReadyOk$n) 0
     set analysis(onUciOk$n) ""
@@ -163,7 +157,10 @@ proc resetAnalysis {{n 1}} {
     set analysis(maxmovenumber$n) 0
 }
 
-namespace eval enginelist {}
+namespace eval enginelist {
+    variable PROTOCOL_UCI_LOCAL 1
+    variable PROTOCOL_UCI_NET 2
+}
 
 set engines(list) {}
 
@@ -195,10 +192,12 @@ proc engine {arglist} {
     if {! [info exists newEngine(Time)]} { set newEngine(Time) 0 }
     if {! [info exists newEngine(URL)]} { set newEngine(URL) "" }
     # Scid only supports UCI engines. The `UCI` field is a protocol flag:
-    # - 1: local UCI engine
-    # - 2: remote UCI engine (network)
-    if {! [info exists newEngine(UCI)]} { set newEngine(UCI) 1 }
-    if {$newEngine(UCI) ni {1 2}} { error "Unsupported engine protocol flag: $newEngine(UCI)" }
+    # - ::enginelist::PROTOCOL_UCI_LOCAL : local UCI engine
+    # - ::enginelist::PROTOCOL_UCI_NET   : remote UCI engine (network)
+    if {! [info exists newEngine(UCI)]} { set newEngine(UCI) $::enginelist::PROTOCOL_UCI_LOCAL }
+    if {$newEngine(UCI) ni [list $::enginelist::PROTOCOL_UCI_LOCAL $::enginelist::PROTOCOL_UCI_NET]} {
+        error "Unsupported engine protocol flag: $newEngine(UCI)"
+    }
     if {! [info exists newEngine(UCIoptions)]} { set newEngine(UCIoptions) "" }
 
     lappend engines(list) [list $newEngine(Name) $newEngine(Cmd) \
@@ -491,7 +490,7 @@ proc ::enginelist::delete {index} {
         set engines(list) [lreplace $engines(list) $index $index]
         ::enginelist::sort
         ::enginelist::write
-	return true
+        return true
     }
     return false
 }
@@ -515,7 +514,7 @@ proc ::enginelist::edit {index} {
     if {$index >= 0  ||  $index >= [llength $engines(list)]} {
         set e [lindex $engines(list) $index]
     } else {
-        set e [list "" "" "" . 0 0 "" 1 {}]
+        set e [list "" "" "" . 0 0 "" $::enginelist::PROTOCOL_UCI_LOCAL {}]
     }
     
     set engines(newIndex) $index
@@ -640,15 +639,15 @@ proc ::enginelist::edit {index} {
             [string trim $engines(newDir)] == ""} {
             tk_messageBox -title Scid -icon info \
                     -message "The Name, Command and Directory fields must not be empty."
-	        } else {
-	            set newEntry [list $engines(newName) $engines(newCmd) \
-	                    $engines(newArgs) $engines(newDir) \
-	                    $engines(newElo) $engines(newTime) \
-	                    $engines(newURL) $engines(newProtocol) $::uci::newOptions ]
-	            if {$engines(newIndex) < 0} {
-	                lappend engines(list) $newEntry
-	            } else {
-	                set engines(list) [lreplace $engines(list) \
+        } else {
+            set newEntry [list $engines(newName) $engines(newCmd) \
+                    $engines(newArgs) $engines(newDir) \
+                    $engines(newElo) $engines(newTime) \
+                    $engines(newURL) $engines(newProtocol) $::uci::newOptions]
+            if {$engines(newIndex) < 0} {
+                lappend engines(list) $newEntry
+            } else {
+                set engines(list) [lreplace $engines(list) \
                         $engines(newIndex) $engines(newIndex) $newEntry]
             }
             destroy .engineEdit
@@ -1787,7 +1786,7 @@ proc makeAnalysisMove {{n 1} {comment ""}} {
 ################################################################################
 proc destroyAnalysisWin {{n 1}} {
     
-    global windowsOS analysis annotateMode
+    global analysis annotateMode
     
     if {$::finishGameMode} { toggleFinishGame }
     
@@ -1804,11 +1803,6 @@ proc destroyAnalysisWin {{n 1}} {
     if {$analysis(pipe$n) == ""} {
         set ::analysisWin$n 0
         return
-    }
-    
-    # Send interrupt signal if the engine wants it:
-    if {(!$windowsOS)  &&  $analysis(send_sigint$n)} {
-        catch {exec -- kill -s INT [pid $analysis(pipe$n)]}
     }
     
     # Some engines in analyze mode may not react as expected to "quit"
@@ -1975,7 +1969,7 @@ proc makeAnalysisWin { {n 1} {index -1} {autostart 1}} {
     set analysisCommand [ toAbsPath [lindex $engineData 1] ]
     set analysisArgs [lindex $engineData 2]
     set analysisDir [ toAbsPath [lindex $engineData 3] ]
-    set analysis(uci$n) [ lindex $engineData 7 ]
+    set analysis(protocol$n) [lindex $engineData 7]
     
     # If the analysis directory is not current dir, cd to it:
     set oldpwd ""
@@ -2318,37 +2312,6 @@ proc checkEngineIsAlive { {n 1} } {
     }
     return 1
 }
-################################################################################
-# formatAnalysisMoves
-# Visibility:
-#   Public.
-# Inputs:
-#   - text (string): Raw PV text from an engine.
-# Returns:
-#   - string: Normalised PV text suitable for inserting as a variation.
-# Side effects:
-#   - None.
-################################################################################
-proc formatAnalysisMoves {text} {
-    # Yace puts ".", "t", "t-" or "t+" at the start of its moves text,
-    # unless directed not to in its .ini file. Get rid of it:
-    if {[strIsPrefix ". " $text]} { set text [string range $text 2 end]}
-    if {[strIsPrefix "t " $text]} { set text [string range $text 2 end]}
-    if {[strIsPrefix "t- " $text]} { set text [string range $text 3 end]}
-    if {[strIsPrefix "t+ " $text]} { set text [string range $text 3 end]}
-    
-    # Trim any initial or final whitespace:
-    set text [string trim $text]
-    
-    # Yace often adds "H" after a move, e.g. "Bc4H". Remove them:
-    regsub -all "H " $text " " text
-    
-    # Crafty adds "<HT>" for a hash table comment. Change it to "{HT}":
-    regsub "<HT>" $text "{HT}" text
-    
-    return $text
-}
-
 set finishGameMode 0
 
 ################################################################################
@@ -2364,13 +2327,13 @@ set finishGameMode 0
 #   - Creates and shows the configuration dialog for UCI engines.
 ################################################################################
 proc toggleFinishGame { { n 1 } } {
-		global analysis
-		set b ".analysisWin$n.b1.bFinishGame"
-		if { $::autoplayMode } { return }
+	global analysis
+	set b ".analysisWin$n.b1.bFinishGame"
+	if { $::autoplayMode } { return }
 
-		# UCI engines
-		# Default values
-		if {! [info exists ::finishGameEng1] } { set ::finishGameEng1 1 }
+	# UCI engines
+	# Default values
+	if {! [info exists ::finishGameEng1] } { set ::finishGameEng1 1 }
 	if {! [info exists ::finishGameEng2] } { set ::finishGameEng2 1 }
 	if {! [info exists ::finishGameCmd1] } { set ::finishGameCmd1 "movetime" }
 	if {! [info exists ::finishGameCmdVal1] } { set ::finishGameCmdVal1 5 }
@@ -2414,18 +2377,18 @@ proc toggleFinishGame { { n 1 } } {
 
 	ttk::labelframe $w.wh_f -text "$::tr(White)" -padding 5
 	grid $w.wh_f -column 0 -row 0 -columnspan 2 -sticky we -pady 8
-    foreach psize $::boardSizes {
-        if {$psize >= 40} { break }
-    }
+	foreach psize $::boardSizes {
+		if {$psize >= 40} { break }
+	}
 	ttk::label $w.wh_f.p -image wk$psize
 	grid $w.wh_f.p -column 0 -row 0 -rowspan 3
 	ttk::radiobutton $w.wh_f.e1 -text $analysis(name1) -variable ::finishGameEng1 -value 1
-		if {[winfo exists .analysisWin2]} {
-			ttk::radiobutton $w.wh_f.e2 -text $analysis(name2) -variable ::finishGameEng1 -value 2
-		} else {
-			set ::finishGameEng1 1
-			ttk::radiobutton $w.wh_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng1 -value 2 -state disabled
-		}
+	if {[winfo exists .analysisWin2]} {
+		ttk::radiobutton $w.wh_f.e2 -text $analysis(name2) -variable ::finishGameEng1 -value 2
+	} else {
+		set ::finishGameEng1 1
+		ttk::radiobutton $w.wh_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng1 -value 2 -state disabled
+	}
 	grid $w.wh_f.e1 -column 1 -row 0 -columnspan 3 -sticky w
 	grid $w.wh_f.e2 -column 1 -row 1 -columnspan 3 -sticky w
 	ttk::spinbox $w.wh_f.cv -width 3 -textvariable ::finishGameCmdVal1 -from 1 -to 999 -justify right
@@ -2440,11 +2403,11 @@ proc toggleFinishGame { { n 1 } } {
 	ttk::label $w.bk_f.p -image bk$psize
 	grid $w.bk_f.p -column 0 -row 0 -rowspan 3
 	ttk::radiobutton $w.bk_f.e1 -text $analysis(name1) -variable ::finishGameEng2 -value 1
-		if {[winfo exists .analysisWin2]} {
-			ttk::radiobutton $w.bk_f.e2 -text $analysis(name2) -variable ::finishGameEng2 -value 2
-		} else {
-			set ::finishGameEng2 1
-			ttk::radiobutton $w.bk_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng2 -value 2 -state disabled
+	if {[winfo exists .analysisWin2]} {
+		ttk::radiobutton $w.bk_f.e2 -text $analysis(name2) -variable ::finishGameEng2 -value 2
+	} else {
+		set ::finishGameEng2 1
+		ttk::radiobutton $w.bk_f.e2 -text $::tr(StartEngine) -variable ::finishGameEng2 -value 2 -state disabled
 	}
 	grid $w.bk_f.e1 -column 1 -row 0 -columnspan 3 -sticky w
 	grid $w.bk_f.e2 -column 1 -row 1 -columnspan 3 -sticky w
@@ -3079,7 +3042,7 @@ proc updateAnalysisBoard {n moves} {
 #   - None.
 # Side effects:
 #   - Sends the current position/move list to the engine and (re)starts analysis.
-#   - Schedules deferred updates via `after` (non-UCI engines).
+#   - Sends the current position to the engine via UCI and (re)starts analysis.
 #   - Updates multiple `analysis(...)` fields (e.g. `fen`, `movelist`, `nodes`).
 ################################################################################
 proc updateAnalysis {{n 1}} {
@@ -3266,13 +3229,12 @@ proc automove_go {{n 1}} {
 # Visibility:
 #   Public.
 # Inputs:
-#   - moves (string|list): Moves to add (SAN or UCI, depending on engine type).
+#   - moves (string|list): Moves to add in UCI coordinate notation.
 #   - n (int): Analysis engine slot.
 # Returns:
-#   - int: Error code from `catch` for non-UCI engines; UCI path returns whatever
-#     `::uci::sc_move_add` returns.
+#   - int: Whatever `::uci::sc_move_add` returns.
 # Side effects:
-#   - Adds moves to the current game via `sc_move addSan` (non-UCI) or UCI helper.
+#   - Adds moves to the current game via `::uci::sc_move_add`.
 ################################################################################
 proc sc_move_add { moves n } {
     return [::uci::sc_move_add $moves]
