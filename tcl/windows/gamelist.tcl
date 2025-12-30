@@ -398,8 +398,15 @@ proc ::windows::gamelist::CopyGames {{w} {srcBase} {dstBase} {filter "dbfilter"}
 	}
 	# If copying to the clipbase, do not bother asking for confirmation:
 	if {$ask && $dstBase != $::clipbase_db} {
+		set msg [format %b [string map \
+			[list \
+				\$nGamesToCopy $nGamesToCopy \
+				\$fromName $fromName \
+				\$targetName $targetName \
+			] \
+			$::tr(CopyConfirm)]]
 		set confirm [tk_messageBox -type "okcancel" -icon question -title "Scid: $::tr(CopyGames)" \
-			-message [subst $::tr(CopyConfirm)] ]
+			-message $msg ]
 		if {$confirm != "ok"} { return }
 	}
 

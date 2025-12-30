@@ -141,7 +141,7 @@ test getRange-both-1.0 {getRange returns explicit bounds when both are set} -set
 } -result {1 3}
 
 
-test getRange-min-only-1.0 {getRange uses cmd_max when only min is set} -setup {
+test getRange-min-only-1.0 {getRange uses default_max when only min is set} -setup {
     ::header_search_test::setup
 } -body {
     # Arrange
@@ -155,7 +155,7 @@ test getRange-min-only-1.0 {getRange uses cmd_max when only min is set} -setup {
 } -result {10 99}
 
 
-test getRange-max-only-1.0 {getRange uses cmd_min when only max is set} -setup {
+test getRange-max-only-1.0 {getRange uses default_min when only max is set} -setup {
     ::header_search_test::setup
 } -body {
     # Arrange

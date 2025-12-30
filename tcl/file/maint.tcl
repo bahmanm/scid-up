@@ -604,7 +604,7 @@ proc doMarkDups {{parent .}} {
     ERROR::MessageBox
     set result 0
   } else {
-    set message [subst $::tr(TwinCheckFound1)]
+    set message [format %b [string map [list \$result $result] $::tr(TwinCheckFound1)]]
     if {$result > 0} {append message $::tr(TwinCheckFound2)}
     append message "."
     tk_messageBox -type ok -parent $parent -icon info -title [concat "Scid: " $::tr(Result)] \
@@ -1119,8 +1119,9 @@ proc doAllocateRatings {} {
   } else {
     set r [::utils::thousands [lindex $result 0]]
     set g [::utils::thousands [lindex $result 1]]
+    set message [format %b [string map [list \$r $r \$g $g] $::tr(AddedRatings)]]
     tk_messageBox -type ok -icon info -parent . \
-        -title "Scid" -message [subst $::tr(AddedRatings)]
+        -title "Scid" -message $message
   }
   ::notify::DatabaseModified $::curr_db
 }

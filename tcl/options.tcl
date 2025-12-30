@@ -90,9 +90,9 @@ proc InitDefaultStats {} {
 
   # Enable stats for subsequent years
   for { set year [clock format [clock seconds] -format {%Y}] } \
-    { $year>2008 && ![info exists ::windows::stats::display([subst {y$year}])] } \
+    { $year>2008 && ![info exists ::windows::stats::display(y$year)] } \
     { incr year -1 } {
-    set ::windows::stats::display([subst {y$year}]) 1
+    set ::windows::stats::display(y$year) 1
   }
 }
 
@@ -682,7 +682,7 @@ proc options.write {} {
       set vars {}
       foreach elem $opt_sorted {
         if {[array exists $elem]} {
-          lappend vars {*}[lmap name [array names $elem] {subst "$elem\($name\)"}]
+          lappend vars {*}[lmap name [array names $elem] {format "%s(%s)" $elem $name}]
         } else {
           lappend vars $elem
         }

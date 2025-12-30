@@ -869,7 +869,7 @@ proc ::tree::graph { baseNumber {bpress 0}} {
   set othersScore 0.0
   set mean 50.0
   set totalGames 0
-  set treeData [subst $[subst {::tree::treeData$baseNumber} ] ]
+  set treeData [set ::tree::treeData$baseNumber]
   # [.treeWin$baseNumber.f.tl get 0 end]
 
   set numTreeLines [llength $treeData]

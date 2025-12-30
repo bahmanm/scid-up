@@ -514,23 +514,21 @@ proc ::search::headerGetOptions {{cmd ""}} {
 # Inputs:
 #   - var_min: Variable name holding the minimum bound (may be empty).
 #   - var_max: Variable name holding the maximum bound (may be empty).
-#   - cmd_min: Fallback string passed to `subst` to produce the minimum bound
-#     when only the maximum is set.
-#   - cmd_max: Fallback string passed to `subst` to produce the maximum bound
-#     when only the minimum is set.
+#   - default_min: Default minimum when only the maximum is set.
+#   - default_max: Default maximum when only the minimum is set.
 # Returns:
 #   - A 2-item list `{min max}`, or `{}` when both bounds are empty.
 # Side effects:
 #   - None.
 ################################################################################
-proc ::search::getRange {var_min var_max cmd_min cmd_max} {
+proc ::search::getRange {var_min var_max default_min default_max} {
 	if {[set $var_min] ne ""} {
 		if {[set $var_max] ne ""} {
 			return [list [set $var_min] [set $var_max]]
 		}
-		return [list [set $var_min] [subst $cmd_max]]
+		return [list [set $var_min] $default_max]
 	} elseif {[set $var_max] ne ""} {
-		return [list [subst $cmd_min] [set $var_max]]
+		return [list $default_min [set $var_max]]
 	}
 	return {}
 }
@@ -560,10 +558,11 @@ proc ::search::headerPlayerOptions {dest_list white welo black belo} {
 
 	if {$::sBlack ne ""} { lappend options $black $::sBlack	}
 
-	set range [::search::getRange ::sWhiteEloMin ::sWhiteEloMax 0 "\[sc_info limit elo\]"]
+	set eloLimit [sc_info limit elo]
+	set range [::search::getRange ::sWhiteEloMin ::sWhiteEloMax 0 $eloLimit]
 	if {$range ne ""} { lappend options $welo $range }
 
-	set range [::search::getRange ::sBlackEloMin ::sBlackEloMax 0 "\[sc_info limit elo\]"]
+	set range [::search::getRange ::sBlackEloMin ::sBlackEloMax 0 $eloLimit]
 	if {$range ne ""} { lappend options $belo $range }
 }
 
@@ -610,13 +609,15 @@ proc ::search::getSearchOptions {dest_list} {
 	set range [::search::getRange ::sGlMin ::sGlMax 0 999]
 	if {$range ne ""} { lappend search "-length" $range }
 
-	set range [::search::getRange ::sDateMin ::sDateMax "1800.01.01" "\[sc_info limit year\].12.31"]
+	set yearLimit [sc_info limit year]
+	set range [::search::getRange ::sDateMin ::sDateMax "1800.01.01" "$yearLimit.12.31"]
 	if {$range ne ""} { lappend search "-date" $range }
 
-	set range [::search::getRange ::sEventDateMin ::sEventDateMax "1800.01.01" "\[sc_info limit year\].12.31"]
+	set range [::search::getRange ::sEventDateMin ::sEventDateMax "1800.01.01" "$yearLimit.12.31"]
 	if {$range ne ""} { lappend search "-eventdate" $range }
 
-	set range [::search::getRange ::sEloDiffMin ::sEloDiffMax "-\[sc_info limit elo\]" "\[sc_info limit elo\]"]
+	set eloLimit [sc_info limit elo]
+	set range [::search::getRange ::sEloDiffMin ::sEloDiffMax "-$eloLimit" $eloLimit]
 	if {$range ne ""} {
 		lappend search "-delo" $range
 		if {$::sIgnoreCol == "Yes"} {

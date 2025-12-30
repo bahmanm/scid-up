@@ -151,11 +151,10 @@ proc setupBoard {} {
     setSetupBoardToFen %W "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
   }
   ttk::button $w.r.b.switchcolor -text $::tr(SwitchColors) -command {
-    regsub -all {(?:([A-Z])|([a-z]))} $::setupBd {[string tolower "\1"][string toupper "\2"]} invertCase
-    set ::setupBd [subst $invertCase]
+    set invertMap {K k Q q R r B b N n P p k K q Q r R b B n N p P}
+    set ::setupBd [string map $invertMap $::setupBd]
     set ::toMove [expr {$::toMove == "White" ? "Black" : "White"}]
-    regsub -all {(?:([A-Z])|([a-z]))} $::castling {[string tolower "\1"][string toupper "\2"]} invertCase
-    set ::castling [subst $invertCase]
+    set ::castling [string map $invertMap $::castling]
     set epFile {-}
     ::board::update .setup.l.bd $setupBd
     set ::setupFen [makeSetupFen]
