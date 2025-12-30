@@ -19,6 +19,18 @@ foreach {n v} {minPlayers 999 maxPlayers 999 minGames 9999 maxGames 9999 \
 
 set tourneyWin 0
 
+################################################################################
+# ::tourney::toggle
+#   Toggles the Tournament window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or destroys the `.tourney` window.
+################################################################################
 proc ::tourney::toggle {} {
   set w .tourney
   if {[winfo exists $w]} {
@@ -28,6 +40,23 @@ proc ::tourney::toggle {} {
   }
 }
 
+################################################################################
+# ::tourney::Open
+#   Creates and populates the Tournament search window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.tourney` and its child widgets.
+#   - Sets the `tourneyWin` global flag and resets it on `<Destroy>`.
+#   - Binds key handlers and sets up text tags.
+#   - Ensures defaults are initialised (via `::tourney::defaults`).
+#   - Adds a `trace` to validate `::tourney::size`.
+#   - Triggers an initial refresh (via `::tourney::refresh`).
+################################################################################
 proc ::tourney::Open {} {
   global tourneyWin
   set w .tourney
@@ -146,6 +175,19 @@ proc ::tourney::Open {} {
   ::tourney::refresh
 }
 
+################################################################################
+# ::tourney::defaults
+#   Resets Tournament search fields to their default values.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tourney::*` globals (date bounds, ranges, and text fields).
+#   - Sets `::tourney::_defaults`.
+################################################################################
 proc ::tourney::defaults {} {
   set ::tourney::_defaults 1
   set ::tourney::start ""
@@ -163,6 +205,27 @@ proc ::tourney::defaults {} {
   set ::tourney::player ""
 }
 
+################################################################################
+# ::tourney::refresh
+#   Searches tournaments in the current database and renders the results list.
+# Visibility:
+#   Public.
+# Inputs:
+#   - option: Optional; unused (kept for call-compatibility).
+# Returns:
+#   - None.
+# Side effects:
+#   - Returns immediately when `.tourney` does not exist.
+#   - Updates history for `::tourney::site`, `::tourney::event`, and
+#     `::tourney::player`.
+#   - Normalises user input via `::tourney::check`.
+#   - Updates `::curr_db` to the current base.
+#   - Uses `sc_filter` and `sc_base tournaments` to query tournament summaries.
+#   - Updates `.tourney.t.text` content, tags, and bindings; disables the widget.
+#   - On failure, shows `ERROR::MessageBox`.
+#   - TODO: In the `end == ""` branch, the code assigns to `start` (likely a
+#     typo); revisit once the intended behaviour is clarified.
+################################################################################
 proc ::tourney::refresh {{option ""}} {
   set w .tourney
   if {! [winfo exists $w]} { return }
@@ -272,6 +335,21 @@ proc ::tourney::refresh {{option ""}} {
   $t configure -state disabled
 }
 
+################################################################################
+# ::tourney::check
+#   Normalises Tournament search inputs (dates, country code, and range bounds).
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tourney::start` / `::tourney::end` to full YYYY.MM.DD patterns.
+#   - Uppercases/truncates `::tourney::country` (and clears the placeholder
+#     "---").
+#   - Swaps min/max values when the bounds are reversed.
+################################################################################
 proc ::tourney::check {} {
   set start $::tourney::start
   set end $::tourney::end
@@ -305,6 +383,20 @@ proc ::tourney::check {} {
   }
 }
 
+################################################################################
+# ::tourney::select
+#   Loads the selected game and opens related views.
+# Visibility:
+#   Public.
+# Inputs:
+#   - gnum: Game number to load.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::game::Load`.
+#   - On load error, shows a `tk_messageBox` with the error message.
+#   - On success, calls `updateBoard -pgn`, `updateTitle`, and `::crosstab::Open`.
+################################################################################
 proc ::tourney::select {gnum} {
   if {[catch {::game::Load $gnum} result]} {
     tk_messageBox -type ok -icon info -title "Scid" -message $result
@@ -315,6 +407,18 @@ proc ::tourney::select {gnum} {
   ::crosstab::Open
 }
 
+################################################################################
+# ::tourney::getSearchOptions
+#   Builds the `sc_base tournaments` options list from the current UI state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - A list of options to splat into `sc_base tournaments`.
+# Side effects:
+#   - None.
+################################################################################
 proc ::tourney::getSearchOptions {} {
     set options [list $::tourney::size]
     if {$::tourney::player ne ""} {
