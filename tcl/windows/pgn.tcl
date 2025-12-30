@@ -454,6 +454,7 @@ namespace eval pgn {
   # Returns:
   #   - None.
   # Side effects:
+  #   - Does nothing unless `.pgnWin` exists and `::pgn::showColor` is true.
   #   - Reads the current PGN offset via `sc_pos pgnOffset`.
   #   - Updates `.pgnWin.text` tags and may adjust scroll position via `see`/`yview`.
   ################################################################################

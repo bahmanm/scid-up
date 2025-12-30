@@ -22,9 +22,6 @@ array set ::enginewin::engState {} ; # closed disconnected idle run locked
 #     `idle` or `run` state.
 # Side effects:
 #   - None.
-# Errors:
-#   - Raises an error if `::enginewin_lastengine($id)` is not set for an engine
-#     that is in `idle` or `run` state.
 ################################################################################
 proc ::enginewin::listEngines {} {
     set result {}
@@ -35,20 +32,7 @@ proc ::enginewin::listEngines {} {
     return $result
 }
 
-################################################################################
-# ::enginewin::onPosChanged
-#   Sends the current position to running engines.
-# Visibility:
-#   Public.
-# Inputs:
-#   - ids: Optional list of engine IDs to update. When empty, updates all running
-#     engines.
-# Returns:
-#   - None.
-# Side effects:
-#   - Calls `sc_game UCI_currentPos` at most once per invocation.
-#   - Calls `::enginewin::sendPosition` for each matching engine.
-################################################################################
+# Sends the updated position to the active engines
 proc ::enginewin::onPosChanged { {ids ""}} {
     set position ""
     foreach {id state} [array get ::enginewin::engState] {
@@ -61,21 +45,8 @@ proc ::enginewin::onPosChanged { {ids ""}} {
     }
 }
 
-################################################################################
-# ::enginewin::sendPosition
-#   Clears the PV display and sends the provided UCI position to the engine.
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - position: UCI position string.
-# Returns:
-#   - None.
-# Side effects:
-#   - Clears the PV display via `::enginewin::updateDisplay $id ""`.
-#   - Updates `::enginewin::newgame_$id` and may send a `NewGame` message.
-#   - Sends a `Go` message via `::engine::send`.
-################################################################################
+# Sends a position to an engine.
+# When the engine replies with an InfoGo message the state will change to "run".
 proc ::enginewin::sendPosition {id position} {
     ::enginewin::updateDisplay $id ""
     if {[set ::enginewin::newgame_$id]} {
@@ -85,21 +56,8 @@ proc ::enginewin::sendPosition {id position} {
     ::engine::send $id Go [list $position [set ::enginewin::limits_$id]]
 }
 
-################################################################################
-# ::enginewin::start
-#   Ensures an engine window exists and starts analysis for the current position.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Optional engine ID. When empty, a new engine window is created.
-#   - enginename: Optional engine name to connect when creating a new window.
-# Returns:
-#   - The engine ID.
-# Side effects:
-#   - May create the engine window (via `::enginewin::Open`).
-#   - Attempts to send the current position to the engine (via
-#     `::enginewin::sendPosition`); errors in this step are ignored.
-################################################################################
+# Start an engine (if necessary it will opens a new enginewin window).
+# Return the engine's id.
 proc ::enginewin::start { {id ""} {enginename ""} } {
     if {$id eq "" || ![winfo exists .engineWin$id]} {
         set id [::enginewin::Open $id $enginename]
@@ -112,19 +70,8 @@ proc ::enginewin::start { {id ""} {enginename ""} } {
     return $id
 }
 
-################################################################################
-# ::enginewin::stop
-#   Stops analysis for the specified engine.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Engine ID.
-# Returns:
-#   - Boolean indicating whether a `StopGo` message was sent.
-# Side effects:
-#   - Sends a `StopGo` message via `::engine::send` when the engine is in `run`
-#     or `locked` state.
-################################################################################
+# Stop the engine.
+# Return true if a StopGo message was sent to the engine.
 proc ::enginewin::stop {id} {
     if {[winfo exists .engineWin$id] && $::enginewin::engState($id) in "run locked"} {
         ::engine::send $id StopGo
@@ -133,19 +80,8 @@ proc ::enginewin::stop {id} {
     return false
 }
 
-################################################################################
-# ::enginewin::toggleStartStop
-#   Stops a running engine, or starts it when it is not currently analysing.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Optional engine ID.
-#   - enginename: Optional engine name to connect when starting.
-# Returns:
-#   - The engine ID.
-# Side effects:
-#   - Calls `::enginewin::stop` or `::enginewin::start`.
-################################################################################
+# If the engine is running, stop it. Otherwise invoke ::enginewin::start
+# Return the engine's id.
 proc ::enginewin::toggleStartStop { {id ""} {enginename ""} } {
     if {[::enginewin::stop $id]} {
         return $id
@@ -153,22 +89,6 @@ proc ::enginewin::toggleStartStop { {id ""} {enginename ""} } {
     return [::enginewin::start $id $enginename]
 }
 
-################################################################################
-# ::enginewin::Open
-#   Creates and initialises an engine window for the specified engine ID.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Optional engine ID. When empty, selects the first unused ID.
-#   - enginename: Optional engine name to connect after creating the window.
-# Returns:
-#   - The engine ID when a new window is created.
-#   - None (empty string) when the window already exists and is only made visible.
-# Side effects:
-#   - Creates `.engineWin$id` and its child widgets, bindings, and traces.
-#   - Initialises `::enginewin::engState($id)` and related state variables.
-#   - Attempts to connect the selected engine (via `::enginewin::connectEngine`).
-################################################################################
 proc ::enginewin::Open { {id ""} {enginename ""} } {
     if {$id == ""} {
         set id 1
@@ -260,20 +180,7 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
     return $id
 }
 
-################################################################################
-# ::enginewin::createDisplayFrame
-#   Creates and configures the PV display widget for an engine window.
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - display: Display-frame widget path (container).
-# Returns:
-#   - None.
-# Side effects:
-#   - Creates `$display.pv_lines` and configures tags and bindings.
-#   - Schedules a board popup on hover over PV moves (via `after`).
-################################################################################
+# Creates $w.display, where the pv lines sent by the engine will be shown.
 proc ::enginewin::createDisplayFrame {id display} {
     ttk_text $display.pv_lines -exportselection true -padx 4 -state disabled
     autoscrollBars both $display $display.pv_lines
@@ -327,21 +234,7 @@ proc ::enginewin::createDisplayFrame {id display} {
     }
 }
 
-################################################################################
-# ::enginewin::createButtonsBar
-#   Creates the engine control button bar (start/stop, lock, add moves, options).
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - btn: Button-bar container widget path.
-#   - display: Display-frame widget path (container that holds `pv_lines`).
-# Returns:
-#   - None.
-# Side effects:
-#   - Creates and configures buttons/menus, and installs widget bindings.
-#   - Adds a trace on `::enginewin::limits_$id` to keep the limits control synced.
-################################################################################
+# Creates the buttons bar
 proc ::enginewin::createButtonsBar {id btn display} {
     ttk::button $btn.startStop -image [list tb_eng_on pressed tb_eng_off] -style Toolbutton \
         -command "::enginewin::toggleStartStop $id"
@@ -430,21 +323,7 @@ proc ::enginewin::createButtonsBar {id btn display} {
     grid columnconfigure $btn 8 -weight 1
 }
 
-################################################################################
-# ::enginewin::changeOption
-#   Updates an engine option and, when required, restarts analysis.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Engine ID.
-#   - name: Option name (or `_go_limits` for the analysis limits selector).
-#   - widget_or_value: Widget path to read the option from, or a direct value.
-# Returns:
-#   - None.
-# Side effects:
-#   - Updates `::enginewin::limits_$id` when `name` is `_go_limits`.
-#   - Sends SetOptions via `::enginecfg::*` and may resend the current position.
-################################################################################
+# Sends a SetOptions message to the engine if an option's value is different.
 proc ::enginewin::changeOption {id name widget_or_value} {
     set prev_state $::enginewin::engState($id)
     if {$name eq "_go_limits"} {
@@ -463,23 +342,13 @@ proc ::enginewin::changeOption {id name widget_or_value} {
     }
 }
 
-################################################################################
-# ::enginewin::changeState
-#   Updates the engine state and synchronises the relevant UI controls.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Engine ID.
-#   - newState: State name. Recognised values include:
-#       - `closed`, `disconnected`, `idle`, `run`, `locked`
-#       - `showConfig`, `toggleConfig` (UI-only state transitions)
-# Returns:
-#   - None.
-# Side effects:
-#   - Enables/disables relevant controls and may show/hide the config pane.
-#   - Updates `::enginewin::engState($id)`.
-#   - Clears the best-move notification in non-running states.
-################################################################################
+# Sets the current state of the engine and updates the relevant buttons.
+# The states are:
+# closed -> No engine is open.
+# disconnected -> The engine was open but the connection was terminated.
+# idle -> The engine is open and ready.
+# run -> The engine is analyzing the current position.
+# locked -> The engine is analyzing a fixed position.
 proc ::enginewin::changeState {id newState} {
     set w .engineWin$id
     if {$newState in {showConfig toggleConfig}} {
@@ -529,41 +398,14 @@ proc ::enginewin::changeState {id newState} {
     }
 }
 
-################################################################################
-# ::enginewin::updateEngineName
-#   Updates the engine name, window title, and notifies the config pane.
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - name: Engine name.
-# Returns:
-#   - None.
-# Side effects:
-#   - Updates `::enginewin_lastengine($id)`.
-#   - Updates the window title.
-#   - Generates `<<UpdateEngineName>>` on `.engineWin$id.config.btn`.
-################################################################################
+# Invoked when the engine's name changes.
+# Update the window's title and ::enginewin_lastengine accordingly.
 proc ::enginewin::updateEngineName {id name} {
     set ::enginewin_lastengine($id) $name
     ::setTitle .engineWin$id "[tr Engine]: $name"
     event generate .engineWin$id.config.btn <<UpdateEngineName>> -data [list $name]
 }
 
-################################################################################
-# ::enginewin::logEngine
-#   Enables or disables the engine I/O log pane.
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - on: Boolean indicating whether logging should be enabled.
-# Returns:
-#   - None.
-# Side effects:
-#   - Shows/hides `.engineWin$id.debug`.
-#   - Configures the engine log callback via `::engine::setLogCmd`.
-################################################################################
 proc ::enginewin::logEngine {id on} {
     catch { .engineWin$id.pane forget .engineWin$id.debug }
     .engineWin$id.debug.lines configure -state normal
@@ -579,22 +421,6 @@ proc ::enginewin::logEngine {id on} {
     }
 }
 
-################################################################################
-# ::enginewin::logHandler
-#   Appends a log message to the debug text widget with a relative timestamp.
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - widget: Debug text widget path.
-#   - tag: Text tag to apply.
-#   - prefix: String prefix to add before the message.
-#   - msg: Log message text.
-# Returns:
-#   - None.
-# Side effects:
-#   - Inserts into the debug text widget and scrolls to the end.
-################################################################################
 proc ::enginewin::logHandler {id widget tag prefix msg} {
     upvar ::enginewin::startTime_$id startTime_
     set t [format "(%.3f) " \
@@ -605,21 +431,8 @@ proc ::enginewin::logHandler {id widget tag prefix msg} {
     $widget configure -state disabled
 }
 
-################################################################################
-# ::enginewin::connectEngine
-#   Closes any existing engine connection and (optionally) connects a new engine.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Engine ID.
-#   - enginename: Engine configuration name to connect, or empty to disconnect.
-# Returns:
-#   - None.
-# Side effects:
-#   - Destroys and rebuilds the config widget tree.
-#   - Closes/reconnects the engine process.
-#   - Sends `SetOptions` and an initial `NewGame` message when connecting.
-################################################################################
+# If any, closes the connection with the current engine.
+# If "config" is not "" opens a connection with a new engine.
 proc ::enginewin::connectEngine {id enginename} {
     set configFrame .engineWin$id.config.options
     foreach wchild [winfo children $configFrame] { destroy $wchild }
@@ -683,20 +496,7 @@ proc ::enginewin::connectEngine {id enginename} {
     set ::enginewin::newgame_$id true
 }
 
-################################################################################
-# ::enginewin::callback
-#   Handles incoming engine messages and updates UI/state accordingly.
-# Visibility:
-#   Public.
-# Inputs:
-#   - id: Engine ID.
-#   - msg: Message list `{msgType msgData}`.
-# Returns:
-#   - None.
-# Side effects:
-#   - Updates engine state, config UI, and PV display.
-#   - Shows a warning `tk_messageBox` on disconnection.
-################################################################################
+# Receive the engine's messages
 proc ::enginewin::callback {id msg} {
     set configFrame .engineWin$id.config.options
     lassign $msg msgType msgData
@@ -734,20 +534,6 @@ proc ::enginewin::callback {id msg} {
     }
 }
 
-################################################################################
-# ::enginewin::changeDisplayLayout
-#   Applies display-layout settings (notation, score side, and PV wrap mode).
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - param: Layout parameter name (`notation`, `scoreside`, or `wrap`).
-#   - value: New value.
-# Returns:
-#   - None.
-# Side effects:
-#   - Updates `::enginewin::m_(<param>,$id)` and/or reconfigures the PV widget.
-################################################################################
 proc ::enginewin::changeDisplayLayout {id param value} {
     set w .engineWin$id
     switch $param {
@@ -761,19 +547,6 @@ proc ::enginewin::changeDisplayLayout {id param value} {
     }
 }
 
-################################################################################
-# ::enginewin::updateOptions
-#   Updates the quick-access option controls based on engine configuration.
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - msgData: Engine configuration data (as received in `InfoConfig`).
-# Returns:
-#   - None.
-# Side effects:
-#   - Enables/disables and updates the multipv/threads/hash UI controls.
-################################################################################
 proc ::enginewin::updateOptions {id msgData} {
     set w .engineWin$id
     if {$msgData eq ""} {
@@ -799,20 +572,6 @@ proc ::enginewin::updateOptions {id msgData} {
     }
 }
 
-################################################################################
-# ::enginewin::updateDisplay
-#   Renders engine analysis output (PV lines, score, and summary header).
-# Visibility:
-#   Private.
-# Inputs:
-#   - id: Engine ID.
-#   - msgData: `InfoPV` payload (multipv/depth/score/pv etc) or empty string.
-# Returns:
-#   - None.
-# Side effects:
-#   - Updates `.engineWin$id.header_info.text` and `.engineWin$id.display.pv_lines`.
-#   - May emit `::notify::EngineBestMove` for the current best move.
-################################################################################
 proc ::enginewin::updateDisplay {id msgData} {
     lassign $msgData multipv depth seldepth nodes nps hashfull tbhits time score score_type score_wdl pv
     if {$time eq ""} { set time 0 }
@@ -935,23 +694,10 @@ proc ::enginewin::updateDisplay {id msgData} {
     }
 }
 
-################################################################################
-# ::enginewin::getMoves
-#   Retrieves the move sequence from a PV line in the display widget.
-# Visibility:
-#   Private.
-# Inputs:
-#   - w: PV text widget.
-#   - index: Index identifying the PV line and range:
-#       - `<line>.0` selects only the first move.
-#       - `<line>.end` selects the entire PV.
-# Returns:
-#   - A move string as displayed (with any figurines mapped back to `KQRBN`).
-# Side effects:
-#   - None.
-# Errors:
-#   - Raises an error if the index does not identify a valid PV line.
-################################################################################
+# Retrieve the moves at the line specified by index.
+# An index linenumber.0 can be used to retrive just the first move.
+# An index linenumber.end can be used to retrive all the moves.
+# If index is not valid an exception is raised.
 proc ::enginewin::getMoves {w index} {
     lassign [$w tag nextrange moves "$index linestart"] begin end
     if {[regexp {^\d+\.0$} $index]} {
@@ -967,21 +713,10 @@ proc ::enginewin::getMoves {w index} {
     return [string map {"\u2654" K "\u2655" Q "\u2656" R "\u2657" B "\u2658" N} $moves]
 }
 
-################################################################################
-# ::enginewin::exportMoves
-#   Imports a PV line (or its first move) into the current game.
-# Visibility:
-#   Public.
-# Inputs:
-#   - w: PV text widget.
-#   - index: PV line index (`<line>.0` for first move, `<line>.end` for all).
-# Returns:
-#   - Boolean indicating whether a valid PV line was found and imported.
-# Side effects:
-#   - Saves an undo point via `::undoFeature save`.
-#   - Imports moves into the current game via `sc_game import`.
-#   - Notifies a PGN position change via `::notify::PosChanged -pgn`.
-################################################################################
+# Add the moves to the current game
+# An index linenumber.0 can be used to add just the first move.
+# An index linenumber.end can be used to add all the moves.
+# Return false if index is not valid.
 proc ::enginewin::exportMoves {w index} {
     if {[catch {::enginewin::getMoves $w $index} line]} {
         return false
@@ -992,21 +727,7 @@ proc ::enginewin::exportMoves {w index} {
     return true
 }
 
-################################################################################
-# ::enginewin::exportLines
-#   Imports all current PV lines as variations into the current game.
-# Visibility:
-#   Public.
-# Inputs:
-#   - w: PV text widget.
-# Returns:
-#   - None.
-# Side effects:
-#   - Saves a single undo point for the first imported line.
-#   - Imports each PV line via `sc_game import`.
-#   - Restores the original PGN location after each import via `sc_move pgn`.
-#   - Notifies a PGN-only position change via `::notify::PosChanged pgnonly`.
-################################################################################
+# Add all the move lines to the current game.
 proc ::enginewin::exportLines {w} {
     set i_line 1
     set location [sc_move pgn]

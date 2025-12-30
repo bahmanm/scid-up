@@ -10,6 +10,21 @@ set ::windows::stats::old_elo 0
 set ::windows::stats::stat_year 0
 set ::windows::stats::statelo 0
 
+################################################################################
+# ::windows::stats::Open
+#   Opens (or closes) the Filter Statistics window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - If `.statsWin` exists, destroys it and clears `::windows::stats::isOpen`.
+#   - Otherwise creates `.statsWin`, wires widgets/bindings, and sets
+#     `::windows::stats::isOpen` to 1.
+#   - Triggers a refresh via `::windows::stats::refresh_wnd`.
+################################################################################
 proc ::windows::stats::Open {} {
   set w .statsWin
   if {[winfo exists $w]} {
@@ -75,10 +90,43 @@ proc ::windows::stats::Open {} {
 }
 
 # TODO: remove this function
+################################################################################
+# ::windows::stats::Refresh
+#   Legacy hook for refreshing filter statistics.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::notify::filter $::curr_db dbfilter`.
+################################################################################
 proc ::windows::stats::Refresh {} {
   ::notify::filter $::curr_db dbfilter
 }
 
+################################################################################
+# ::windows::stats::refresh_wnd
+#   Regenerates and displays filter statistics in `.statsWin`.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Does nothing unless `.statsWin` exists.
+#   - Reads global filter configuration (e.g. `FilterMinElo`, `FilterMaxYear`).
+#   - Reads the `::windows::stats::display(*)` flags to determine which ranges
+#     to include.
+#   - Reads UI toggle flags controlling which blocks are included:
+#     `::windows::stats::like_graphelo`, `::windows::stats::like_graphyear`,
+#     `::windows::stats::statelo`, `::windows::stats::stat_year`,
+#     `::windows::stats::old_elo`, `::windows::stats::old_year`.
+#   - Queries statistics via `sc_filter stats ...`.
+#   - Rewrites `.statsWin.stats` text and configures tags/height/state.
+################################################################################
 proc ::windows::stats::refresh_wnd {} {
   global FilterMaxMoves FilterMinMoves FilterStepMoves FilterMaxElo FilterMinElo FilterStepElo FilterMaxYear FilterMinYear FilterStepYear FilterGuessELO
   variable display
