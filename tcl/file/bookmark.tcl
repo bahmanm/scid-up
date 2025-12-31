@@ -91,7 +91,7 @@ proc ::bookmarks::RefreshMenu {menu} {
     set newval 1
   }
   $menu add command -label FileBookmarks$display \
-    -command "set bookmarks(subMenus) $newval; ::bookmarks::Refresh"
+    -command [list apply {{newval} { set bookmarks(subMenus) $newval; ::bookmarks::Refresh }} $newval]
   set helpMessage($menu,3) FileBookmarks$display
   foreach tag [list Add File Edit $display] {
     configMenuText $menu FileBookmarks$tag FileBookmarks$tag $::language
@@ -110,7 +110,7 @@ proc ::bookmarks::RefreshMenu {menu} {
     if {$isfolder} {
       incr nfolders
       $menu.file add command -label [::bookmarks::Text $entry] \
-        -command "::bookmarks::AddCurrent $nfolders"
+        -command [list ::bookmarks::AddCurrent $nfolders]
     }
 
     if {! $bookmarks(subMenus)} {
@@ -335,17 +335,17 @@ proc ::bookmarks::Edit {} {
   bind $w <F1> {helpWindow Bookmarks}
   ttk::entry $w.e -width 40 \
     -textvariable bookmarks(edit) -font font_Small
-  $w.e configure -validate key -validatecommand "after 200 ::bookmarks::EditRefresh;  return true"
+  $w.e configure -validate key -validatecommand [list apply {{} { after 200 ::bookmarks::EditRefresh; return true }}]
 
   pack $w.e -side top -fill x
   pack [ttk::frame $w.b2] -side bottom -fill x
   pack [ttk::frame $w.b1] -side bottom -fill x
   pack [ttk::frame $w.f] -side top -fill both -expand 1
   ttk::treeview $w.f.list -columns {0} -show {} -selectmode browse \
-             -yscrollcommand "$w.f.ybar set"
+             -yscrollcommand [list $w.f.ybar set]
   $w.f.list configure -height 10
   $w.f.list column 0 -width 50
-  ttk::scrollbar $w.f.ybar -takefocus 0 -command "$w.f.list yview"
+  ttk::scrollbar $w.f.ybar -takefocus 0 -command [list $w.f.list yview]
   bind $w.f.list <<TreeviewSelect>>  ::bookmarks::EditSelect
   pack $w.f.ybar -side right -fill y
   pack $w.f.list -side left -fill both -expand 1

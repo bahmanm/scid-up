@@ -36,7 +36,7 @@ proc ::windows::stats::Open {} {
   win::createDialog $w
   wm title $w "Scid: $::tr(FilterStatistic)"
   setWinLocation $w
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
 
   autoscrollText y $w.statsasb $w.stats Treeview
   $w.stats configure -width 64 -height 40 -state normal -font font_Fixed -wrap none
@@ -77,8 +77,8 @@ proc ::windows::stats::Open {} {
   pack $w.fbuttons -side top -fill x
   pack $w.statsasb -side top -fill both -expand yes
   set ::windows::stats::isOpen 1
-  bind $w <Control-q> "destroy $w"
-  bind $w <Escape> "destroy $w"
+  bind $w <Control-q> [list destroy $w]
+  bind $w <Escape> [list destroy $w]
   bind $w <F1> { helpWindow Index }
   bind $w <Destroy> {
     set ::windows::stats::isOpen 0
@@ -167,7 +167,7 @@ proc ::windows::stats::refresh_wnd {} {
   set s ""
   set sm "\n"
   set stat ""
-  append s " [::utils::string::Pad $stat [expr $len - 4]] [::utils::string::PadRight $games 10]"
+  append s " [::utils::string::Pad $stat [expr {$len - 4}]] [::utils::string::PadRight $games 10]"
   append s "     1-0     =-=     0-1 [::utils::string::PadRight $score 8]\n"
   append s "--------------------------------------------------------------"
   append s "\n [::utils::string::Pad $all $len]" [sc_filter stats all]
@@ -272,7 +272,7 @@ proc ::windows::stats::refresh_wnd {} {
   set stat ""
   if { $::windows::stats::old_elo || $::windows::stats::old_year} {
       append s "\n\n"
-      append s "OldYear/OldElo[::utils::string::Pad $stat [expr $len - 17]] [::utils::string::PadRight $games 10]"
+      append s "OldYear/OldElo[::utils::string::Pad $stat [expr {$len - 17}]] [::utils::string::PadRight $games 10]"
       append s "     1-0     =-=     0-1 [::utils::string::PadRight $score 8]\n"
       append s "--------------------------------------------------------------"
       append s "\n [::utils::string::Pad $all $len]" [sc_filter stats all]

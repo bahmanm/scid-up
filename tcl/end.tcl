@@ -60,10 +60,10 @@ proc findNovelty {} {
   packdlgbuttons $w.b.close $w.b.go
   wm resizable $w 0 0
   focus $w.b.go
-  bind $w <KeyPress-1> "$w.b1 invoke"
-  bind $w <KeyPress-2> "$w.b2 invoke"
-  bind $w <KeyPress-3> "$w.b3 invoke"
-  bind $w <KeyPress-4> "$w.b4 invoke"
+  bind $w <KeyPress-1> [list ${w}.b1 invoke]
+  bind $w <KeyPress-2> [list ${w}.b2 invoke]
+  bind $w <KeyPress-3> [list ${w}.b3 invoke]
+  bind $w <KeyPress-4> [list ${w}.b4 invoke]
   updateNoveltyWin
 }
 
@@ -105,7 +105,7 @@ proc mergeGame {base gnum} {
   set w .mergeDialog
   win::createDialog $w
   wm title $w "Scid: $::tr(MergeGame)"
-  bind $w <Escape> "$w.b.cancel invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
   bind $w <F1> {helpWindow GameList Browsing}
   ttk::label $w.title -text $::tr(Preview:) -font font_Bold -anchor center
   pack $w.title -side top -fill x
@@ -128,7 +128,7 @@ proc mergeGame {base gnum} {
       set label_width [string length $label]
     }
     ttk::button $w.b.m$i -text $label -width $label_width -padding 0 \
-      -command "updateMergeGame $w $i"
+      -command [list updateMergeGame $w $i]
     pack $w.b.m$i -side left
   }
   dialogbutton $w.b.ok -text "OK" -command {
@@ -139,10 +139,10 @@ proc mergeGame {base gnum} {
     updateBoard -pgn
   }
   dialogbutton $w.b.cancel -text $::tr(Cancel) \
-      -command "catch {grab release $w}; destroy $w"
+      -command [list apply {{w} { catch {grab release $w}; destroy $w }} $w]
   packbuttons right $w.b.cancel $w.b.ok
   grab $w
-  updateMergeGame $w [expr $merge(ply) / 2]
+  updateMergeGame $w [expr {$merge(ply) / 2}]
 }
 
 proc updateMergeGame {{w} {n_moves}} {
@@ -150,7 +150,7 @@ proc updateMergeGame {{w} {n_moves}} {
   if {! [winfo exists $w]} { return }
 
   # Update widgets
-  set widget [expr $merge(ply) / 2]
+  set widget [expr {$merge(ply) / 2}]
   $w.b.m$widget state !pressed
   $w.b.m$n_moves state pressed
   set merge(ply) [expr {$n_moves * 2}];
@@ -223,19 +223,19 @@ proc setExportText {exportType} {
   $pane.start.text insert end $exportStartFile($exportType)
   $pane.end.text insert end $exportEndFile($exportType)
 
-  ttk::button $w.buttons.default -text "Reset to Default" -command "
-  $pane.start.text delete 1.0 end
-  $pane.start.text insert end \$default_exportStartFile($exportType)
-  $pane.end.text delete 1.0 end
-  $pane.end.text insert end \$default_exportEndFile($exportType)
-  "
-  dialogbutton $w.buttons.ok -text "OK" -command "
-  set exportStartFile($exportType) \[$pane.start.text get 1.0 end-1c\]
-  set exportEndFile($exportType) \[$pane.end.text get 1.0 end-1c\]
-  focus .
-  destroy $w
-  "
-  dialogbutton $w.buttons.cancel -text $::tr(Cancel) -command "focus .; destroy $w"
+  ttk::button $w.buttons.default -text "Reset to Default" -command [list apply {{pane exportType} {
+    $pane.start.text delete 1.0 end
+    $pane.start.text insert end $::default_exportStartFile($exportType)
+    $pane.end.text delete 1.0 end
+    $pane.end.text insert end $::default_exportEndFile($exportType)
+  }} $pane $exportType]
+  dialogbutton $w.buttons.ok -text "OK" -command [list apply {{w pane exportType} {
+    set ::exportStartFile($exportType) [$pane.start.text get 1.0 end-1c]
+    set ::exportEndFile($exportType) [$pane.end.text get 1.0 end-1c]
+    focus .
+    destroy $w
+  }} $w $pane $exportType]
+  dialogbutton $w.buttons.cancel -text $::tr(Cancel) -command [list apply {{w} { focus .; destroy $w }} $w]
   pack $w.buttons.default -side left -padx 5 -pady 2
   packdlgbuttons $w.buttons.cancel $w.buttons.ok
   focus $pane.start.text
@@ -316,8 +316,8 @@ proc exportOptions {exportType} {
   wm title $w "Scid: [tr OptionsExport]"
   # wm transient $w .
   wm protocol $w WM_DELETE_WINDOW { }
-  bind $w <Escape> "$w.b.cancel invoke"
-  bind $w <Return> "$w.b.ok invoke"
+  bind $w <Escape> [list ${w}.b.cancel invoke]
+  bind $w <Return> [list ${w}.b.ok invoke]
   bind $w <F1> {helpWindow Export}
 
   pack [ttk::frame $w.o] -side top -fill x
@@ -565,7 +565,7 @@ proc nameEditor {} {
   wm title $w "Scid: [tr FileMaintNameEditor]"
   set nameEditorWin 1
   setWinLocation $w
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
 
   ttk::labelframe $w.typeButtons -text $::tr(NameEditType)
   pack $w.typeButtons -side top -fill x -anchor w
@@ -664,9 +664,13 @@ proc nameEditor {} {
 
   foreach {i j} {.nedit.g.fromE "editName"  .nedit.g.toE "editNameNew" } {
     for {set z 1} {$z <= 9} {incr z} {
-      bind $i [format "<Control-Key-%d>" $z] \
-          [format "eval {if {\$nameMatchCount >= %d} { \
-              set %s \$nameMatches(%d)}}; break" $z $j $z ]
+      bind $i [format {<Control-Key-%d>} $z] [list apply {{minCount varName index} {
+        if {$nameMatchCount >= $minCount} {
+          upvar #0 $varName target
+          set target $nameMatches($index)
+        }
+        return -code break
+      } ::} $z $j $z]
     }
   }
 
@@ -891,7 +895,10 @@ proc gameSave { gnum } {
   pack .save.extrafr -side top -fill both -expand 1
   pack .save.extra -in .save.extrafr -side left -fill both -expand 1
   # Override tab-binding for this text widget:
-  bind .save.extra.text <Key-Tab> "[bind all <Key-Tab>]; break"
+  bind .save.extra.text <Key-Tab> [list apply {{script} {
+    uplevel #0 $script
+    return -code break
+  } ::} [bind all <Key-Tab>]]
   ttk::button .save.extrafr.last -text $::tr(UseLastTag) -command {
     set extraTags [sc_game tag get -last Extra]
     .save.extra.text delete 1.0 end
@@ -916,9 +923,12 @@ proc gameSave { gnum } {
     entrywhite "white" entryblack "black"
     entryround "round" } {
     for {set z 1} {$z <= 9} {incr z} {
-      bind $f.$i [format "<Control-Key-%d>" $z] \
-          [format "eval {if {\$nameMatchCount >= %d} \
-            {set %s \$nameMatches(%d)}}" $z $j $z ]
+      bind $f.$i [format {<Control-Key-%d>} $z] [list apply {{minCount varName index} {
+        if {$nameMatchCount >= $minCount} {
+          upvar #0 $varName target
+          set target $nameMatches($index)
+        }
+      } ::} $z $j $z]
     }
   }
 

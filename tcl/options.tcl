@@ -90,9 +90,9 @@ proc InitDefaultStats {} {
 
   # Enable stats for subsequent years
   for { set year [clock format [clock seconds] -format {%Y}] } \
-    { $year>2008 && ![info exists ::windows::stats::display([subst {y$year}])] } \
+    { $year>2008 && ![info exists ::windows::stats::display(y$year)] } \
     { incr year -1 } {
-    set ::windows::stats::display([subst {y$year}]) 1
+    set ::windows::stats::display(y$year) 1
   }
 }
 
@@ -231,8 +231,6 @@ set moveEntry(Coord) 1
 # windows can be moves among tabs (drag and drop) or undocked (right-clicking on tab)
 set windowsDock 1
 
-
-set ::tactics::analysisTime 3
 
 # Analysis command: to start chess analysis engine.
 set analysisCommand ""
@@ -594,13 +592,13 @@ proc options.write {} {
 
     puts $optionF ""
     foreach i [lsort [array names winWidth]] {
-      puts $optionF "set winWidth($i)  [expr $winWidth($i)]"
-      puts $optionF "set winHeight($i) [expr $winHeight($i)]"
+      puts $optionF "set winWidth($i)  [expr {$winWidth($i)}]"
+      puts $optionF "set winHeight($i) [expr {$winHeight($i)}]"
     }
     puts $optionF ""
     foreach i [lsort [array names winX]] {
-      puts $optionF "set winX($i)  [expr $winX($i)]"
-      puts $optionF "set winY($i)  [expr $winY($i)]"
+      puts $optionF "set winX($i)  [expr {$winX($i)}]"
+      puts $optionF "set winY($i)  [expr {$winY($i)}]"
     }
     puts $optionF ""
     puts $optionF "set analysisCommand [list $analysisCommand]"
@@ -684,7 +682,7 @@ proc options.write {} {
       set vars {}
       foreach elem $opt_sorted {
         if {[array exists $elem]} {
-          lappend vars {*}[lmap name [array names $elem] {subst "$elem\($name\)"}]
+          lappend vars {*}[lmap name [array names $elem] {format "%s(%s)" $elem $name}]
         } else {
           lappend vars $elem
         }

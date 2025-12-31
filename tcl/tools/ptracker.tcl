@@ -190,7 +190,7 @@ proc ::ptrack::make {} {
   toplevel $w -background [ttk::style lookup . -background]
   wm title $w "Scid: [tr ToolsTracker]"
   setWinLocation $w
-  bind $w <Escape> "destroy $w"
+  bind $w <Escape> [list destroy $w]
   bind $w <F1> {helpWindow PTracker}
   image create photo ptrack -width $::ptrack::psize -height $::ptrack::psize
   ttk::label $w.status -width 1 -anchor w -relief sunken -font font_Small
@@ -244,15 +244,15 @@ proc ::ptrack::make {} {
     set b $w.bd.p$sq
     ttk::label $b -image b$p$::ptrack::psize -border 1 -relief raised
     grid $b -row 10 -column $c
-    bind $b <1> "::ptrack::select $sq"
+    bind $b <1> [list ::ptrack::select $sq]
   }
   foreach file {a b c d e f g h} c {1 2 3 4 5 6 7 8} p {p p p p p p p p} {
     set sq ${file}7
     set b $w.bd.p$sq
     ttk::label $b -image b$p$::ptrack::psize -border 1 -relief raised
     grid $b -row 11 -column $c
-    bind $b <1> "::ptrack::select $sq"
-    bind $b <$::MB3> "::ptrack::select {a7 b7 c7 d7 e7 f7 g7 h7}"
+    bind $b <1> [list ::ptrack::select $sq]
+    bind $b <$::MB3> [list ::ptrack::select {a7 b7 c7 d7 e7 f7 g7 h7}]
   }
   grid [ttk::frame $w.bd.gap2 -height 5] -row 12 -column 0
   foreach file {a b c d e f g h} c {1 2 3 4 5 6 7 8} p {p p p p p p p p} {
@@ -260,15 +260,15 @@ proc ::ptrack::make {} {
     set b $w.bd.p$sq
     ttk::label $b -image w$p$::ptrack::psize -border 1 -relief raised
     grid $b -row 13 -column $c
-    bind $b <ButtonPress-1> "::ptrack::select $sq"
-    bind $b <$::MB3> "::ptrack::select {a2 b2 c2 d2 e2 f2 g2 h2}"
+    bind $b <ButtonPress-1> [list ::ptrack::select $sq]
+    bind $b <$::MB3> [list ::ptrack::select {a2 b2 c2 d2 e2 f2 g2 h2}]
   }
   foreach file {a b c d e f g h} c {1 2 3 4 5 6 7 8} p {r n b q k b n r} {
     set sq ${file}1
     set b $w.bd.p$sq
     ttk::label $b -image w$p$::ptrack::psize -border 1 -relief raised
     grid $b -row 14 -column $c
-    bind $b <Button-1> "::ptrack::select $sq"
+    bind $b <Button-1> [list ::ptrack::select $sq]
   }
 
   # Both-piece bindings:
@@ -327,11 +327,11 @@ proc ::ptrack::make {} {
     image create photo ptrack_$col -width 101 -height 20
     for {set i 0} {$i <= 100} {incr i} {
       set color [::ptrack::color $i $col]
-      ptrack_$col put $color -to $i 0 [expr {$i+1} ] 19
-    }
-    $f.b.menu add command -image ptrack_$col \
-      -command "::ptrack::recolor $col"
-  }
+	    ptrack_$col put $color -to $i 0 [expr {$i+1} ] 19
+	  }
+	  $f.b.menu add command -image ptrack_$col \
+	      -command [list ::ptrack::recolor $col]
+	}
   $f.b configure -image ptrack_$::ptrack::color
   ttk::label $f.label -text $::tr(GlistColor:) -font font_Bold
   pack $f.label $f.b -side left -pady 5
@@ -358,12 +358,12 @@ proc ::ptrack::make {} {
   bind $f.to <FocusOut> +::ptrack::status
 
   set f $w.t.buttons
-  ttk::button $f.stop -text $::tr(Stop) -command progressBarCancel -state disabled
-  ttk::button $f.update -text $::tr(Update) -command ::ptrack::refresh
-  ttk::button $f.close -text $::tr(Close) -command "destroy $w"
-  pack $f.close $f.update $f.stop -side right -padx 3 -pady 5
+	ttk::button $f.stop -text $::tr(Stop) -command progressBarCancel -state disabled
+	ttk::button $f.update -text $::tr(Update) -command ::ptrack::refresh
+	ttk::button $f.close -text $::tr(Close) -command [list destroy $w]
+	pack $f.close $f.update $f.stop -side right -padx 3 -pady 5
   ::ptrack::status
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
   wm resizable $w 0 0
   focus $w.t.buttons.update
 }
@@ -418,9 +418,11 @@ proc ::ptrack::refresh {{type "all"}} {
   if {$::ptrack::mode == "-time"} { set timeMode 1 }
 
   progressBarSet $w.progress 401 21
-  set err [catch { eval sc_base piecetrack $::ptrack::mode \
-              $::ptrack::moves(start) $::ptrack::moves(end) \
-              $::ptrack::select} ::ptrack::data]
+  set err [catch {
+    sc_base piecetrack $::ptrack::mode \
+        $::ptrack::moves(start) $::ptrack::moves(end) \
+        $::ptrack::select
+  } ::ptrack::data]
 
   catch {grab release $w.t.buttons.stop}
   $w.t.buttons.stop configure -state disabled

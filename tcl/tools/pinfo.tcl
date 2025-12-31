@@ -245,8 +245,8 @@ proc ::pinfo::splitName { playerName } {
     set count [string first " " $playerName ]
   }
   if { $count > 0 } {
-    set fname [string range $playerName [expr $count + $countlen] end]
-    set lname [string range $playerName 0 [expr $count - 1]]
+    set fname [string range $playerName [expr {$count + $countlen}] end]
+    set lname [string range $playerName 0 [expr {$count - 1}]]
     return [list [string trim $fname] [string trim $lname]]
   }
   return [list $playerName ""]
@@ -374,10 +374,10 @@ proc playerInfo {{player ""}} {
   # add country flag
   set found [string first " \[" $pinfo]
   if { $found > 0 } {
-    set countryID [string range $pinfo [expr $found - 3] [expr $found - 1]]
+    set countryID [string range $pinfo [expr {$found - 3}] [expr {$found - 1}]]
     set country [getFlagImage $countryID]
     if { $country ne "" } {
-      set pinfo [string replace $pinfo [expr $found - 3] [expr $found - 1] "$countryID <img $country>"]
+      set pinfo [string replace $pinfo [expr {$found - 3}] [expr {$found - 1}] "$countryID <img $country>"]
     }
   }
   # append Elo History
@@ -424,7 +424,10 @@ proc playerInfo {{player ""}} {
       -command {::preport::preportDlg $playerInfoName}
     dialogbutton $w.b2.help -textvar ::tr(Help) -command {helpWindow PInfo}
     dialogbutton $w.b2.update -textvar ::tr(Update) -command {::pinfo::playerInfo $playerInfoName}
-    dialogbutton $w.b2.close -textvar ::tr(Close) -command "focus .; destroy $w"
+    dialogbutton $w.b2.close -textvar ::tr(Close) -command [list apply {{w} {
+        focus .
+        destroy $w
+    } ::} $w]
     packbuttons right $w.b2.close $w.b2.update $w.b2.help
     pack $w.b.eloT $w.b.eloF $w.b.eloD -side left -padx "5 0"
     packbuttons left $w.b.graph $w.b.edit
@@ -434,10 +437,10 @@ proc playerInfo {{player ""}} {
     $w.text configure -font font_Regular -wrap none -state normal
     ttk::label $w.photo
     pack $w.frame -side top -fill both -expand yes
-    bind $w <Escape> "focus .; destroy $w"
+	    bind $w <Escape> [list apply {{w} { focus .; destroy $w } ::} $w]
     ::htext::init $w.text
     ::htext::updateRate $w.text 0
-    bind $w <Escape> "focus .; destroy $w"
+	    bind $w <Escape> [list apply {{w} { focus .; destroy $w } ::} $w]
     bind $w <F1> {helpWindow PInfo}
     ::createToplevelFinalize $w
   }

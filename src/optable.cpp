@@ -17,6 +17,7 @@
 #include "dstring.h"
 #include "pbook.h"
 #include <algorithm>
+#include <cstdio>
 
 uint
 endgameTheme (matSigT msig)
@@ -740,17 +741,17 @@ OpTable::DumpLines (/*FILE * */ Tcl_Channel fp)
                 first = false;
                 line->PrintNote (dstr, (StartLength + 2) / 2, 0, OPTABLE_Text);
                 //fprintf (fp, "ROW %u[%u]: ", i+1, NLines[i]);
-                sprintf (buf, "ROW %u[%u]: ", i+1, NLines[i]);
+                std::snprintf(buf, sizeof(buf), "ROW %u[%u]: ", i+1, NLines[i]);
                 my_Tcl_Write(fp,buf,strlen(buf));
             } else {
                 //fprintf (fp, "   %u-NOTE: ", i+1);
-                sprintf (buf, "   %u-NOTE: ", i+1);
+                std::snprintf(buf, sizeof(buf), "   %u-NOTE: ", i+1);
                 my_Tcl_Write(fp,buf,strlen(buf));
                 line->PrintNote (dstr, (StartLength + 2) / 2,
                             line->CommonLength(prevLine), OPTABLE_Text);
             }
             //fprintf (fp, "%s\n", dstr->Data());
-            sprintf (buf, "%s\n", dstr->Data());
+            std::snprintf(buf, sizeof(buf), "%s\n", dstr->Data());
             my_Tcl_Write(fp,buf,strlen(buf));
             prevLine = line;
             line = line->Next;
@@ -1228,7 +1229,7 @@ OpTable::PrintText (DString * dstr, const char * title, const char * comment,
     dstr->Append ((TheoryPercent() + 5) / 10, "%)\n");
     dstr->Append (hrule, "  ");
     for (i=0; i < OPTABLE_COLUMNS; i++) {
-        sprintf (cell, " %3u     ", i + ((StartLength + 2) / 2));
+        std::snprintf(cell, sizeof(cell), " %3u     ", i + ((StartLength + 2) / 2));
         dstr->Append (cell);
     }
     dstr->Append ("\n", hrule);
@@ -1244,7 +1245,7 @@ OpTable::PrintText (DString * dstr, const char * title, const char * comment,
         bstr->Clear();
         bool wtm = true;
         char tempStr [8];
-        sprintf (tempStr, "%2u  ", row+1);
+        std::snprintf(tempStr, sizeof(tempStr), "%2u  ", row+1);
         wstr->Append (tempStr);
         bstr->Append ("    ");
         uint nSameMoves = 0;
@@ -1303,13 +1304,13 @@ OpTable::PrintText (DString * dstr, const char * title, const char * comment,
         }
 
         // Print number of games in this row, and White percentage score:
-        sprintf (cell, "%2u:", NLines[row]);
+        std::snprintf(cell, sizeof(cell), "%2u:", NLines[row]);
         wstr->Append (cell);
         uint score = 0;
         if (NLines[row] > 0) {
             score = (RowScore[row] * 50 + (NLines[row]/2)) / NLines[row];
         }
-        sprintf (cell, "%2u%%", score);
+        std::snprintf(cell, sizeof(cell), "%2u%%", score);
         bstr->Append (cell);
         dstr->Append (wstr->Data(), "\n", bstr->Data(), "\n\n");
     }
@@ -1541,7 +1542,7 @@ OpTable::BestGames (DString * dstr, uint count, const char * rtype)
         }
         if (bestIndex < 0) { break; }
         char tempStr [10];
-        sprintf (tempStr, "%2u", c);
+        std::snprintf(tempStr, sizeof(tempStr), "%2u", c);
         dstr->Append (preNum, tempStr, postNum);
         Line[bestIndex]->PrintSummary (dstr, Format, printFullDate, true);
         if (Line[bestIndex]->NoteNumber != 0) {
@@ -1727,12 +1728,12 @@ OpTable::TopPlayers (DString * dstr, colorT c, uint count)
 
         if (found) {
             char tempStr [100];
-            sprintf (tempStr, "%2u", n);
+            std::snprintf(tempStr, sizeof(tempStr), "%2u", n);
             dstr->Append (startRow, preNum, tempStr, postNum);
             uint freq = pf[index].frequency;
             ASSERT (freq > 0);
             ASSERT (pf[index].name != NULL);
-            sprintf (tempStr, "%3u", freq);
+            std::snprintf(tempStr, sizeof(tempStr), "%3u", freq);
             dstr->Append (nextCell, tempStr);
 
             // Print the year range in which the player played this line:
@@ -1741,24 +1742,24 @@ OpTable::TopPlayers (DString * dstr, colorT c, uint count)
             if (maxYear == 0) {
                 strCopy (tempStr, "         ");
             } else if (minYear == maxYear) {
-                sprintf (tempStr, "     %4u", minYear);
+                std::snprintf(tempStr, sizeof(tempStr), "     %4u", minYear);
             } else {
-                sprintf (tempStr, "%4u%s%4u",
+                std::snprintf(tempStr, sizeof(tempStr), "%4u%s%4u",
                          minYear, inRange, maxYear);
             }
             dstr->Append (nextCell, " ", tempStr);
 
             // Print the score with this line:
             uint score = (50 * pf[index].score + (freq / 2)) / freq;
-            sprintf (tempStr, "%3u%s", score, percentStr);
+            std::snprintf(tempStr, sizeof(tempStr), "%3u%s", score, percentStr);
             dstr->Append (nextCell, tempStr);
 
             // Print peak Elo while playing this line:
             uint maxElo = pf[index].maxElo;
             if (maxElo == 0) {
-                sprintf (tempStr, "%s    %s", preElo, postElo);
+                std::snprintf(tempStr, sizeof(tempStr), "%s    %s", preElo, postElo);
             } else {
-                sprintf (tempStr, "%s%4u%s", preElo, maxElo, postElo);
+                std::snprintf(tempStr, sizeof(tempStr), "%s%4u%s", preElo, maxElo, postElo);
             }
             dstr->Append (nextCell, " ", tempStr);
             dstr->Append (nextCell, " ", startName);
@@ -1893,16 +1894,16 @@ OpTable::TopEcoCodes (DString * dstr, uint count)
             ecoStr[3] = 0;
 
             char tempStr [100];
-            sprintf (tempStr, "%2u", n);
+            std::snprintf(tempStr, sizeof(tempStr), "%2u", n);
             dstr->Append (startRow, preNum, tempStr, postNum);
             dstr->Append (nextCell, ecoStr);
             ecoStr[2] = '9';
             dstr->Append (inRange, ecoStr);
-            sprintf (tempStr, "%3u", maxFreq);
+            std::snprintf(tempStr, sizeof(tempStr), "%3u", maxFreq);
             dstr->Append (nextCell, tempStr);
 
             uint score = (50 * ecoScore[ecoClass] + (maxFreq / 2)) / maxFreq;
-            sprintf (tempStr, "%3u%s", score, percentStr);
+            std::snprintf(tempStr, sizeof(tempStr), "%3u%s", score, percentStr);
             dstr->Append (nextCell, tempStr);
             dstr->Append (endRow);
             ecoCount[ecoClass] = 0;
@@ -2058,7 +2059,7 @@ OpTable::PopularMoveOrders (DString * dstr, uint count)
     for (uint i=0; i < count; i++) {
         if (i == NumMoveOrders) { break; }
         char tempStr [16];
-        sprintf (tempStr, "%2u", i+1);
+        std::snprintf(tempStr, sizeof(tempStr), "%2u", i+1);
         dstr->Append (preNum, tempStr, postNum);
         if (Format == OPTABLE_CText) {
             dstr->Append ("<tab><darkblue>");
@@ -2122,7 +2123,7 @@ OpTable::ThemeReport (DString * dstr, uint argc, const char ** argv)
 
     char tempStr [250];
     //sprintf (tempStr, argv[0], (StartLength + (OPTABLE_COLUMNS * 2)) / 2);
-    sprintf (tempStr, argv[0], MaxThemeMoveNumber);
+    std::snprintf(tempStr, sizeof(tempStr), argv[0], MaxThemeMoveNumber);
     dstr->Append (tempStr, endLine);
     argc--;
     argv++;
@@ -2151,7 +2152,7 @@ OpTable::ThemeReport (DString * dstr, uint argc, const char ** argv)
             percent = ((100 * ThemeCount[theme]) + (FilterCount/2)) / FilterCount;
         }
         char rstr [16];
-        sprintf (rstr, "%3u", percent);
+        std::snprintf(rstr, sizeof(rstr), "%3u", percent);
         dstr->Append (rstr, percentStr);
         if (theme < leftcol) {
             dstr->Append ("  ");
@@ -2266,7 +2267,7 @@ OpTable::EndMaterialReport (DString * dstr, const char * repGames,
         for (i=0; i < NUM_EGTHEMES; i++) {
             uint pc = 0;
             if (sum > 0) { pc = ((100 * EndgameCount[t][i]) + (sum/2)) / sum; }
-            sprintf (numStr, "%5u", pc);
+            std::snprintf(numStr, sizeof(numStr), "%5u", pc);
             dstr->Append (nextCell);
             if (Format == OPTABLE_CText  &&  t == OPTABLE_Line) {
                 dstr->Append ("<darkblue><run sc_report ", Type);

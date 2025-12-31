@@ -561,20 +561,27 @@ proc changeBaseType {baseNum} {
 
   ttk::style configure btypeWin.Treeview -rowheight 36
   ttk::treeview $w.t -columns {} -show tree -selectmode browse \
-        -yscrollcommand "$w.yscroll set" -style btypeWin.Treeview
-  bind $w.t <<TreeviewSelect>> "selectBaseType \[$w.t selection\]"
+        -yscrollcommand [list $w.yscroll set] -style btypeWin.Treeview
+  bind $w.t <<TreeviewSelect>> [list apply {{w} {
+    selectBaseType [$w selection]
+  } ::} $w.t]
   $w.t configure -height 9
 
-  ttk::scrollbar $w.yscroll -command "$w.t yview" -takefocus 0
+  ttk::scrollbar $w.yscroll -command [list $w.t yview] -takefocus 0
   pack [ttk::frame $w.b] -side bottom -anchor e
   pack $w.yscroll -side right -fill y
   pack $w.t -side left -fill both -expand yes
 
   dialogbutton $w.b.set -text "OK" -command \
-    "catch {sc_base extra $baseNum type \$temp_dbtype}; ::windows::switcher::Refresh; ::maint::Refresh;
-     focus .; destroy $w"
+    [list apply {{w baseNum} {
+      catch {sc_base extra $baseNum type $::temp_dbtype}
+      ::windows::switcher::Refresh
+      ::maint::Refresh
+      focus .
+      destroy $w
+    }} $w $baseNum]
 
-  dialogbutton $w.b.cancel -text $::tr(Cancel) -command "focus .; destroy $w"
+  dialogbutton $w.b.cancel -text $::tr(Cancel) -command [list apply {{w} { focus .; destroy $w }} $w]
   packdlgbuttons $w.b.cancel $w.b.set
 
   set numtypes [llength $base_types]
@@ -583,21 +590,25 @@ proc changeBaseType {baseNum} {
   }
 
   bind $w <Up> {
-    if {$temp_dbtype != 0} { selectBaseType [expr $temp_dbtype - 1] }
+    if {$temp_dbtype != 0} { selectBaseType [expr {$temp_dbtype - 1}] }
     break
   }
 
   bind $w <Down> {
-    if {$temp_dbtype < [expr [llength $::windows::switcher::base_types] - 1]} {
-      selectBaseType [expr $temp_dbtype + 1]
+    set baseTypesCount [llength $::windows::switcher::base_types]
+    if {$temp_dbtype < [expr {$baseTypesCount - 1}]} {
+      selectBaseType [expr {$temp_dbtype + 1}]
     }
     break
   }
 
   bind $w <Home> { selectBaseType 0 }
-  bind $w <End> { selectBaseType [expr [llength $::windows::switcher::base_types] - 1] }
-  bind $w <Escape> "$w.b.cancel invoke"
-  bind $w <Return> "$w.b.set invoke"
+  bind $w <End> {
+    set baseTypesCount [llength $::windows::switcher::base_types]
+    selectBaseType [expr {$baseTypesCount - 1}]
+  }
+  bind $w <Escape> [list ${w}.b.cancel invoke]
+  bind $w <Return> [list ${w}.b.set invoke]
 
   focus $w.t
   grab $w
@@ -687,23 +698,23 @@ proc ::windows::switcher::releaseMouseEvent {fromBase x y {w .baseWin}} {
 ################################################################################
 proc ::windows::switcher::popupmenu { {switcherWin} {w} {abs_x} {abs_y} {baseIdx} } {
   $w.menu delete 0 end
-  $w.menu add command -label "[tr NewGameListWindow]" -command "::windows::gamelist::Open $baseIdx"
+  $w.menu add command -label "[tr NewGameListWindow]" -command [list ::windows::gamelist::Open $baseIdx]
   $w.menu add separator
   $w.menu add command -label [tr FileOpen] -command ::file::Open
   if {![sc_base isReadOnly $baseIdx]} {
-    $w.menu add command -label [tr ToolsImportFile] -command "importPgnFile $baseIdx"
+    $w.menu add command -label [tr ToolsImportFile] -command [list importPgnFile $baseIdx]
   }
   if { $baseIdx != $::clipbase_db } {
     $w.menu add command -label [tr FileClose] -command [list ::file::Close $baseIdx]
-    $w.menu add command -label $::tr(CompactDatabase) -command "compactDB $baseIdx"
+    $w.menu add command -label $::tr(CompactDatabase) -command [list compactDB $baseIdx]
     if { [::file::autoLoadBases.find $baseIdx] == "-1" } {
       set ::sw_DummyCheckbutton 0
       $w.menu add checkbutton -label "[tr LoadatStartup]" -variable ::sw_DummyCheckbutton \
-        -command "::file::autoLoadBases.add $baseIdx"
+        -command [list ::file::autoLoadBases.add $baseIdx]
     } else {
       set ::sw_DummyCheckbutton 1
       $w.menu add checkbutton -label "[tr LoadatStartup]" -variable ::sw_DummyCheckbutton \
-        -command "::file::autoLoadBases.remove $baseIdx"
+        -command [list ::file::autoLoadBases.remove $baseIdx]
     }
     $w.menu add command -label [tr AboutDatabase] -command [list apply {{base} {
       set name [file nativename [sc_base filename $base]]
@@ -723,7 +734,7 @@ proc ::windows::switcher::popupmenu { {switcherWin} {w} {abs_x} {abs_y} {baseIdx
   }
 
   $w.menu add separator
-  $w.menu add command -label [tr ChangeIcon] -command "changeBaseType $baseIdx"
+  $w.menu add command -label [tr ChangeIcon] -command [list changeBaseType $baseIdx]
   tk_popup $w.menu $abs_x $abs_y
 }
 
@@ -752,7 +763,9 @@ proc ::windows::switcher::Open {{w .baseWin}} {
   }
 
   ::windows::switcher::Create $w
-  bind $w <Destroy> "+ if {\[string equal $w %W\]} {set ::baseWin 0}"
+  bind $w <Destroy> [list +apply {{w} {
+    if {[string equal $w %W]} {set ::baseWin 0}
+  } ::} $w]
   bind $w <F1> { helpWindow Switcher }
 }
 
@@ -800,16 +813,18 @@ proc ::windows::switcher::Create {{w}} {
 
     menu $f.menu -tearoff 0
     foreach win {"" .img .name .ngames} {
-      bind $f$win <ButtonPress-$::MB3> "::windows::switcher::popupmenu $w $f %X %Y $i"
+      bind $f$win <ButtonPress-$::MB3> [list ::windows::switcher::popupmenu $w $f %X %Y $i]
     }
   }
   bind $w <<NotifyFilter>> [list apply {{w} {
     lassign %d dbase filter
     if {$filter eq "dbfilter"} { ::windows::switcher::Update_ $w }
   }} $w]
-  bind $w <Configure> "+if {\"%W\" eq \"$w\"} {
-    ::windows::switcher::Update_ %W
-  }"
+  bind $w <Configure> [list +apply {{w} {
+    if {[string equal %W $w]} {
+      ::windows::switcher::Update_ %W
+    }
+  } ::} $w]
   bind $w <Destroy> {
     set idx [lsearch $::windows::switcher::wins %W]
     set ::windows::switcher::wins [lreplace $::windows::switcher::wins $idx $idx]
@@ -886,7 +901,7 @@ proc ::windows::switcher::Draw {{w} {numColumns} {iconWidth} {iconHeight} } {
   set x 0
   set y 0
   foreach i [sc_base list] {
-      $w.c coords tag$i [expr $x + 2] [expr $y + 2]
+      $w.c coords tag$i [expr {$x + 2}] [expr {$y + 2}]
       incr column
       if { $x == 0} { incr numRows }
       if {$column == $numColumns} {

@@ -67,14 +67,17 @@ proc ::search::Open {ref_base ref_filter title create_subwnd} {
 
 	grid [ttk::frame $w.buttons] -sticky news
 	ttk::menubutton $w.buttons.save -text [::tr Presets] -direction above
-	$w.buttons.save configure {*}[$options_cmd $w.buttons.save]
-	ttk::button $w.buttons.reset_values -text [::tr Defaults] \
-		-command "set ::search::filterOp_($w) reset; $options_cmd reset"
-	ttk::button $w.buttons.search_new -text "[tr Search] ([tr GlistNewSort] [tr Filter])" \
-		-command "::search::start_ 1 $w $options_cmd"
-	ttk::button $w.buttons.search -text [::tr Search] \
-		-command "::search::start_ 0 $w $options_cmd"
-	grid $w.buttons.save $w.buttons.reset_values x $w.buttons.search_new $w.buttons.search -sticky w -padx "0 5"
+		$w.buttons.save configure {*}[$options_cmd $w.buttons.save]
+		ttk::button $w.buttons.reset_values -text [::tr Defaults] \
+			-command [list apply {{w options_cmd} {
+				set ::search::filterOp_($w) reset
+				{*}$options_cmd reset
+			} ::} $w $options_cmd]
+		ttk::button $w.buttons.search_new -text "[tr Search] ([tr GlistNewSort] [tr Filter])" \
+			-command [list ::search::start_ 1 $w $options_cmd]
+		ttk::button $w.buttons.search -text [::tr Search] \
+			-command [list ::search::start_ 0 $w $options_cmd]
+		grid $w.buttons.save $w.buttons.reset_values x $w.buttons.search_new $w.buttons.search -sticky w -padx "0 5"
 	grid columnconfigure $w.buttons 2 -weight 1
 
 	ttk::button $w.buttons.stop -text [::tr Stop] -command progressBarCancel
@@ -85,8 +88,10 @@ proc ::search::Open {ref_base ref_filter title create_subwnd} {
 	grid $w.progressbar -in $w.buttons -row 0 -column 1 -columnspan 4
 	progressbar_ $w hide
 
-	bind $w <Return> "$w.buttons.search invoke"
-	bind $w.buttons.search <Destroy> "unset ::search::dbase_($w)"
+		bind $w <Return> [list ${w}.buttons.search invoke]
+		bind $w.buttons.search <Destroy> [list apply {{w} {
+			unset ::search::dbase_($w)
+		} ::} $w]
 	bind $w <<NotifyFilter>> [list apply {{w} {
 		lassign %d dbase filter
 		if {$dbase eq $::search::dbase_($w) && $filter eq $::search::filter_($w)} {

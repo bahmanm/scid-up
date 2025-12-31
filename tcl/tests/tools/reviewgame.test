@@ -80,6 +80,9 @@ proc ::reviewgame_test::setup {} {
         }
         set ms [lindex $args 0]
         set script [lindex $args 1]
+        if {![string is integer -strict $ms]} {
+            error "after delay must be integer milliseconds, got: $ms"
+        }
         lappend ::reviewgame_test::afterCalls [list $ms $script]
         return "afterId"
     }
@@ -337,6 +340,7 @@ test reviewgame-startAnalyze-1.0 {startAnalyze sets fen, schedules timers, and s
     # Arrange
     set ::reviewgame::progressBarStep 1
     set ::reviewgame::analysisEngine(analyzeMode) 0
+    ::scid_test::widgets::setState $::reviewgame::window.finfo.pb -maximum 97
 
     # Act
     ::reviewgame::startAnalyze 2 "e4"
@@ -345,7 +349,7 @@ test reviewgame-startAnalyze-1.0 {startAnalyze sets fen, schedules timers, and s
     set fenKey "fen$::reviewgame::engineSlot"
     set okFen [expr {$::analysis($fenKey) eq "FEN"}]
 
-    # progressBarTimer = (analysisTime*1000*step)/maximum = (2*1000*1)/100 = 20
+    # progressBarTimer = int((analysisTime*1000*step)/maximum) = int((2*1000*1)/97) = 20
     set okTimer [expr {$::reviewgame::progressBarTimer == 20}]
 
     # First after should schedule updateProgressBar, second should schedule stopAnalyze.

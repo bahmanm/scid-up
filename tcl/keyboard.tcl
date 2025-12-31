@@ -55,7 +55,10 @@ proc keyboardShortcuts {w} {
 	bind $w <Control-S> { ::gameAdd }
 
 	# Toggle fullscreen
-	bind $w <F11> { wm attributes . -fullscreen [expr ![wm attributes . -fullscreen]] }
+	bind $w <F11> {
+		set fullscreen [wm attributes . -fullscreen]
+		wm attributes . -fullscreen [expr {!$fullscreen}]
+	}
 
 	# Open the enter/create variation dialog
 	# TODO: <v> is not intuitive: <space> or <up> <down> may be better
@@ -64,18 +67,18 @@ proc keyboardShortcuts {w} {
 		::showVars
 	}
 
-	# Change current database
-	set totalBaseSlots [sc_info limit bases]
-	for {set i 1} { $i <= $totalBaseSlots} {incr i} {
-		bind $w <Control-Key-$i> "::file::SwitchToBase $i"
-	}
+		# Change current database
+		set totalBaseSlots [sc_info limit bases]
+		for {set i 1} { $i <= $totalBaseSlots} {incr i} {
+			bind $w <Control-Key-$i> [list ::file::SwitchToBase $i]
+		}
 
 	# Open the help window
 	bind $w <F1> { helpWindowPertinent %W }
 
 	# Engines
-	bind $w <F2> "::enginewin::toggleStartStop 1"
-	bind $w <F3> "::enginewin::toggleStartStop 2"
+		bind $w <F2> [list ::enginewin::toggleStartStop 1]
+		bind $w <F3> [list ::enginewin::toggleStartStop 2]
 
 	# Toggle the active window between docked/undocked
 	bind $w <F9> { ::win::toggleDocked %W }
@@ -83,7 +86,7 @@ proc keyboardShortcuts {w} {
 	#TODO: to be checked
 	bind $w <F6>	::book::open
 	bind $w <Control-d> ::windows::switcher::Open
-	bind $w <Control-e> "::makeCommentWin toggle"
+		bind $w <Control-e> [list ::makeCommentWin toggle]
 	bind $w <Control-i> ::windows::stats::Open
 	bind $w <Control-l> ::windows::gamelist::Open
 	bind $w <Control-m> ::maint::OpenClose

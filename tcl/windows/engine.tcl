@@ -150,10 +150,10 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
     grid rowconfigure $w 2 -weight 0
     grid columnconfigure $w 0 -weight 1
 
-    bind $w <<NotifyNewGame>> "set ::enginewin::newgame_$id true"
+    bind $w <<NotifyNewGame>> [list set ::enginewin::newgame_$id true]
 
     # The engine should be closed before the debug .text is destroyed
-    bind $w.config <Destroy> "
+    bind $w.config <Destroy> [list apply {{id} {
         unset ::enginewin::engState($id)
         ::engine::close $id
         array unset ::enginewin::m_ *,$id
@@ -162,7 +162,7 @@ proc ::enginewin::Open { {id ""} {enginename ""} } {
         unset ::enginewin::newgame_$id
         unset ::enginewin::startTime_$id
         ::notify::EngineBestMove $id {} {}
-    "
+    } ::} $id]
 
     ::options.store ::enginewin_lastengine($id) ""
     set ::enginewin::engState($id) {}
@@ -237,18 +237,18 @@ proc ::enginewin::createDisplayFrame {id display} {
 # Creates the buttons bar
 proc ::enginewin::createButtonsBar {id btn display} {
     ttk::button $btn.startStop -image [list tb_eng_on pressed tb_eng_off] -style Toolbutton \
-        -command "::enginewin::toggleStartStop $id"
+        -command [list ::enginewin::toggleStartStop $id]
     #TODO: change the tooltip to "Start/stop engine"
     ::utils::tooltip::Set $btn.startStop [tr StartEngine]
 
-    ttk::button $btn.lock -image tb_eng_lock -style Toolbutton -command "
-        if {\$::enginewin::engState($id) eq {locked}} {
+    ttk::button $btn.lock -image tb_eng_lock -style Toolbutton -command [list apply {{id} {
+        if {$::enginewin::engState($id) eq {locked}} {
             ::enginewin::changeState $id run
             ::enginewin::onPosChanged $id
         } else {
             ::enginewin::changeState $id locked
         }
-    "
+    } ::} $id]
     bind $btn.lock <Any-Enter> [list apply {{id} {
         if {"pressed" in [%W state]} {
             set y [winfo rooty %W]
@@ -263,23 +263,23 @@ proc ::enginewin::createButtonsBar {id btn display} {
     ::utils::tooltip::Set $btn.lock [tr LockEngine]
 
     ttk::button $btn.addbestmove -image tb_eng_addbestmove -style Toolbutton \
-        -command "::enginewin::exportMoves $display.pv_lines 1.0"
+        -command [list ::enginewin::exportMoves $display.pv_lines 1.0]
     ::utils::tooltip::Set $btn.addbestmove [tr AddMove]
     ttk::button $btn.addlines -image tb_eng_addlines -style Toolbutton \
-        -command "::enginewin::exportLines $display.pv_lines"
+        -command [list ::enginewin::exportLines $display.pv_lines]
     ::utils::tooltip::Set $btn.addlines [tr AddAllVariations]
 
     ttk::spinbox $btn.multipv -increment 1 -width 4 -state disabled \
         -validate key -validatecommand { string is integer %P } \
-        -command "after idle \[bind $btn.multipv <FocusOut>\]"
+        -command [list after idle [list ::enginewin::changeOption $id multipv $btn.multipv]]
     bind $btn.multipv <Return> { {*}[bind %W <FocusOut>] }
-    bind $btn.multipv <FocusOut> "::enginewin::changeOption $id multipv $btn.multipv"
+    bind $btn.multipv <FocusOut> [list ::enginewin::changeOption $id multipv $btn.multipv]
     ::utils::tooltip::Set $btn.multipv [tr Lines]
 
     menu $btn.threads_menu
     foreach {threads_value} {1 2 4 8 16 32 64} {
         $btn.threads_menu add command -label "$threads_value CPU" -command \
-            "::enginewin::changeOption $id threads $threads_value"
+            [list ::enginewin::changeOption $id threads $threads_value]
     }
     #TODO: change keyboard focus to the threads widget
     $btn.threads_menu add command -label "..." -command \
@@ -301,10 +301,10 @@ proc ::enginewin::createButtonsBar {id btn display} {
     menu $btn.limits_menu
     foreach {depth_value} {16 20 24 28 32 36 40} {
         $btn.limits_menu add command -label "[tr Depth]: $depth_value" -command \
-            "::enginewin::changeOption $id _go_limits \[list \[list depth $depth_value \] \]"
+            [list ::enginewin::changeOption $id _go_limits [list [list depth $depth_value]]]
     }
     $btn.limits_menu add command -label "[tr Depth]: ∞" -command \
-        "::enginewin::changeOption $id _go_limits {}"
+        [list ::enginewin::changeOption $id _go_limits {}]
     ttk::menubutton $btn.limits -style Toolbutton -direction above -menu $btn.limits_menu
     trace add variable ::enginewin::limits_$id write [list apply {{btn varname args} {
         set value [set $varname]
@@ -316,7 +316,7 @@ proc ::enginewin::createButtonsBar {id btn display} {
     }} $btn.limits]
 
     ttk::button $btn.config -image tb_eng_config -style Toolbutton \
-        -command "::enginewin::changeState $id toggleConfig"
+        -command [list ::enginewin::changeState $id toggleConfig]
     $btn.config state pressed
     grid $btn.startStop $btn.lock $btn.addbestmove \
          $btn.addlines $btn.multipv $btn.threads $btn.hash $btn.limits x $btn.config -sticky ew

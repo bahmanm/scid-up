@@ -23,6 +23,8 @@
 #include <tcl.h>
 #include <sstream>
 #include <limits>
+#include <array>
+#include <vector>
 
 namespace UI_impl {
 
@@ -206,6 +208,26 @@ inline UI_res_t Result(UI_handle_t ti, errorT res, const T& value) {
 	return UI_impl::ResultHelper(ti, res);
 }
 
+inline int LegacyCmdFromObjv(UI_res_t (*fn)(UI_extra_t, UI_handle_t, int, const char**),
+                             UI_extra_t cd,
+                             UI_handle_t ti,
+                             int objc,
+                             Tcl_Obj* const objv[]) {
+	std::array<const char*, 16> stackArgv = {};
+	std::vector<const char*> heapArgv;
+
+	const char** argv = stackArgv.data();
+	if (objc > static_cast<int>(stackArgv.size())) {
+		heapArgv.resize(static_cast<size_t>(objc));
+		argv = heapArgv.data();
+	}
+
+	for (int i = 0; i < objc; ++i) {
+		argv[i] = Tcl_GetString(objv[i]);
+	}
+	return fn(cd, ti, objc, argv);
+}
+
 } //End of UI_impl namespace
 
 
@@ -228,26 +250,43 @@ UI_impl::UI_res_t sc_search      (UI_impl::UI_extra_t, UI_impl::UI_handle_t, int
 UI_impl::UI_res_t sc_tree        (UI_impl::UI_extra_t, UI_impl::UI_handle_t, int argc, const char ** argv);
 UI_impl::UI_res_t sc_var         (UI_impl::UI_extra_t, UI_impl::UI_handle_t, int argc, const char ** argv);
 
+inline int str_is_prefix_obj  (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(str_is_prefix, cd, ti, objc, objv); }
+inline int str_prefix_len_obj (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(str_prefix_len, cd, ti, objc, objv); }
+inline int sc_base_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_base, cd, ti, objc, objv); }
+inline int sc_book_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_book, cd, ti, objc, objv); }
+inline int sc_clipbase_obj    (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_clipbase, cd, ti, objc, objv); }
+inline int sc_eco_obj         (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_eco, cd, ti, objc, objv); }
+inline int sc_filter_obj      (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_filter, cd, ti, objc, objv); }
+inline int sc_game_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_game, cd, ti, objc, objv); }
+inline int sc_info_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_info, cd, ti, objc, objv); }
+inline int sc_move_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_move, cd, ti, objc, objv); }
+inline int sc_name_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_name, cd, ti, objc, objv); }
+inline int sc_report_obj      (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_report, cd, ti, objc, objv); }
+inline int sc_pos_obj         (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_pos, cd, ti, objc, objv); }
+inline int sc_search_obj      (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_search, cd, ti, objc, objv); }
+inline int sc_tree_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_tree, cd, ti, objc, objv); }
+inline int sc_var_obj         (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_var, cd, ti, objc, objv); }
+
 inline int UI_impl::initTclTk (UI_handle_t ti)
 {
 	if (Tcl_Init (ti) == TCL_ERROR) { return TCL_ERROR; }
 
-	Tcl_CreateCommand(ti, "strIsPrefix" , str_is_prefix , 0, NULL);
-	Tcl_CreateCommand(ti, "strPrefixLen", str_prefix_len, 0, NULL);
-	Tcl_CreateCommand(ti, "sc_base"     , sc_base       , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_book"     , sc_book       , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_clipbase" , sc_clipbase   , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_eco"      , sc_eco        , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_filter"   , sc_filter     , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_game"     , sc_game       , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_info"     , sc_info       , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_move"     , sc_move       , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_name"     , sc_name       , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_report"   , sc_report     , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_pos"      , sc_pos        , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_search"   , sc_search     , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_tree"     , sc_tree       , 0, NULL);
-	Tcl_CreateCommand(ti, "sc_var"      , sc_var        , 0, NULL);
+	Tcl_CreateObjCommand(ti, "strIsPrefix" , str_is_prefix_obj , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "strPrefixLen", str_prefix_len_obj, 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_base"     , sc_base_obj       , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_book"     , sc_book_obj       , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_clipbase" , sc_clipbase_obj   , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_eco"      , sc_eco_obj        , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_filter"   , sc_filter_obj     , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_game"     , sc_game_obj       , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_info"     , sc_info_obj       , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_move"     , sc_move_obj       , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_name"     , sc_name_obj       , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_report"   , sc_report_obj     , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_pos"      , sc_pos_obj        , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_search"   , sc_search_obj     , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_tree"     , sc_tree_obj       , 0, nullptr);
+	Tcl_CreateObjCommand(ti, "sc_var"      , sc_var_obj        , 0, nullptr);
 
 	return TCL_OK;
 }

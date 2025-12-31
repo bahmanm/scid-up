@@ -33,7 +33,7 @@ namespace eval reviewgame {
 #   - Starts a UCI engine in slot `::reviewgame::engineSlot` (if available).
 #   - Creates and configures toplevel `::reviewgame::window`.
 #   - Reads current game tags via `sc_game tags get`.
-#   - Sets play-mode callback via `::setPlayMode`.
+#   - Sets the global interaction handler via `::setInteractionHandler`.
 #   - Binds window events (destroy/help) and initialises session counters.
 #   - Calls `::reviewgame::resetValues` and enters `::reviewgame::mainLoop`.
 ################################################################################
@@ -127,13 +127,15 @@ proc ::reviewgame::start {} {
   
   set ::reviewgame::boardFlipped [::board::isFlipped .main.board]
   
-  bind $w <Destroy> "if {\[string equal $w %W\]} {::reviewgame::endTraining}"
+  bind $w <Destroy> [list apply {{w} {
+    if {[string equal $w %W]} {::reviewgame::endTraining}
+  } ::} $w]
   bind $w <F1> { helpWindow ReviewGame }
   ::createToplevelFinalize $w
   set ::reviewgame::movesLikePlayer 0
   set ::reviewgame::movesLikeEngine 0
   set ::reviewgame::numberMovesPlayed 0
-  ::setPlayMode "::reviewgame::callback"
+  ::setInteractionHandler "::reviewgame::callback"
   ::reviewgame::resetValues
   ::reviewgame::mainLoop
 }
@@ -162,7 +164,7 @@ proc ::reviewgame::clearEvaluation {} {
 
 ################################################################################
 # ::reviewgame::callback
-#   Handles play-mode callbacks while a review session is active.
+#   Handles interaction-handler callbacks while a review session is active.
 # Visibility:
 #   Public.
 # Inputs:
@@ -218,7 +220,7 @@ proc ::reviewgame::showSolution {} {
 #   - Sets `::reviewgame::bailout` and resets `::reviewgame::sequence`.
 #   - Stops any in-flight analysis (`::reviewgame::stopAnalyze`).
 #   - Closes `::reviewgame::window` via `::win::closeWindow`.
-#   - Resets play mode via `::setPlayMode ""`.
+#   - Resets the global interaction handler via `::setInteractionHandler ""`.
 #   - Attempts to close the UCI engine in slot `::reviewgame::engineSlot`.
 ################################################################################
 proc ::reviewgame::endTraining {} {
@@ -232,7 +234,7 @@ proc ::reviewgame::endTraining {} {
   focus .
   bind $w <Destroy> {}
   ::win::closeWindow $w
-  ::setPlayMode ""
+  ::setInteractionHandler ""
   
   catch { ::uci::closeUCIengine $::reviewgame::engineSlot }
 }
@@ -508,11 +510,11 @@ proc ::reviewgame::isGoodScore {engine player} {
   global ::reviewgame::margin
   if { ![::board::isFlipped .main.board] } {
     # if player plays white
-    if {$player >= [expr $engine - $margin]} {
+    if {$player >= [expr {$engine - $margin}]} {
       return 1
     }
   } else  {
-    if {$player <= [expr $engine + $margin]} {
+    if {$player <= [expr {$engine + $margin}]} {
       return 1
     }
   }
@@ -610,6 +612,7 @@ proc ::reviewgame::sendToEngine {text} {
 #   - Cancels any pending `::reviewgame::stopAnalyze` timer.
 #   - If analysis is already active, sends UCI `exit` before restarting.
 #   - Schedules progress bar updates (`::reviewgame::updateProgressBar`).
+#     (`after` requires the delay to be an integer number of milliseconds.)
 #   - Updates `::analysis(fen$::reviewgame::engineSlot)`.
 #   - Sends UCI `position ...` and `go infinite` to the engine.
 #   - Schedules `::reviewgame::stopAnalyze` after `analysisTime` seconds.
@@ -619,8 +622,8 @@ proc ::reviewgame::startAnalyze { analysisTime { move "" } } {
   
   set pb $::reviewgame::window.finfo.pb
   set length [$pb cget -maximum]
-  set ::reviewgame::progressBarTimer  [expr ( $analysisTime * 1000 * $::reviewgame::progressBarStep ) / $length ]
-  after $::reviewgame::progressBarTimer ::reviewgame::updateProgressBar
+  set ::reviewgame::progressBarTimer [expr {max(1, int(($analysisTime * 1000.0 * $::reviewgame::progressBarStep) / $length))}]
+  after $::reviewgame::progressBarTimer [list ::reviewgame::updateProgressBar]
   
   # Check that the engine has not already had analyze mode started:
   if {$analysisEngine(analyzeMode)} {
@@ -642,7 +645,7 @@ proc ::reviewgame::startAnalyze { analysisTime { move "" } } {
   
   ::reviewgame::sendToEngine "position fen $::analysis(fen$engineSlot) $move"
   ::reviewgame::sendToEngine "go infinite"
-  after [expr 1000 * $analysisTime] "::reviewgame::stopAnalyze $move"
+  after [expr {int(1000.0 * $analysisTime)}] [list ::reviewgame::stopAnalyze $move]
 }
 ################################################################################
 # ::reviewgame::stopAnalyze
@@ -680,7 +683,7 @@ proc ::reviewgame::stopAnalyze { { move "" } } {
   set pv [lindex $::analysis(multiPV$::reviewgame::engineSlot) 0]
   set analysisEngine(score,$sequence) [lindex $pv 1]
   if { $sequence == 1 } { ;# change score to white perspective
-      set analysisEngine(score,$sequence) [expr 0 - $analysisEngine(score,$sequence)]
+      set analysisEngine(score,$sequence) [expr {0 - $analysisEngine(score,$sequence)}]
   }
   set analysisEngine(moves,$sequence) [lindex $pv 2]
   
@@ -751,10 +754,11 @@ proc ::reviewgame::extendedTime {} {
 # Side effects:
 #   - Calls `$::reviewgame::window.finfo.pb step`.
 #   - Schedules itself via `after` using `::reviewgame::progressBarTimer`.
+#     (`after` requires the delay to be an integer number of milliseconds.)
 ################################################################################
 proc ::reviewgame::updateProgressBar {} {
   $::reviewgame::window.finfo.pb step $::reviewgame::progressBarStep
-  after $::reviewgame::progressBarTimer ::reviewgame::updateProgressBar
+  after $::reviewgame::progressBarTimer [list ::reviewgame::updateProgressBar]
 }
 ################################################################################
 # ::reviewgame::checkConsistency

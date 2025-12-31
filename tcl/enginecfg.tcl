@@ -154,11 +154,11 @@ proc ::enginecfg::dlgNewRemote {} {
     win::createDialog $w
     pack [ttk::label $w.msg -text "Remote engine (hostname:port):"] -fill x
     pack [ttk::entry $w.value] -fill x
-    dialogbutton $w.cancel -text [tr Cancel] -command "destroy $w"
-    dialogbutton $w.ok -text "OK" -command "
-        set ::enginecfg_dlgresult \[$w.value get\]
+    dialogbutton $w.cancel -text [tr Cancel] -command [list destroy $w]
+    dialogbutton $w.ok -text "OK" -command [list apply {{w} {
+        set ::enginecfg_dlgresult [$w.value get]
         destroy $w
-    "
+    } ::} $w]
     ::packdlgbuttons $w.cancel $w.ok
     grab $w
     tkwait window $w
@@ -183,7 +183,7 @@ proc ::enginecfg::createConfigButtons {id w fn_connect} {
     ::utils::tooltip::Set $w.engine [tr EngineSelect]
 
     ttk::button $w.reload -text "\u21BB" -style Toolbutton \
-        -command "event generate $w.engine <<ComboboxSelected>>"
+        -command [list event generate $w.engine <<ComboboxSelected>>]
     ::utils::tooltip::Set $w.reload [tr EngineReload]
 
     ttk::button $w.addpipe -text "\u271A" -style Toolbutton -command [list apply {{fn_connect} {
@@ -289,9 +289,9 @@ proc ::enginecfg::updateConfigFrame {id configFrame msgInfoConfig} {
 # the configFrame is destroyed.
 proc ::enginecfg::autoSaveConfig {id configFrame {autosave false}} {
     if {$autosave} {
-        bind $configFrame.text <Destroy> "
-            ::enginecfg::save \[ set ::enginecfg::engConfig_$id \]
-        "
+        bind $configFrame.text <Destroy> [list apply {{id} {
+            ::enginecfg::save [set ::enginecfg::engConfig_$id]
+        } ::} $id]
     } else {
         bind $configFrame.text <Destroy> {}
     }
@@ -393,21 +393,21 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     bind $w.name <Return> [bind $w.name <FocusOut>]
 
     apply $fn_create_entry $w cmd "\n[tr EngineCmd]" $cmd
-    bind $w.cmd <FocusOut> "::enginecfg::onSubmitParam $id cmd \[ %W get \]"
+    bind $w.cmd <FocusOut> [list apply {{id} { ::enginecfg::onSubmitParam $id cmd [%W get] } ::} $id]
     bind $w.cmd <Return> [bind $w.cmd <FocusOut>]
     ttk::button $w.cmdbtn -style Pad0.Small.TButton -text ... \
-        -command "::enginecfg::onSubmitParam $id cmd {} 1"
+        -command [list ::enginecfg::onSubmitParam $id cmd {} 1]
     $w window create end -window $w.cmdbtn -pady 2 -padx 2
 
     apply $fn_create_entry $w args "\n[tr EngineArgs]" $args
-    bind $w.args <FocusOut> "::enginecfg::onSubmitParam $id args \[ %W get \]"
+    bind $w.args <FocusOut> [list apply {{id} { ::enginecfg::onSubmitParam $id args [%W get] } ::} $id]
     bind $w.args <Return> [bind $w.args <FocusOut>]
 
     apply $fn_create_entry $w wdir "\n[tr EngineDir]" $wdir
-    bind $w.wdir <FocusOut> "::enginecfg::onSubmitParam $id wdir \[ %W get \]"
+    bind $w.wdir <FocusOut> [list apply {{id} { ::enginecfg::onSubmitParam $id wdir [%W get] } ::} $id]
     bind $w.wdir <Return> [bind $w.wdir <FocusOut>]
     ttk::button $w.wdirbtn -style Pad0.Small.TButton -text ... \
-        -command "::enginecfg::onSubmitParam $id wdir {} 2"
+        -command [list ::enginecfg::onSubmitParam $id wdir {} 2]
     $w window create end -window $w.wdirbtn -pady 2 -padx 2
 
     $w insert end "\n[tr EngineProtocol]:\t"
@@ -415,29 +415,34 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
 
     $w insert end "\n[tr EngineNotation]:\t"
     ttk::combobox $w.notation -state readonly -width 12 -values [list engine SAN "English SAN" figurine]
-    bind $w.notation <<ComboboxSelected>> "
-        ::enginecfg::onChangeLayout $id notation \[ $w.notation current \]
-    "
+    bind $w.notation <<ComboboxSelected>> [list apply {{id} {
+        ::enginecfg::onChangeLayout $id notation [%W current]
+    } ::} $id]
     $w window create end -window $w.notation -pady 2
     $w.notation current [expr { $notation < 0 ? 0 - $notation : $notation }]
     ::enginecfg::onChangeLayout $id notation $notation
 
     ttk::checkbutton $w.wrap -text [tr GInfoWrap] -onvalue word -offvalue none -style Toolbutton \
-        -command "::enginecfg::onChangeLayout $id wrap \[ set ::$w.wrap \]"
+        -command [list apply {{id wrapVar} {
+            ::enginecfg::onChangeLayout $id wrap [set $wrapVar]
+        } ::} $id ::$w.wrap]
     $w window create end -window $w.wrap -pady 2 -padx 6
     set ::$w.wrap $pvwrap
 
     $w insert end "\n[tr EngineFlipEvaluation]:\t"
     ttk::checkbutton $w.scoreside -style Switch.Toolbutton -onvalue engine -offvalue white \
-        -command "::enginecfg::onChangeLayout $id scoreside \[::update_switch_btn $w.scoreside \]"
+        -command [list apply {{id btn} {
+            ::enginecfg::onChangeLayout $id scoreside [::update_switch_btn $btn]
+        } ::} $id $w.scoreside]
     ::update_switch_btn $w.scoreside $scoreside
     $w window create end -window $w.scoreside -pady 2
 
     $w insert end "\n[tr EngineShowLog]:\t"
-    ttk::checkbutton $w.debug -style Switch.Toolbutton -command "
-        lset ::enginecfg::engConfig_$id 6 3 \[::update_switch_btn $w.debug\]
-        ::enginewin::logEngine $id \[::update_switch_btn $w.debug\]
-    "
+    ttk::checkbutton $w.debug -style Switch.Toolbutton -command [list apply {{id w} {
+        set enabled [::update_switch_btn $w.debug]
+        lset ::enginecfg::engConfig_$id 6 3 $enabled
+        ::enginewin::logEngine $id $enabled
+    } ::} $id $w]
     ::update_switch_btn $w.debug $debugframe
     $w window create end -window $w.debug -pady 2
 
@@ -447,10 +452,11 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     if {$enginePid != ""} {
         $w insert end "\n[tr LowPriority]:\t"
         ttk::checkbutton $w.priority -onvalue idle -offvalue normal \
-            -style Switch.Toolbutton -command "
-                catch { sc_info priority $enginePid \[ ::update_switch_btn $w.priority \] }
-                lset ::enginecfg::engConfig_$id 6 4 \[ ::update_switch_btn $w.priority \]
-            "
+            -style Switch.Toolbutton -command [list apply {{id w enginePid} {
+                set priority [::update_switch_btn $w.priority]
+                catch { sc_info priority $enginePid $priority }
+                lset ::enginecfg::engConfig_$id 6 4 $priority
+            } ::} $id $w $enginePid]
         ::update_switch_btn $w.priority $priority
         $w window create end -window $w.priority -pady 2
         $w insert end "  pid: $enginePid"
@@ -465,10 +471,12 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     $w insert end "  port: "
     ttk::entry $w.netport -width 6 -validate key -validatecommand { string is integer %P }
     $w window create end -window $w.netport -pady 2
-    bind $w.netd <<ComboboxSelected>> "::enginecfg::onSubmitNetd $id $w"
-    bind $w.netport <FocusOut> "if {\"readonly\" ni \[$w.netport state\]} {
-        ::enginecfg::onSubmitNetd $id $w
-    }"
+    bind $w.netd <<ComboboxSelected>> [list ::enginecfg::onSubmitNetd $id $w]
+    bind $w.netport <FocusOut> [list apply {{id w} {
+        if {"readonly" ni [%W state]} {
+            ::enginecfg::onSubmitNetd $id $w
+        }
+    } ::} $id $w]
     bind $w.netport <Return> [bind $w.netport <FocusOut>]
     if {$netport eq ""} {
         $w.netd set "off"
@@ -500,7 +508,7 @@ proc ::enginecfg::createOptionWidgets {id configFrame options} {
             set disableReset 0
             $w insert end "\n"
             ttk::button $w.reset -style Pad0.Small.TButton -text "Reset Options" \
-                -command "::enginecfg::onSubmitReset $id $configFrame"
+                -command [list ::enginecfg::onSubmitReset $id $configFrame]
             $w window create end -window $w.reset
         }
         $w insert end "\n$name:" opt_label "\t"
@@ -516,15 +524,17 @@ proc ::enginecfg::createOptionWidgets {id configFrame options} {
             if {$type eq "combo"} {
                 lassign [lsort -decreasing -integer [lmap elem $var_list { string length $elem }]] maxlen
                 ttk::combobox $w.value$i -width [incr maxlen] -values $var_list -state readonly
-                bind $w.value$i <<ComboboxSelected>> "::enginecfg::setOptionFromWidget $id $i %W"
+                bind $w.value$i <<ComboboxSelected>> [list ::enginecfg::setOptionFromWidget $id $i %W]
             } elseif {$type eq "check"} {
                 ttk::checkbutton $w.value$i -onvalue true -offvalue false -style Switch.Toolbutton -command \
-                    "::enginecfg::setOption $id $i \[::update_switch_btn $w.value$i \]"
+                    [list apply {{id i btn} {
+                        ::enginecfg::setOption $id $i [::update_switch_btn $btn]
+                    } ::} $id $i $w.value$i]
             } else {
                 if {$type eq "spin" || $type eq "slider"} {
                     ttk::spinbox $w.value$i -width 12 -from $min -to $max -increment 1 \
                         -validate key -validatecommand { string is integer %P } \
-                        -command "after idle \[bind $w.value$i <FocusOut>\] "
+                        -command [list after idle [list ::enginecfg::setOptionFromWidget $id $i $w.value$i]]
                 } else {
                     ttk::entry $w.value$i
                     if {$type eq "file"} {
@@ -535,14 +545,14 @@ proc ::enginecfg::createOptionWidgets {id configFrame options} {
                 }
                 # Special vars like %W cannot be used in <FocusOut> because the
                 # other events are forwarded to it
-                bind $w.value$i <FocusOut> "::enginecfg::setOptionFromWidget $id $i $w.value$i"
+                bind $w.value$i <FocusOut> [list ::enginecfg::setOptionFromWidget $id $i $w.value$i]
                 bind $w.value$i <Return> [bind $w.value$i <FocusOut>]
             }
             $w window create end -window $w.value$i -pady 2
         }
         if {$btn ne ""} {
             ttk::button $w.button$i -style Pad0.Small.TButton -text $btn \
-                -command "::enginecfg::onSubmitButton $id $i"
+                -command [list ::enginecfg::onSubmitButton $id $i]
             $w window create end -window $w.button$i -padx 2 -pady 2
         } elseif {$type eq "spin" || $type eq "slider"} {
             $w insert end " (Range: $min ... $max)"

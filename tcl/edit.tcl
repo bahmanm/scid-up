@@ -52,8 +52,8 @@ proc setupBoard {} {
   ::board::new $w.l.bd
   ::board::coords $w.l.bd
   for {set i 0} { $i < 64 } { incr i } {
-    ::board::bind $w.l.bd $i <B1-Motion>       "dragBoardPiece  $w.l.bd %X %Y $i"
-    ::board::bind $w.l.bd $i <ButtonRelease-1> "setupBoardPiece $w.l.bd %X %Y"
+    ::board::bind $w.l.bd $i <B1-Motion> [list dragBoardPiece $w.l.bd %X %Y $i]
+    ::board::bind $w.l.bd $i <ButtonRelease-1> [list setupBoardPiece $w.l.bd %X %Y]
   }
   grid $w.l.bd -sticky news
   grid rowconfigure $w.l.bd 0 -weight 1
@@ -151,11 +151,10 @@ proc setupBoard {} {
     setSetupBoardToFen %W "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
   }
   ttk::button $w.r.b.switchcolor -text $::tr(SwitchColors) -command {
-    regsub -all {(?:([A-Z])|([a-z]))} $::setupBd {[string tolower "\1"][string toupper "\2"]} invertCase
-    set ::setupBd [subst $invertCase]
+    set invertMap {K k Q q R r B b N n P p k K q Q r R b B n N p P}
+    set ::setupBd [string map $invertMap $::setupBd]
     set ::toMove [expr {$::toMove == "White" ? "Black" : "White"}]
-    regsub -all {(?:([A-Z])|([a-z]))} $::castling {[string tolower "\1"][string toupper "\2"]} invertCase
-    set ::castling [subst $invertCase]
+    set ::castling [string map $invertMap $::castling]
     set epFile {-}
     ::board::update .setup.l.bd $setupBd
     set ::setupFen [makeSetupFen]
@@ -195,8 +194,12 @@ proc setupBoard {} {
   pack .setup.paste .setup.clear -in .setup.statusbar -side left
   pack .setup.status -in .setup.statusbar -side right -expand yes -fill x -anchor w
 
-  bind $w.l <Configure> "::board::resizeAuto $w.l.bd \[grid bbox $w 0 1\]"
-  bind $w <Destroy> "if {\[string equal $w %W\]} { ::win::saveWinGeometry $w }"
+  bind $w.l <Configure> [list apply {{w} {
+    ::board::resizeAuto ${w}.l.bd [grid bbox $w 0 1]
+  } ::} $w]
+  bind $w <Destroy> [list apply {{w} {
+    if {[string equal $w %W]} { ::win::saveWinGeometry $w }
+  } ::} $w]
   bind $w <Escape> {destroy .setup}
   ::win::restoreWinGeometry $w
 

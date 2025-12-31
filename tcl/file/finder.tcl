@@ -33,7 +33,7 @@ proc ::file::finder::Open {} {
   wm title $w "Scid: $::tr(FileFinder)"
   bind $w <F1> {helpWindow Finder}
   setWinLocation $w
-  bind $w <Configure> "recordWinSize $w"
+  bind $w <Configure> [list recordWinSize $w]
   
   ttk::frame $w.p
   ttk::labelframe $w.p.label -text $::menuLabel($::language,FinderSortType)
@@ -222,9 +222,12 @@ proc ::file::finder::Refresh {{newdir ""}} {
   if {[llength $flist] != 0} {
     foreach i {Type Size Mod Name Path} v {type size mod name path} {
       $t tag configure s$i -font font_SmallBold
-      $t tag bind s$i <1> "set ::file::finder::data(sort) $v; ::file::finder::Refresh -fast"
-      $t tag bind s$i <Any-Enter> "$t tag config s$i -foreground red"
-      $t tag bind s$i <Any-Leave> "$t tag config s$i -foreground {}"
+      $t tag bind s$i <1> [list apply {{v} {
+        set ::file::finder::data(sort) $v
+        ::file::finder::Refresh -fast
+      } ::} $v]
+      $t tag bind s$i <Any-Enter> [list $t tag config s$i -foreground red]
+      $t tag bind s$i <Any-Leave> [list $t tag config s$i -foreground {}]
     }
     $t insert end "$::tr(FinderFiles)\n" {center bold}
     $t insert end " "
@@ -263,9 +266,9 @@ proc ::file::finder::Refresh {{newdir ""}} {
       set fullpath $data(dir)/$dir/$tail
     }
     
-    $t tag bind f$path <ButtonRelease-1> "::file::Open [list $fullpath]"
+    $t tag bind f$path <ButtonRelease-1> [list ::file::Open $fullpath]
     # Bind right button to popup a contextual menu:
-    $t tag bind f$path <ButtonPress-$::MB3> "::file::finder::contextMenu .finder.t.text [list $fullpath] %x %y %X %Y"
+    $t tag bind f$path <ButtonPress-$::MB3> [list ::file::finder::contextMenu .finder.t.text $fullpath %x %y %X %Y]
     
     $t tag bind f$path <Any-Enter> \
         "$t tag configure [list f$path] -background $hc"
@@ -291,7 +294,7 @@ proc ::file::finder::Refresh {{newdir ""}} {
     lappend mlist $d
   }
   foreach m $mlist {
-    $data(menu) add command -label $m -command "::file::finder::Refresh [list $m]"
+    $data(menu) add command -label $m -command [list ::file::finder::Refresh $m]
   }
   
   #store actual directory string in menubutton
@@ -329,12 +332,12 @@ proc ::file::finder::contextMenu {win fullPath x y xc yc} {
   if { [winfo exists $mctxt] } { destroy $mctxt }
   
   menu $mctxt
-  $mctxt add command -label [tr FinderCtxOpen ] -command "::file::Open [list $fullPath]"
-  $mctxt add command -label [tr FinderCtxBackup ] -command "::file::finder::backup [list $fullPath]"
-  $mctxt add command -label [tr FinderCtxCopy ] -command "::file::finder::copy [list $fullPath]"
-  $mctxt add command -label [tr FinderCtxMove ] -command "::file::finder::move [list $fullPath]"
+  $mctxt add command -label [tr FinderCtxOpen ] -command [list ::file::Open $fullPath]
+  $mctxt add command -label [tr FinderCtxBackup ] -command [list ::file::finder::backup $fullPath]
+  $mctxt add command -label [tr FinderCtxCopy ] -command [list ::file::finder::copy $fullPath]
+  $mctxt add command -label [tr FinderCtxMove ] -command [list ::file::finder::move $fullPath]
   $mctxt add separator
-  $mctxt add command -label [tr FinderCtxDelete ] -command "::file::finder::delete $fullPath"
+  $mctxt add command -label [tr FinderCtxDelete ] -command [list ::file::finder::delete $fullPath]
   
   $mctxt post [winfo pointerx .] [winfo pointery .]
   
@@ -576,4 +579,3 @@ proc ::file::finder::GetFiles {dir {len -1}} {
   }
   return $flist
 }
-

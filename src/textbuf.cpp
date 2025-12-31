@@ -14,6 +14,7 @@
 
 #include "textbuf.h"
 #include "misc.h"
+#include <cstdio>
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //### TextBuffer::Init(): Initialise the textbuffer.
@@ -232,7 +233,7 @@ errorT
 TextBuffer::PrintInt (uint i, const char * str)
 {
     char temp[255];
-    sprintf(temp, "%d%s", i, str);
+    std::snprintf(temp, sizeof(temp), "%u%s", i, str);
     return PrintWord(temp);
 }
 

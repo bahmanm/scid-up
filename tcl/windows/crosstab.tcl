@@ -140,7 +140,7 @@ proc ::crosstab::Open {} {
   }
   $w.menu.file add separator
   $w.menu.file add command -label CrosstabFileClose \
-      -command "::win::closeWindow $w"
+      -command [list ::win::closeWindow $w]
 
   $w.menu.edit add command -label CrosstabEditEvent -command {
     makeNameEditor
@@ -243,7 +243,7 @@ proc ::crosstab::Open {} {
   $w.b.type.menu add radiobutton -label [tr CrosstabOptAuto] \
       -variable crosstab(type) -value auto -command crosstab::Refresh
   ttk::button $w.b.update -textvar ::tr(Update) -command ::crosstab::Refresh
-  ttk::button $w.b.cancel -textvar ::tr(Close) -command "::win::closeWindow $w"
+  ttk::button $w.b.cancel -textvar ::tr(Close) -command [list ::win::closeWindow $w]
   ttk::button $w.b.setfilter -textvar ::tr(SetFilter) -command {
     sc_filter reset $::crosstab::dbase_ dbfilter empty
     ::crosstab::AddToFilter
@@ -258,7 +258,7 @@ proc ::crosstab::Open {} {
   pack $w.f -side top -fill both -expand true
 
   # Take input focus even if -state is disabled
-  bind $w.f.text <ButtonPress-1> "focus %W"
+  bind $w.f.text <ButtonPress-1> [list focus %W]
 
   ::crosstab::Refresh
 }
@@ -345,4 +345,3 @@ proc ::crosstab::Refresh {} {
   $w.f.text configure -state disabled
   raiseWin $w
 }
-

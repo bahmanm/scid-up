@@ -17,17 +17,17 @@ proc ::tip::show {{n -1}} {
     ttk::checkbutton $w.b.start -textvar ::tr(TipAtStartup) -variable startup(tip) -style Small.TCheckbutton
     dialogbuttonsmall $w.b.prev [list -text "<" ]
     dialogbuttonsmall $w.b.next [list -text ">" ]
-    dialogbuttonsmall $w.b.close [list -textvar ::tr(Close) -command "destroy $w" ]
+    dialogbuttonsmall $w.b.close [list -textvar ::tr(Close) -command [list destroy $w] ]
     pack $w.b.start -side left -padx 2
     packdlgbuttons $w.b.close $w.b.next $w.b.prev
 
-    bind $w <Up> "$w.text yview scroll -1 units"
-    bind $w <Down> "$w.text yview scroll 1 units"
-    bind $w <Prior> "$w.text yview scroll -1 pages"
-    bind $w <Next> "$w.text yview scroll 1 pages"
-    bind $w <Key-Home> "$w.text yview moveto 0"
-    bind $w <Key-End> "$w.text yview moveto 0.99"
-    bind $w <Escape> "$w.b.close invoke"
+	    bind $w <Up> [list ${w}.text yview scroll -1 units]
+	    bind $w <Down> [list ${w}.text yview scroll 1 units]
+	    bind $w <Prior> [list ${w}.text yview scroll -1 pages]
+	    bind $w <Next> [list ${w}.text yview scroll 1 pages]
+	    bind $w <Key-Home> [list ${w}.text yview moveto 0]
+	    bind $w <Key-End> [list ${w}.text yview moveto 0.99]
+	    bind $w <Escape> [list ${w}.b.close invoke]
     raiseWin $w
     focus $w
   }
@@ -41,14 +41,14 @@ proc ::tip::show {{n -1}} {
 
   set ntips [llength $tiplist]
   if {$n < 0} {
-    set n [expr int(double($ntips) * rand())]
+    set n [expr {int(double($ntips) * rand())}]
   }
-  set prev [expr $n - 1]
-  if {$prev < 0} {set prev [expr $ntips - 1]}
-  set next [expr ($n + 1) % $ntips]
-  $w.b.prev configure -command "::tip::show $prev"
-  $w.b.next configure -command "::tip::show $next"
-  set tip "<center><b>$::tr(Tip) [expr $n + 1]:</b></center><br><br>"
+  set prev [expr {$n - 1}]
+  if {$prev < 0} {set prev [expr {$ntips - 1}]}
+  set next [expr {($n + 1) % $ntips}]
+  $w.b.prev configure -command [list ::tip::show $prev]
+  $w.b.next configure -command [list ::tip::show $next]
+  set tip "<center><b>$::tr(Tip) [expr {$n + 1}]:</b></center><br><br>"
   append tip [string trim [lindex $tiplist $n]]
   ::htext::display $w.text $tip "" 0
 }
@@ -273,4 +273,3 @@ set tips(E) {
     look in the <a Appearance>help section</a>.
   }
 }
-

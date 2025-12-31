@@ -47,7 +47,7 @@ image create photo e20 -height 20 -width 20
 set x 0
 foreach p {wp wn wb wr wq wk bp bn bb br bq bk} {
   image create photo ${p}20 -width 20 -height 20
-  ${p}20 copy p20 -from $x 0 [expr $x + 19] 19
+  ${p}20 copy p20 -from $x 0 [expr {$x + 19}] 19
   incr x 20
 }
 
@@ -113,6 +113,11 @@ proc checkPieceCounts {name el op} {
 trace add variable pMin write checkPieceCounts
 trace add variable pMax write checkPieceCounts
 
+proc setMaterialCountRange {key min max} {
+  set ::pMin($key) $min
+  set ::pMax($key) $max
+}
+
 
 ################################################################################
 # makeBoolMenu
@@ -135,9 +140,9 @@ proc makeBoolMenu {w varName} {
 
   menu $w.menu -tearoff 0
   $w.menu add radiobutton -label Yes -image tb_tick -variable $varName -value Yes \
-      -command "$w configure -image tb_tick"  ;# -hidemargin 1
+      -command [list $w configure -image tb_tick]  ;# -hidemargin 1
   $w.menu add radiobutton -label No -image tb_cross -variable $varName -value No \
-      -command "$w configure -image tb_cross" ;# -hidemargin 1
+      -command [list $w configure -image tb_cross] ;# -hidemargin 1
   return $w.menu
 }
 
@@ -162,11 +167,11 @@ proc makePieceMenu {w varName} {
   ttk::menubutton $w -menu $w.menu -style Pad0.Small.TButton
   menu $w.menu -tearoff 0
   $w.menu add radiobutton -label " ? " -variable $varName -value "?" \
-      -command "$w configure -image e20"  -hidemargin 1
+      -command [list $w configure -image e20]  -hidemargin 1
   foreach i {wk wq wr wb wn wp bk bq br bb bn bp} {
     $w.menu add radiobutton -label $i -image ${i}20 -value $i \
         -variable $varName \
-        -command "$w configure -image ${i}20"  -hidemargin 1
+        -command [list $w configure -image ${i}20]  -hidemargin 1
   }
   foreach i {" ? " wk bk} {
     $w.menu entryconfigure $i -columnbreak 1
@@ -392,8 +397,8 @@ proc ::search::material {{ref_base ""}} {
   wm title $w "Scid: $::tr(MaterialSearch)"
 
   bind $w <F1> { helpWindow Searches Material }
-  bind $w <Escape> "$w.b3.cancel invoke"
-  bind $w <Return> "$w.b3.search invoke"
+  bind $w <Escape> [list ${w}.b3.cancel invoke]
+  bind $w <Return> [list ${w}.b3.search invoke]
 
   pack [ttk::frame $w.refdb] -side top -fill x
   CreateSelectDBWidget "$w.refdb" "refDatabaseM" "$ref_base"
@@ -410,11 +415,11 @@ proc ::search::material {{ref_base ""}} {
 
   foreach i {q r b n m p} {
     set f $w.mp.material.$i
-    ttk::button $f.w0 -text "0" -command "set pMin(w$i) 0; set pMax(w$i) 0"
-    ttk::button $f.w1 -text "1" -command "set pMin(w$i) 1; set pMax(w$i) 1"
-    ttk::button $f.w2 -text "2" -command "set pMin(w$i) 2; set pMax(w$i) 2"
-    ttk::button $f.wa -text "0+" -command "set pMin(w$i) 0; set pMax(w$i) 2"
-    ttk::button $f.w1p -text "1+" -command "set pMin(w$i) 1; set pMax(w$i) 2"
+    ttk::button $f.w0 -text "0" -command [list setMaterialCountRange w$i 0 0]
+    ttk::button $f.w1 -text "1" -command [list setMaterialCountRange w$i 1 1]
+    ttk::button $f.w2 -text "2" -command [list setMaterialCountRange w$i 2 2]
+    ttk::button $f.wa -text "0+" -command [list setMaterialCountRange w$i 0 2]
+    ttk::button $f.w1p -text "1+" -command [list setMaterialCountRange w$i 1 2]
     ttk::label $f.wi -image w${i}20 -font font_Small
     ttk::label $f.wto -text "-" -font font_Small -padding 0
     ttk::entry $f.wmin -width 2 -textvar pMin(w$i) -font font_Small -justify right ;#-relief sunken
@@ -422,11 +427,11 @@ proc ::search::material {{ref_base ""}} {
     pack $f.w0 $f.w1 $f.w2 $f.wa $f.w1p $f.wi $f.wmin $f.wto $f.wmax -side left -pady 1
 
     pack [ttk::frame $f.space -width 20] -side left
-    ttk::button $f.b0 -text "0" -command "set pMin(b$i) 0; set pMax(b$i) 0"
-    ttk::button $f.b1 -text "1" -command "set pMin(b$i) 1; set pMax(b$i) 1"
-    ttk::button $f.b2 -text "2" -command "set pMin(b$i) 2; set pMax(b$i) 2"
-    ttk::button $f.ba -text "0+" -command "set pMin(b$i) 0; set pMax(b$i) 2"
-    ttk::button $f.b1p -text "1+" -command "set pMin(b$i) 1; set pMax(b$i) 2"
+    ttk::button $f.b0 -text "0" -command [list setMaterialCountRange b$i 0 0]
+    ttk::button $f.b1 -text "1" -command [list setMaterialCountRange b$i 1 1]
+    ttk::button $f.b2 -text "2" -command [list setMaterialCountRange b$i 2 2]
+    ttk::button $f.ba -text "0+" -command [list setMaterialCountRange b$i 0 2]
+    ttk::button $f.b1p -text "1+" -command [list setMaterialCountRange b$i 1 2]
     ttk::label $f.bi -image b${i}20 -font font_Small
     ttk::label $f.bto -text "-" -font font_Small
     ttk::entry $f.bmin -width 2 -textvar pMin(b$i) -font font_Small -justify right ;#-relief sunken
@@ -438,16 +443,16 @@ proc ::search::material {{ref_base ""}} {
       $f.b$b configure -width 2 -takefocus 0 -style Pad0.Small.TButton ;# -font $small -pady 0 -padx 1
     }
     if {$i == "p"} {
-      $f.w1p configure -command "set pMin(wp) 1; set pMax(wp) 8"
-      $f.wa configure -command "set pMin(wp) 0; set pMax(wp) 8"
-      $f.b1p configure -command "set pMin(bp) 1; set pMax(bp) 8"
-      $f.ba configure -command "set pMin(bp) 0; set pMax(bp) 8"
+      $f.w1p configure -command [list setMaterialCountRange wp 1 8]
+      $f.wa configure -command [list setMaterialCountRange wp 0 8]
+      $f.b1p configure -command [list setMaterialCountRange bp 1 8]
+      $f.ba configure -command [list setMaterialCountRange bp 0 8]
     }
     if {$i == "m"} {
-      $f.w1p configure -command "set pMin(wm) 1; set pMax(wm) 4"
-      $f.wa configure -command "set pMin(wm) 0; set pMax(wm) 4"
-      $f.b1p configure -command "set pMin(bm) 1; set pMax(bm) 4"
-      $f.ba configure -command "set pMin(bm) 0; set pMax(bm) 4"
+      $f.w1p configure -command [list setMaterialCountRange wm 1 4]
+      $f.wa configure -command [list setMaterialCountRange wm 0 4]
+      $f.b1p configure -command [list setMaterialCountRange bm 1 4]
+      $f.ba configure -command [list setMaterialCountRange bm 0 4]
     }
   }
 
@@ -577,10 +582,10 @@ proc ::search::material {{ref_base ""}} {
     menu $f.grid.f$i.menu -tearoff 0
     menu $f.grid.r$i.menu -tearoff 0
     foreach l { "?" a b c d e f g h } {
-        $f.grid.f$i.menu add command -label $l -command "set pattFyle($i) $l"
+        $f.grid.f$i.menu add command -label $l -command [list set pattFyle($i) $l]
     }
     foreach l { "?" 1 2 3 4 5 6 7 8 } {
-        $f.grid.r$i.menu add command -label $l -command "set pattRank($i) $l"
+        $f.grid.r$i.menu add command -label $l -command [list set pattRank($i) $l]
     }
     if { $i <= $nPatterns } {
     set column [expr {7 * (($i - 1) / 7)} ]

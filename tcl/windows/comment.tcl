@@ -209,7 +209,7 @@ proc ::windows::commenteditor::createWin { {focus_if_exists 1} } {
 	# NAGs frame:
 	ttk::frame $w_.nf
 	ttk::label $w_.nf.label -font font_Bold -text [tr AnnotationSymbols]
-	ttk::button $w_.nf.clear -text [tr Clear] -command "::windows::commenteditor::clearNAGs_"
+	ttk::button $w_.nf.clear -text [tr Clear] -command [list ::windows::commenteditor::clearNAGs_]
 	ttk::entry $w_.nf.text
 	ttk::frame $w_.nf.b
 	set i 0
@@ -233,7 +233,7 @@ proc ::windows::commenteditor::createWin { {focus_if_exists 1} } {
 		=+ BlackSlightAdvantage
 		~ Unclear
 	} {
-		ttk::button $w_.nf.b.b$i -text "$nag" -width 3 -command "::addNag $nag"
+		ttk::button $w_.nf.b.b$i -text "$nag" -width 3 -command [list ::addNag $nag]
 		::utils::tooltip::Set $w_.nf.b.b$i [tr $description]
 		grid $w_.nf.b.b$i -column [expr {$i % 6}] -row [expr {int($i / 6)}] -padx 1 -pady 1
 		incr i
@@ -246,7 +246,7 @@ proc ::windows::commenteditor::createWin { {focus_if_exists 1} } {
 	# Comment frame:
 	ttk::frame $w_.cf
 	ttk::label $w_.cf.label -font font_Bold -text [tr Comment]
-	ttk::button $w_.cf.clear -text [tr Clear] -command "::windows::commenteditor::clearComment_"
+	ttk::button $w_.cf.clear -text [tr Clear] -command [list ::windows::commenteditor::clearComment_]
 	autoscrollText y $w_.cf.txtframe $w_.cf.txtframe.text Treeview
 	$w_.cf.txtframe.text configure -wrap word -state normal
 	grid rowconfig $w_.cf 1 -weight 1
@@ -265,12 +265,17 @@ proc ::windows::commenteditor::createWin { {focus_if_exists 1} } {
 	Refresh
 
 	# Add bindings at the end
-	bind $w_ <Destroy> "if {\[string equal $w_ %W\]} { set ::windows::commenteditor::isOpen 0; ::windows::commenteditor::notify_ 1 }"
-	bind $w_.nf.text <KeyPress>   "::windows::commenteditor::notifyCancel_"
-	bind $w_.nf.text <KeyRelease> "::windows::commenteditor::storeNAGs_"
-	bind $w_.cf.txtframe.text <KeyPress>   "::windows::commenteditor::notifyCancel_"
-	bind $w_.cf.txtframe.text <KeyRelease> "::windows::commenteditor::notify_ 1000"
-	bind $w_.cf.txtframe.text <<Modified>> "::windows::commenteditor::storeComment_"
+		bind $w_ <Destroy> [list apply {{w} {
+			if {[string equal $w %W]} {
+				set ::windows::commenteditor::isOpen 0
+				::windows::commenteditor::notify_ 1
+			}
+		} ::} $w_]
+		bind $w_.nf.text <KeyPress>   [list ::windows::commenteditor::notifyCancel_]
+		bind $w_.nf.text <KeyRelease> [list ::windows::commenteditor::storeNAGs_]
+		bind $w_.cf.txtframe.text <KeyPress>   [list ::windows::commenteditor::notifyCancel_]
+		bind $w_.cf.txtframe.text <KeyRelease> [list ::windows::commenteditor::notify_ 1000]
+	bind $w_.cf.txtframe.text <<Modified>> [list ::windows::commenteditor::storeComment_]
 
 	set ::windows::commenteditor::isOpen 1
 	$w_.cf.txtframe.text edit modified false

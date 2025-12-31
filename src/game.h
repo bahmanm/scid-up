@@ -230,11 +230,11 @@ public:
     void Clear();
     void strip(bool variations, bool comments, bool NAGs);
 
-    bool HasNonStandardStart(char* outFEN = nullptr) const {
+    bool HasNonStandardStart(char* outFEN = nullptr, size_t outFENLen = 0) const {
         if (!StartPos)
             return false;
-        if (outFEN)
-            StartPos->PrintFEN(outFEN);
+        if (outFEN && outFENLen)
+            StartPos->PrintFEN(outFEN, outFENLen);
         return true;
     }
 
@@ -562,9 +562,9 @@ template <typename TFunc> void Game::viewTagPairs(TFunc visitor) const {
 	for (auto& e : GetExtraTags()) {
 		visitor(e.first.c_str(), e.second.c_str());
 	}
-	if (HasNonStandardStart(strBuf)) {
-		visitor("FEN", strBuf);
-	}
+		if (HasNonStandardStart(strBuf, sizeof(strBuf))) {
+			visitor("FEN", strBuf);
+		}
 }
 
 namespace gamepos {
@@ -607,7 +607,7 @@ inline void collectPositions(Game& game, TCont& dest) {
 		gamepos.RAVdepth = game.GetVarLevel();
 		gamepos.RAVnum = game.GetVarNumber();
 		char strBuf[256];
-		game.currentPos()->PrintFEN(strBuf);
+		game.currentPos()->PrintFEN(strBuf, sizeof(strBuf));
 		gamepos.FEN = strBuf;
 		for (byte* nag = game.GetNags(); *nag; nag++) {
 			gamepos.NAGs.push_back(*nag);

@@ -54,7 +54,7 @@ proc ::windows::eco::Refresh {{code "x"}} {
     set ::windows::eco::isOpen 1
     ::createToplevel $w
     wm minsize $w 200 100
-    bind $w <Escape> "destroy $w"
+    bind $w <Escape> [list destroy $w]
     bind $w <F1> {helpWindow ECO}
     bind $w <Destroy> {set ::windows::eco::isOpen 0}
     ttk::entry $w.title -width 15 -font font_Bold
@@ -63,7 +63,7 @@ proc ::windows::eco::Refresh {{code "x"}} {
     pack $w.b -side bottom -fill x
     ttk::button $w.b.classify -textvar ::tr(ReclassifyGames) -command classifyAllGames
     dialogbutton $w.b.help -textvar ::tr(Help) -command {helpWindow ECO}
-    dialogbutton $w.b.close -textvar ::tr(Close) -command "destroy $w"
+    dialogbutton $w.b.close -textvar ::tr(Close) -command [list destroy $w]
     pack $w.b.classify -side left -padx 5 -pady 5
     packbuttons right $w.b.close $w.b.help
     set pane [::utils::pane::Create $w.pane graph text 500 400 0.5]
@@ -86,7 +86,7 @@ proc ::windows::eco::Refresh {{code "x"}} {
 
     foreach i {0 1 2 3 4 5 6 7 8 9 A B C D E a b c d e f g h i j k l m n o p
                q r s t u v w x y z} {
-      bind $w <KeyPress-$i> "::windows::eco::KeyPress $i"
+      bind $w <KeyPress-$i> [list ::windows::eco::KeyPress $i]
     }
 
     foreach i {Left Delete less BackSpace} {
@@ -101,7 +101,7 @@ proc ::windows::eco::Refresh {{code "x"}} {
     bind $w <Next>  {.ecograph.pane.text.text yview scroll 1 pages}
 
     bind $graph.c <1> { ::windows::eco::Select %x }
-    bind $graph.c <$::MB3> { ::windows::eco::KeyPress "<" }
+    bind $graph.c <$::MB3> { ::windows::eco::KeyPress < }
 
     bind $graph <Configure> {
       ::utils::graph::configure eco -height [expr {[winfo height .ecograph.pane.graph.c] - 50} ]
@@ -332,4 +332,3 @@ proc ::windows::eco::KeyPress {key} {
     ::windows::eco::Refresh
   }
 }
-

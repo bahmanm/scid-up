@@ -72,12 +72,12 @@ proc ::tourney::Open {} {
   bind $w <F1> {helpWindow Tmt}
   bind $w <Return> ::tourney::refresh
   bind $w <Destroy> { set tourneyWin 0 }
-  bind $w <Up> "$w.t.text yview scroll -1 units"
-  bind $w <Down> "$w.t.text yview scroll 1 units"
-  bind $w <Prior> "$w.t.text yview scroll -1 pages"
-  bind $w <Next> "$w.t.text yview scroll 1 pages"
-  bind $w <Key-Home> "$w.t.text yview moveto 0"
-  bind $w <Key-End> "$w.t.text yview moveto 0.99"
+  bind $w <Up> [list ${w}.t.text yview scroll -1 units]
+  bind $w <Down> [list ${w}.t.text yview scroll 1 units]
+  bind $w <Prior> [list ${w}.t.text yview scroll -1 pages]
+  bind $w <Next> [list ${w}.t.text yview scroll 1 pages]
+  bind $w <Key-Home> [list ${w}.t.text yview moveto 0]
+  bind $w <Key-End> [list ${w}.t.text yview moveto 0.99]
 
   foreach i {o1 o2 o3 b} {ttk::frame $w.$i}
   autoscrollText both $w.t $w.t.text Treeview
@@ -266,9 +266,12 @@ proc ::tourney::refresh {{option ""}} {
     $t insert end "\t" title
     foreach i {Date Players Games Elo Site Event} {
       $t tag configure s$i -font font_SmallBold
-      $t tag bind s$i <1> "set ::tourney::sort $i; ::tourney::refresh"
-      $t tag bind s$i <Any-Enter> "$t tag config s$i -foreground red"
-      $t tag bind s$i <Any-Leave> "$t tag config s$i -foreground {}"
+      $t tag bind s$i <1> [list apply {{i} {
+        set ::tourney::sort $i
+        ::tourney::refresh
+      } ::} $i]
+      $t tag bind s$i <Any-Enter> [list $t tag config s$i -foreground red]
+      $t tag bind s$i <Any-Leave> [list $t tag config s$i -foreground {}]
       if { $i == "Event" } { set tab ":" } else { set tab "\t" }
       $t insert end $tab title
       $t insert end [tr TmtSort$i] [list s$i title]

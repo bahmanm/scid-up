@@ -241,7 +241,10 @@ proc search::headerCreateFrame { w } {
   bind $f.demin <FocusOut> +checkDates
   bind $f.demax <FocusOut> +checkDates
   ttk::button $f.dlyear -textvar ::tr(YearToToday) -style Pad0.Small.TButton -command {
-    set sEventDateMin "[expr [::utils::date::today year]-1].[::utils::date::today month].[::utils::date::today day]"
+    set todayYear [::utils::date::today year]
+    set todayMonth [::utils::date::today month]
+    set todayDay [::utils::date::today day]
+    set sEventDateMin "[expr {$todayYear - 1}].$todayMonth.$todayDay"
     set sEventDateMax [::utils::date::today]
   }
   ::utils::tooltip::Set $f.dlyear $::tr(YearToTodayTooltip)
@@ -277,7 +280,10 @@ proc search::headerCreateFrame { w } {
   bind $f.emin <FocusOut> +checkDates
   bind $f.emax <FocusOut> +checkDates
   ttk::button $f.lyear -textvar ::tr(YearToToday) -style Pad0.Small.TButton -command {
-    set sDateMin "[expr [::utils::date::today year]-1].[::utils::date::today month].[::utils::date::today day]"
+    set todayYear [::utils::date::today year]
+    set todayMonth [::utils::date::today month]
+    set todayDay [::utils::date::today day]
+    set sDateMin "[expr {$todayYear - 1}].$todayMonth.$todayDay"
     set sDateMax [::utils::date::today]
   }
   ::utils::tooltip::Set $f.lyear $::tr(YearToTodayTooltip)
@@ -349,9 +355,15 @@ proc search::headerCreateFrame { w } {
   menu $f.last.m
   foreach x {10 50 100 500 1000 5000 10000} {
     $f.first.m add command -label $x \
-        -command "set sGnumMin 1; set sGnumMax $x"
+        -command [list apply {{x} {
+            set sGnumMin 1
+            set sGnumMax $x
+        } ::} $x]
     $f.last.m add command -label $x \
-        -command "set sGnumMin -$x; set sGnumMax -1"
+        -command [list apply {{x} {
+            set sGnumMin -$x
+            set sGnumMax -1
+        } ::} $x]
   }
   pack $f.l3 $f.all $f.first $f.last -side left -padx 2
 
@@ -382,15 +394,15 @@ proc search::headerCreateFrame { w } {
   ttk::entry $f.e3 -textvariable sPgntext(3) -width 15
   pack $f.l1 $f.e1 $f.l2 $f.e2 $f.l3 $f.e3 -side left -pady "0 5"
 
-  ttk::button $w.flagslabel -textvar ::tr(FindGamesWith:) -style Pad0.Small.TButton -image tb_menu -compound left -command "
-    if {\$::sHeaderFlagFrame} {
+  ttk::button $w.flagslabel -textvar ::tr(FindGamesWith:) -style Pad0.Small.TButton -image tb_menu -compound left -command [list apply {{w} {
+    if {$::sHeaderFlagFrame} {
       set ::sHeaderFlagFrame 0
       pack forget $w.flags
     } else {
       set ::sHeaderFlagFrame 1
       pack $w.flags -side top -after $w.flagslabel -pady 5 -fill x
     }
-  "
+  } ::} $w]
   pack $w.flagslabel -side top -fill x -pady "5 5"
 
   ttk::frame $w.flags
@@ -454,16 +466,16 @@ proc ::search::headerGetOptions {{cmd ""}} {
 		menu $m -postcommand [list apply {{m} {
 		    foreach submenu [winfo children $m] { destroy $submenu }
 			$m delete 0 end
-			$m add command -label [::tr Save] -command "::search::header::savePreset {}"
+				$m add command -label [::tr Save] -command [list ::search::header::savePreset {}]
 			$m add separator
 			set i 0
 			foreach name [array names ::sHeader_PresetFilters] {
 				menu $m.i[incr i]
-				$m.i$i add command -label [::tr Load] -command "::search::header::loadPreset [list $name]"
-				$m.i$i add command -label [::tr Delete] -command "unset [list ::sHeader_PresetFilters($name)]"
-				$m add cascade -label $name -menu $m.i$i
-			}
-		}} $m]
+					$m.i$i add command -label [::tr Load] -command [list ::search::header::loadPreset $name]
+					$m.i$i add command -label [::tr Delete] -command [list unset ::sHeader_PresetFilters($name)]
+					$m add cascade -label $name -menu $m.i$i
+				}
+			}} $m]
 		return [list -menu $m]
 	}
 
@@ -502,23 +514,21 @@ proc ::search::headerGetOptions {{cmd ""}} {
 # Inputs:
 #   - var_min: Variable name holding the minimum bound (may be empty).
 #   - var_max: Variable name holding the maximum bound (may be empty).
-#   - cmd_min: Fallback string passed to `subst` to produce the minimum bound
-#     when only the maximum is set.
-#   - cmd_max: Fallback string passed to `subst` to produce the maximum bound
-#     when only the minimum is set.
+#   - default_min: Default minimum when only the maximum is set.
+#   - default_max: Default maximum when only the minimum is set.
 # Returns:
 #   - A 2-item list `{min max}`, or `{}` when both bounds are empty.
 # Side effects:
 #   - None.
 ################################################################################
-proc ::search::getRange {var_min var_max cmd_min cmd_max} {
+proc ::search::getRange {var_min var_max default_min default_max} {
 	if {[set $var_min] ne ""} {
 		if {[set $var_max] ne ""} {
 			return [list [set $var_min] [set $var_max]]
 		}
-		return [list [set $var_min] [subst $cmd_max]]
+		return [list [set $var_min] $default_max]
 	} elseif {[set $var_max] ne ""} {
-		return [list [subst $cmd_min] [set $var_max]]
+		return [list $default_min [set $var_max]]
 	}
 	return {}
 }
@@ -548,10 +558,11 @@ proc ::search::headerPlayerOptions {dest_list white welo black belo} {
 
 	if {$::sBlack ne ""} { lappend options $black $::sBlack	}
 
-	set range [::search::getRange ::sWhiteEloMin ::sWhiteEloMax 0 "\[sc_info limit elo\]"]
+	set eloLimit [sc_info limit elo]
+	set range [::search::getRange ::sWhiteEloMin ::sWhiteEloMax 0 $eloLimit]
 	if {$range ne ""} { lappend options $welo $range }
 
-	set range [::search::getRange ::sBlackEloMin ::sBlackEloMax 0 "\[sc_info limit elo\]"]
+	set range [::search::getRange ::sBlackEloMin ::sBlackEloMax 0 $eloLimit]
 	if {$range ne ""} { lappend options $belo $range }
 }
 
@@ -598,18 +609,20 @@ proc ::search::getSearchOptions {dest_list} {
 	set range [::search::getRange ::sGlMin ::sGlMax 0 999]
 	if {$range ne ""} { lappend search "-length" $range }
 
-	set range [::search::getRange ::sDateMin ::sDateMax "1800.01.01" "\[sc_info limit year\].12.31"]
+	set yearLimit [sc_info limit year]
+	set range [::search::getRange ::sDateMin ::sDateMax "1800.01.01" "$yearLimit.12.31"]
 	if {$range ne ""} { lappend search "-date" $range }
 
-	set range [::search::getRange ::sEventDateMin ::sEventDateMax "1800.01.01" "\[sc_info limit year\].12.31"]
+	set range [::search::getRange ::sEventDateMin ::sEventDateMax "1800.01.01" "$yearLimit.12.31"]
 	if {$range ne ""} { lappend search "-eventdate" $range }
 
-	set range [::search::getRange ::sEloDiffMin ::sEloDiffMax "-\[sc_info limit elo\]" "\[sc_info limit elo\]"]
+	set eloLimit [sc_info limit elo]
+	set range [::search::getRange ::sEloDiffMin ::sEloDiffMax "-$eloLimit" $eloLimit]
 	if {$range ne ""} {
 		lappend search "-delo" $range
 		if {$::sIgnoreCol == "Yes"} {
 			lassign $range elo_min elo_max
-			lappend search "-delo|" [list [expr -1 * $elo_max] [expr -1 * $elo_min]]
+			lappend search "-delo|" [list [expr {-1 * $elo_max}] [expr {-1 * $elo_min}]]
 		}
 	}
 
@@ -748,7 +761,7 @@ proc ::search::header::savePreset {name} {
     ::win::createDialog $w
     pack [ttk::label $w.msg -text "New preset filter:"] -fill x
     pack [ttk::entry $w.value] -fill x
-    dialogbutton $w.cancel -text [tr Cancel] -command "destroy $w"
+    dialogbutton $w.cancel -text [tr Cancel] -command [list destroy $w]
     dialogbutton $w.ok -text "OK" -command [list apply {{w} {
       set value [$w.value get]
       destroy $w
@@ -757,8 +770,8 @@ proc ::search::header::savePreset {name} {
       }
     }} $w]
     ::packdlgbuttons $w.ok $w.cancel
-    bind $w <Escape> "$w.cancel invoke"
-    bind $w <Return> "$w.ok invoke"
+	    bind $w <Escape> [list ${w}.cancel invoke]
+	    bind $w <Return> [list ${w}.ok invoke]
     grab $w
     tk::PlaceWindow $w pointer
     focus $w.value
@@ -883,13 +896,13 @@ proc chooseEcoRange {} {
   wm title $w "Scid: Choose ECO Range"
   wm minsize $w 30 5
 
-  ttk::treeview $w.list -yscrollcommand "$w.ybar set" -columns {0} -show {} -selectmode browse
+  ttk::treeview $w.list -yscrollcommand [list $w.ybar set] -columns {0} -show {} -selectmode browse
   $w.list column 0 -width 400
   set i -1
   foreach elem $ecoCommonRanges {
     $w.list insert {} end -id [incr i] -values [list $elem]
   }
-  ttk::scrollbar $w.ybar -command "$w.list yview" -takefocus 0
+  ttk::scrollbar $w.ybar -command [list $w.list yview] -takefocus 0
   pack [ttk::frame $w.b] -side bottom -fill x
   pack $w.ybar -side right -fill y
   pack $w.list -side left -fill both -expand yes
@@ -903,22 +916,29 @@ proc chooseEcoRange {} {
     }
     destroy .ecoRangeWin
   }
-  ttk::button $w.b.cancel -text $::tr(Cancel) -command "
+  ttk::button $w.b.cancel -text $::tr(Cancel) -command [list apply {{w} {
     set scid_ecoRangeChosen {}
     grab release $w
     focus .
     destroy $w
-  "
+  }} $w]
   wm protocol $w WM_DELETE_WINDOW "$w.b.cancel invoke"
   pack $w.b.cancel $w.b.ok -side right -padx 5 -pady 2
-  bind $w <Escape> "
-  set scid_ecoRangeChosen {}
-  grab release $w
-  focus .
-  destroy $w
-  break"
-  bind $w <Return> "$w.b.ok invoke; break"
-  bind $w.list <Double-ButtonRelease-1> "$w.b.ok invoke; break"
+  bind $w <Escape> [list apply {{w} {
+    set scid_ecoRangeChosen {}
+    grab release $w
+    focus .
+    destroy $w
+    return -code break
+  } ::} $w]
+  bind $w <Return> [list apply {{w} {
+    ${w}.b.ok invoke
+    return -code break
+  } ::} $w]
+  bind $w.list <Double-ButtonRelease-1> [list apply {{w} {
+    ${w}.b.ok invoke
+    return -code break
+  } ::} $w]
   focus $w.list
   grab $w
   tkwait window $w
@@ -927,4 +947,3 @@ proc chooseEcoRange {} {
 
 ###
 ### End of file: search/header.tcl
-
