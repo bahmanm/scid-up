@@ -76,6 +76,13 @@ proc ::gamelist_test::setup {} {
     set ::tr(Cancel) "Cancel"
     set ::tr(CopyConfirm) "Confirm copy?"
 
+    ::gamelist_test::stubCommand tr {key} {
+        if {![info exists ::tr($key)]} {
+            return $key
+        }
+        return [uplevel 1 [list subst $::tr($key)]]
+    }
+
     ::gamelist_test::stubCommand ::utils::thousands {n limit} {
         return $n
     }

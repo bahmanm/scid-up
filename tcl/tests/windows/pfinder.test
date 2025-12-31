@@ -303,9 +303,31 @@ test pfinder-refresh-success-renders-players-1.0 {refresh renders players and bi
     set inserted [::scid_test::widgets::getText .plist.t.text]
 
     set binds [::scid_test::widgets::getTagBindCalls .plist.t.text]
-    set headerClickScript "set ::plist::sort Games; ::plist::refresh"
+
+    # Header click binding exists to sort by the selected column and refresh.
+    # `pfinder.tcl` currently uses `apply`, but older versions used a plain script.
+    set headerBound 0
+    foreach bind $binds {
+        lassign $bind tagName sequence script
+        if {$tagName ne "sGames" || ($sequence ni {<1> <Button-1> <ButtonPress-1>})} { continue }
+
+        if {[llength $script] >= 2 && [lindex $script 0] eq "apply"} {
+            # Expected shape:
+            #   apply {{i} {...} ::} Games
+            if {[lindex $script end] eq "Games"} {
+                set lambda [lindex $script 1]
+                set body [lindex $lambda 1]
+                set headerBound [expr {[string match "*set ::plist::sort*" $body] && [string match "*::plist::refresh*" $body]}]
+            }
+        } else {
+            # Legacy shape:
+            #   set ::plist::sort Games; ::plist::refresh
+            set headerBound [expr {[string match "*set ::plist::sort Games*" $script] && [string match "*::plist::refresh*" $script]}]
+        }
+        break
+    }
+
     set headerHoverScript ".plist.t.text tag config sGames -foreground red"
-    set headerBound [expr {[lsearch -exact $binds [list sGames <1> $headerClickScript]] != -1}]
     set headerHoverBound [expr {[lsearch -exact $binds [list sGames <Any-Enter> $headerHoverScript]] != -1}]
     set carlsenBound [expr {[lsearch -exact $binds [list p1 <ButtonPress-1> [list ::pinfo::playerInfo {Magnus Carlsen}]]] != -1}]
     set anandBound [expr {[lsearch -exact $binds [list p2 <ButtonPress-1> [list ::pinfo::playerInfo {Viswanathan Anand}]]] != -1}]
