@@ -69,12 +69,12 @@ jobs:
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         
-        -DTCL_LIBRARY=${{ github.workspace }}/opt/tcl-tk9/libtcl9.0.so
         -DTCL_INCLUDE_PATH=${{ github.workspace }}/opt/tcl-tk9/include/
-        -DTK_LIBRARY=${{ github.workspace }}/opt/tcl-tk9/lib/libtcl9tk9.0.so
-        -DTK_INCLUDE_PATH=${{ github.workspace }}/opt/tcl-tk9/include/
-        
+        -DTCL_LIBRARY=${{ github.workspace }}/opt/tcl-tk9/lib/libtcl9.0.so
         -DTCL_TCLSH=${{ github.workspace }}/opt/tcl-tk9/bin/tclsh
+        
+        -DTK_INCLUDE_PATH=${{ github.workspace }}/opt/tcl-tk9/include/
+        -DTK_LIBRARY=${{ github.workspace }}/opt/tcl-tk9/lib/tk9.0/libtcl9tk9.0.so
         -DTK_WISH=${{ github.workspace }}/opt/tcl-tk9/bin/wish
         
         -S ${{ github.workspace }}
