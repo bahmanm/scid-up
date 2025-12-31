@@ -86,7 +86,7 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: >
-        PATH=${{ github.workspace }}/opt/tcl-tk9/bin
+        PATH=${{ github.workspace }}/opt/tcl-tk9/bin:${PATH}
         ctest 
         --build-config ${{ matrix.build_type }}
         --verbose
