@@ -12,10 +12,36 @@ namespace eval ::tree {
 }
 
 ################################################################################
+# ::tree::menuCopyToSelection
+#   Copies the Tree window text to the clipboard.
+# Visibility:
+#   Private.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears and updates the system clipboard.
+################################################################################
 proc ::tree::menuCopyToSelection { baseNumber } {
   clipboard clear
   clipboard append [ .treeWin$baseNumber.f.tl get 1.0 end ]
 }
+################################################################################
+# ::tree::make
+#   Creates (or closes, if already open) the Tree window for a database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Optional database number. When -1, uses the current base.
+#   - locked: Optional boolean; when true, closing the window closes the base.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or destroys `.treeWin<baseNumber>` and associated child windows.
+#   - Initialises `tree(*)` state for the base.
+#   - Registers menus, bindings, and buttons.
+#   - Triggers an initial refresh.
 ################################################################################
 proc ::tree::make { { baseNumber -1 } {locked 0} } {
   global tree highcolor geometry helpMessage
@@ -166,6 +192,17 @@ proc ::tree::make { { baseNumber -1 } {locked 0} } {
   set ::tree::cachesize($baseNumber) [sc_tree cacheinfo $baseNumber]
 }
 ################################################################################
+# ::tree::hideCtxtMenu
+# Visibility:
+#   Private.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys `.treeWin<baseNumber>.f.tl.ctxtMenu` when it exists.
+#   - Focuses `.treeWin<baseNumber>`.
+################################################################################
 proc ::tree::hideCtxtMenu { baseNumber } {
   set w .treeWin$baseNumber.f.tl.ctxtMenu
   if {[winfo exists $w]} {
@@ -174,6 +211,18 @@ proc ::tree::hideCtxtMenu { baseNumber } {
   }
 }
 ################################################################################
+# ::tree::selectCallback
+#   Handles a Tree line click when autorefresh is enabled.
+# Visibility:
+#   Private.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+#   - move: SAN move string (as used by `addSanMove`).
+# Returns:
+#   - None.
+# Side effects:
+#   - May call `::tree::select`.
+################################################################################
 proc ::tree::selectCallback { baseNumber move } {
   if {$::tree(autorefresh$baseNumber)} {
     tree::select $move $baseNumber
@@ -181,7 +230,21 @@ proc ::tree::selectCallback { baseNumber move } {
 }
 
 ################################################################################
-# close the corresponding base if it is flagged as locked
+# ::tree::closeTree
+#   Closes the Tree window and associated sub-windows for a database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::tree::mask::close`.
+#   - Persists window geometry in `::geometry(treeWin<baseNumber>)`.
+#   - Destroys `.treeGraph<baseNumber>`, `.treeBest<baseNumber>`, and `.treeWin<baseNumber>`.
+#   - If `::tree(locked<baseNumber>)` is true, calls `::file::Close <baseNumber>`.
+#   - Updates `::treeWin` for the current base.
+################################################################################
 proc ::tree::closeTree {baseNumber} {
   global tree
   ::tree::mask::close
@@ -200,6 +263,19 @@ proc ::tree::closeTree {baseNumber} {
   set ::treeWin [winfo exists .treeWin$curr_base]
 }
 ################################################################################
+# ::tree::toggleTraining
+#   Enables or disables training mode for a specific Tree window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears training mode for other open Tree windows.
+#   - Updates `::tree::trainingBase` and `::tree::trainingColor`.
+#   - Triggers a refresh.
+################################################################################
 proc ::tree::toggleTraining { baseNumber } {
   global tree
 
@@ -216,6 +292,20 @@ proc ::tree::toggleTraining { baseNumber } {
   ::tree::refresh $baseNumber
 }
 
+################################################################################
+# ::tree::doTraining
+#   Executes one training step by selecting and playing a weighted-random move.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Optional; engine slot number used to avoid clashing with active automove.
+# Returns:
+#   - The result of `addSanMove` when a training move is played; otherwise an
+#     empty string.
+# Side effects:
+#   - May call `automove` for analysis windows.
+#   - May annotate the previous move based on mask rules (NAG/comment).
+#   - Reads `sc_filter treestats` and calls `addSanMove`.
 ################################################################################
 proc ::tree::doTraining { { n 0 } } {
   global tree
@@ -295,10 +385,33 @@ proc ::tree::doTraining { { n 0 } } {
 }
 
 ################################################################################
+# ::tree::toggleLock
+#   Applies the lock setting by refreshing the Tree window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Triggers a refresh.
+################################################################################
 proc ::tree::toggleLock { baseNumber } {
   ::tree::refresh $baseNumber
 }
 
+################################################################################
+# ::tree::select
+#   Plays the selected move from the Tree window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - move: SAN move string.
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `addSanMove` when the Tree window exists.
 ################################################################################
 proc ::tree::select { move baseNumber } {
   global tree
@@ -309,10 +422,18 @@ proc ::tree::select { move baseNumber } {
 }
 
 ################################################################################
-
-# Returns the list of databases whose tree filter needs to be updated when
-# the position of the main board changes.
-# It must also disable commands that depend on the current position.
+# ::tree::listTreeBases
+#   Returns the list of Tree windows whose filter needs updating.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Optional list of base numbers. When empty, uses `sc_base list`.
+# Returns:
+#   - A list of `{baseNumber filter progressSpec}` entries.
+# Side effects:
+#   - Disables Tree window controls while an update is in progress.
+#   - Shows the per-window progress bar and binds Stop to cancel the update.
+################################################################################
 proc ::tree::listTreeBases {{base ""}} {
     if { $base == "" } {
         set base [sc_base list]
@@ -347,6 +468,18 @@ proc ::tree::listTreeBases {{base ""}} {
     return $bases
 }
 
+################################################################################
+# ::tree::restoreButtons
+#   Restores Tree window controls after an update completes or is cancelled.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Tree window path (e.g. `.treeWin1`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Hides the progress bar and re-enables/disables buttons.
+################################################################################
 proc ::tree::restoreButtons {w} {
     grid forget $w.progress
     $w.buttons.best configure -state normal
@@ -358,6 +491,19 @@ proc ::tree::restoreButtons {w} {
     $w.buttons.stop configure -state disabled -command {}
 }
 
+################################################################################
+# ::tree::refresh
+#   Requests an update of the Tree filter for one (or all) Tree windows.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Optional database number. When empty, refreshes all.
+# Returns:
+#   - None.
+# Side effects:
+#   - When the base is not open, displays an error in the Tree window.
+#   - Calls `::updateTreeFilter` (which ultimately calls `::tree::dorefresh`).
+################################################################################
 proc ::tree::refresh { { baseNumber "" }} {
     if { $baseNumber != "" && [lsearch -exact [sc_base list] $baseNumber] == -1 } {
         displayLines $baseNumber "Error: the file is not open."
@@ -366,6 +512,20 @@ proc ::tree::refresh { { baseNumber "" }} {
     ::updateTreeFilter $baseNumber
 }
 
+################################################################################
+# ::tree::dorefresh
+#   Performs the actual Tree statistics query and redraws the window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+#   - filter: Optional filter name; defaults to "tree".
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_tree stats` to compute tree lines.
+#   - Updates `.treeWin<baseNumber>` status line and main text view.
+#   - May refresh the graph and trigger training moves.
 ################################################################################
 proc ::tree::dorefresh { baseNumber {filter "tree"}} {
   global tree treeWin
@@ -399,7 +559,19 @@ proc ::tree::dorefresh { baseNumber {filter "tree"}} {
 }
 
 ################################################################################
-#
+# ::tree::displayLines
+#   Renders tree statistics (and optional mask annotations) into the Tree window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+#   - moves: Newline-delimited `sc_tree stats` output.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.treeWin<baseNumber>.f.tl` content, tags, and bindings.
+#   - Updates `::tree::treeData<baseNumber>` for graph rendering.
+#   - Updates the cached position key via `::tree::mask::setCacheFenIndex`.
 ################################################################################
 proc ::tree::displayLines { baseNumber moves } {
   global ::tree::mask::maskFile
@@ -583,9 +755,16 @@ proc ::tree::displayLines { baseNumber moves } {
   $w.f.tl configure -state disabled
 }
 ################################################################################
-# returns a list with (ngames freq success eloavg perf) or
-# {} if there was a problem during parsing
-# 1: e4     B00     37752: 47.1%   54.7%  2474  2513  2002   37%
+# ::tree::getLineValues
+#   Parses a single `sc_tree stats` line into numeric fields.
+# Visibility:
+#   Private.
+# Inputs:
+#   - l: A single line of tree output.
+# Returns:
+#   - A list `{ngames freq success eloavg perf}` on success; otherwise `{}`.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::getLineValues { l } {
   set ret {}
@@ -622,7 +801,16 @@ proc ::tree::getLineValues { l } {
   return $ret
 }
 ################################################################################
-# returns the color to use for score (red, green) or ""
+# ::tree::getColorScore
+#   Determines whether a tree line’s success score should be highlighted.
+# Visibility:
+#   Private.
+# Inputs:
+#   - line: A single line of tree output.
+# Returns:
+#   - `greenfg`, `redfg`, or an empty string.
+# Side effects:
+#   - Reads `sc_pos side`.
 ################################################################################
 proc ::tree::getColorScore { line } {
   set data [::tree::getLineValues $line]
@@ -647,6 +835,19 @@ proc ::tree::getColorScore { line } {
   }
   return ""
 }
+################################################################################
+# ::tree::status
+#   Updates the Tree window status line (and title) for a database.
+# Visibility:
+#   Private.
+# Inputs:
+#   - msg: Status message to display; when empty, computes a default message.
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.treeWin<baseNumber>.status`.
+#   - Updates the window title (and caches base filename in `tree(status*)`).
 ################################################################################
 proc ::tree::status { msg baseNumber } {
   global tree
@@ -791,8 +992,18 @@ catch {source [scidConfigFile treecache]}
 
 ################################################################################
 # ::tree::best
-#   Open/Close the window of best (highest-rated) tree games.
-#
+#   Opens or closes the “best games” list for this Tree base.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or destroys `.treeBest<baseNumber>`.
+#   - Calls `::windows::gamelist::OpenTreeBest`.
+#   - Updates the pressed state of `.treeWin<baseNumber>.buttons.best`.
+################################################################################
 proc ::tree::best { baseNumber } {
   set w .treeBest$baseNumber
   if {[winfo exists $w]} {
@@ -806,8 +1017,16 @@ proc ::tree::best { baseNumber } {
 
 ################################################################################
 # ::tree::graphRedraw
-#   Redraws the tree graph window.
-#
+#   Redraws the Tree graph window based on the current window size.
+# Visibility:
+#   Private.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reconfigures the graph canvas and triggers `::utils::graph::redraw`.
+################################################################################
 proc ::tree::graphRedraw { baseNumber } {
   .treeGraph$baseNumber.c itemconfigure text -width [expr {[winfo width .treeGraph$baseNumber.c] - 50}]
   .treeGraph$baseNumber.c coords text [expr {[winfo width .treeGraph$baseNumber.c] / 2}] 10
@@ -818,9 +1037,19 @@ proc ::tree::graphRedraw { baseNumber } {
 
 ################################################################################
 # ::tree::graph
-#   Updates the tree graph window, creating it if necessary.
-#   bpress: the button/menu was selected => bring window to front
-#
+#   Updates the Tree graph window, creating it when necessary.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+#   - bpress: Optional boolean; when true, focuses/raises an existing graph.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures `.treeGraph<baseNumber>` and a `::utils::graph`.
+#   - Reads `::tree::treeData<baseNumber>` produced by `::tree::displayLines`.
+#   - Registers menu commands for exporting the graph.
+################################################################################
 proc ::tree::graph { baseNumber {bpress 0}} {
   set w .treeGraph$baseNumber
   if {! [winfo exists .treeWin$baseNumber]} { return }
@@ -940,6 +1169,18 @@ proc ::tree::graph { baseNumber {bpress 0}} {
 }
 
 ################################################################################
+# ::tree::configGraphMenus
+#   Updates translated menu labels for the Tree graph window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - lang: Optional language code; when empty, uses `::language`.
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates menu label text on `.treeGraph<baseNumber>.menu`.
+################################################################################
 proc ::tree::configGraphMenus { lang baseNumber } {
   if {! [winfo exists .treeGraph$baseNumber]} { return }
   if {$lang == ""} { set lang $::language }
@@ -952,7 +1193,19 @@ proc ::tree::configGraphMenus { lang baseNumber } {
   }
 }
 
-# ################################################################################
+################################################################################
+# ::tree::toggleRefresh
+#   Toggles automatic refresh for a Tree window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Tree database number (window suffix).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `tree(autorefresh<baseNumber>)` and the toolbar icon.
+#   - Triggers a refresh when enabling autorefresh.
+################################################################################
 proc ::tree::toggleRefresh { baseNumber } {
   global tree
   set b .treeWin$baseNumber.buttons.bStartStop
@@ -967,7 +1220,17 @@ proc ::tree::toggleRefresh { baseNumber } {
   }
 }
 ################################################################################
-#
+# ::tree::setCacheSize
+#   Sets the maximum number of cached positions for the tree statistics engine.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Database number.
+#   - size: Cache size in positions.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_tree cachesize`.
 ################################################################################
 proc ::tree::setCacheSize { base size } {
   sc_tree cachesize $base $size
@@ -1014,6 +1277,21 @@ namespace eval ::tree::mask {
 ################################################################################
 #
 ################################################################################
+# ::tree::mask::open
+#   Opens a mask file and loads it into memory.
+# Visibility:
+#   Public.
+# Inputs:
+#   - filename: Optional path to a `.stm` file. When empty, prompts the user.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts to save unsaved mask changes.
+#   - Clears and repopulates `::tree::mask::mask` from the file.
+#   - Updates `::tree::mask::maskFile` and `::tree::mask::dirty`.
+#   - Updates the “recent masks” menu in all open Tree windows.
+#   - Triggers `::tree::refresh`.
+################################################################################
 proc ::tree::mask::open { {filename ""} } {
   global ::tree::mask::maskSerialized ::tree::mask::mask ::tree::mask::recentMask
 
@@ -1058,7 +1336,17 @@ proc ::tree::mask::open { {filename ""} } {
 
 }
 ################################################################################
-#
+# ::tree::mask::askForSave
+#   Prompts to save the current mask file when there are unsaved changes.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_messageBox` confirmation dialog.
+#   - May call `::tree::mask::save`.
 ################################################################################
 proc ::tree::mask::askForSave {} {
   if {$::tree::mask::dirty} {
@@ -1070,7 +1358,19 @@ proc ::tree::mask::askForSave {} {
   }
 }
 ################################################################################
-#
+# ::tree::mask::new
+#   Creates a new, empty mask file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts for a save path.
+#   - Prompts to save the current mask when dirty.
+#   - Resets `::tree::mask::mask` and `::tree::mask::maskFile`.
+#   - Triggers `::tree::refresh`.
 ################################################################################
 proc ::tree::mask::new {} {
 
@@ -1092,7 +1392,18 @@ proc ::tree::mask::new {} {
   }
 }
 ################################################################################
-#
+# ::tree::mask::close
+#   Closes the current mask and clears it from memory.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Prompts to save the mask when dirty.
+#   - Clears `::tree::mask::mask` and resets `::tree::mask::maskFile`.
+#   - Triggers `::tree::refresh`.
 ################################################################################
 proc ::tree::mask::close {} {
   if { $::tree::mask::maskFile == "" } {
@@ -1106,7 +1417,17 @@ proc ::tree::mask::close {} {
   ::tree::refresh
 }
 ################################################################################
-#
+# ::tree::mask::save
+#   Saves the current mask to `::tree::mask::maskFile`.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes the serialised mask array to the mask file.
+#   - Clears `::tree::mask::dirty`.
 ################################################################################
 proc ::tree::mask::save {} {
   set f [ ::open $::tree::mask::maskFile w ]
@@ -1115,7 +1436,21 @@ proc ::tree::mask::save {} {
   set ::tree::mask::dirty 0
 }
 ################################################################################
-#
+# ::tree::mask::contextMenu
+#   Displays the per-move context menu for Tree mask editing.
+# Visibility:
+#   Private.
+# Inputs:
+#   - win: Text widget path used for the menu parent.
+#   - move: SAN move string, or "dummy" for the header row.
+#   - x, y: Mouse coordinates (widget-relative) (unused).
+#   - xc, yc: Mouse coordinates (screen) (unused).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and posts `$win.ctxtMenu`.
+#   - Reads legal moves via `sc_pos moves`.
+#   - Wires menu commands to mask mutation procs.
 ################################################################################
 proc ::tree::mask::contextMenu {win move x y xc yc} {
   update idletasks
@@ -1191,7 +1526,19 @@ proc ::tree::mask::contextMenu {win move x y xc yc} {
   $mctxt post [winfo pointerx .] [winfo pointery .]
 }
 ################################################################################
-#
+# ::tree::mask::addToMask
+#   Adds a move entry to the mask for a given position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates the position entry when missing.
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - Calls `::tree::refresh` when a move is added.
 ################################################################################
 proc ::tree::mask::addToMask { move {fen ""} } {
   global ::tree::mask::mask
@@ -1211,7 +1558,19 @@ proc ::tree::mask::addToMask { move {fen ""} } {
   }
 }
 ################################################################################
-#
+# ::tree::mask::removeFromMask
+#   Removes a move entry from the mask for a given position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - Calls `::tree::refresh` when a move is removed.
+#   - Removes the position entry if it becomes empty and has no position comment.
 ################################################################################
 proc ::tree::mask::removeFromMask { move {fen ""} } {
   global ::tree::mask::mask
@@ -1237,7 +1596,17 @@ proc ::tree::mask::removeFromMask { move {fen ""} } {
   }
 }
 ################################################################################
-# returns 1 if the move is already in mask
+# ::tree::mask::moveExists
+#   Checks whether a move exists in the mask for a given position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - 1 when the move exists; otherwise 0.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::moveExists { move {fen ""} } {
   global ::tree::mask::mask
@@ -1254,7 +1623,17 @@ proc ::tree::mask::moveExists { move {fen ""} } {
   return 1
 }
 ################################################################################
-# return the list of moves with their data
+# ::tree::mask::getAllMoves
+#   Returns all masked moves for the current cached position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - A list of move entries (each is a list), or an empty string when the
+#     current position is not present in the mask.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::getAllMoves {} {
   global ::tree::mask::mask
@@ -1265,7 +1644,16 @@ proc ::tree::mask::getAllMoves {} {
   return $moves
 }
 ################################################################################
-#
+# ::tree::mask::getColor
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - The stored colour marker for the move; defaults to `::tree::mask::defaultColor`.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::getColor { move {fen ""}} {
   global ::tree::mask::mask
@@ -1286,7 +1674,19 @@ proc ::tree::mask::getColor { move {fen ""}} {
   return $col
 }
 ################################################################################
-#
+# ::tree::mask::setColor
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - color: Colour name to store.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - Shows a warning `tk_messageBox` when the move is not present in the mask.
+#   - Triggers `::tree::refresh`.
 ################################################################################
 proc ::tree::mask::setColor { move color {fen ""}} {
   global ::tree::mask::mask
@@ -1310,7 +1710,18 @@ proc ::tree::mask::setColor { move color {fen ""}} {
   ::tree::refresh
 }
 ################################################################################
-# defaults to "  " (2 spaces)
+# ::tree::mask::getNag
+#   Returns the stored NAG for a move, formatted for display.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - A 2-character string (space-padded when needed); defaults to
+#     `::tree::mask::emptyNag`.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::getNag { move { fen "" }} {
   global ::tree::mask::mask ::tree::mask::emptyNag
@@ -1333,7 +1744,20 @@ proc ::tree::mask::getNag { move { fen "" }} {
   return $nag
 }
 ################################################################################
-#
+# ::tree::mask::setNag
+#   Sets the NAG for a move in the mask.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - nag: NAG string (e.g. "!?"), or the translated "None" sentinel.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+#   - refresh: Optional boolean; when true, triggers `::tree::refresh`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - Shows a warning `tk_messageBox` when the move is not present in the mask.
 ################################################################################
 proc ::tree::mask::setNag { move nag {fen ""} {refresh 1} } {
   global ::tree::mask::mask
@@ -1361,7 +1785,16 @@ proc ::tree::mask::setNag { move nag {fen ""} {refresh 1} } {
   if {$refresh} { ::tree::refresh }
 }
 ################################################################################
-#
+# ::tree::mask::getComment
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - The stored move comment, or an empty string when not present.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::getComment { move { fen "" } } {
   global ::tree::mask::mask
@@ -1384,7 +1817,19 @@ proc ::tree::mask::getComment { move { fen "" } } {
   return $comment
 }
 ################################################################################
-#
+# ::tree::mask::setComment
+#   Sets the comment for a move in the mask.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - comment: Comment text.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - Shows a warning `tk_messageBox` when the move is not present in the mask.
 ################################################################################
 proc ::tree::mask::setComment { move comment { fen "" } } {
   global ::tree::mask::mask
@@ -1409,7 +1854,15 @@ proc ::tree::mask::setComment { move comment { fen "" } } {
   set mask($fen) [ lreplace $mask($fen) 0 0 $moves ]
 }
 ################################################################################
-#
+# ::tree::mask::getPositionComment
+# Visibility:
+#   Private.
+# Inputs:
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - The trimmed position comment for the position, or an empty string.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::getPositionComment {{fen ""}} {
   global ::tree::mask::mask
@@ -1426,7 +1879,18 @@ proc ::tree::mask::getPositionComment {{fen ""}} {
   return $comment
 }
 ################################################################################
-#
+# ::tree::mask::setPositionComment
+#   Sets the position comment for a given position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - comment: Comment text.
+#   - fen: Optional shortened FEN key. When empty, uses `::tree::mask::cacheFenIndex`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a position entry when missing.
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
 ################################################################################
 proc ::tree::mask::setPositionComment { comment {fen ""} } {
   global ::tree::mask::mask
@@ -1443,7 +1907,20 @@ proc ::tree::mask::setPositionComment { comment {fen ""} } {
   set mask($fen) $newpos
 }
 ################################################################################
-#
+# ::tree::mask::setImage
+#   Sets one of the two marker images for a move.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - img: Image name to store (or empty string for no marker).
+#   - nmr: Marker slot index (0 or 1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - Shows a warning `tk_messageBox` when the move is not present in the mask.
+#   - Triggers `::tree::refresh`.
 ################################################################################
 proc ::tree::mask::setImage { move img nmr } {
   global ::tree::mask::mask
@@ -1467,7 +1944,17 @@ proc ::tree::mask::setImage { move img nmr } {
   ::tree::refresh
 }
 ################################################################################
-# nmr = 0 or 1 (two images per line)
+# ::tree::mask::getImage
+#   Gets one of the two marker images for a move.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: SAN move string.
+#   - nmr: Marker slot index (0 or 1).
+# Returns:
+#   - The image name, defaulting to `tb_empty`.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::getImage { move nmr } {
   global ::tree::mask::mask
@@ -1488,7 +1975,18 @@ proc ::tree::mask::getImage { move nmr } {
 }
 
 ################################################################################
-# if move is null, this is a position comment
+# ::tree::mask::addComment
+#   Opens the edit dialog for a move or position comment.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: Optional SAN move string. When empty, edits the position comment.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.treeMaskAddComment` and initialises its text widget.
+#   - Validates that the move exists in the mask when `move` is provided.
+#   - Wires OK to `::tree::mask::updateComment` and triggers `::tree::refresh`.
 ################################################################################
 proc ::tree::mask::addComment { { move "" } } {
 
@@ -1522,7 +2020,17 @@ proc ::tree::mask::addComment { { move "" } } {
   focus $w.f.e
 }
 ################################################################################
-#
+# ::tree::mask::updateComment
+#   Saves the current comment edit dialog content into the mask.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: Optional SAN move string. When empty, updates the position comment.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - Triggers `::tree::refresh`.
 ################################################################################
 proc ::tree::mask::updateComment { { move "" } } {
   set e .treeMaskAddComment.f.e
@@ -1537,7 +2045,19 @@ proc ::tree::mask::updateComment { { move "" } } {
   ::tree::refresh
 }
 ################################################################################
-#
+# ::tree::mask::fillWithBase
+#   Populates the current mask by scanning every game in the current database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Requires an open mask file; otherwise shows a `tk_messageBox`.
+#   - Displays a progress window and iterates over all games.
+#   - Calls `::tree::mask::fillWithGame` for each game.
+#   - Calls `::notify::PosChanged` at the end.
 ################################################################################
 proc ::tree::mask::fillWithBase {} {
   if {$::tree::mask::maskFile == ""} {
@@ -1555,7 +2075,20 @@ proc ::tree::mask::fillWithBase {} {
   ::notify::PosChanged
 }
 ################################################################################
-#
+# ::tree::mask::fillWithGame
+#   Populates the current mask by scanning a single game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Optional base number. When empty, uses the current base.
+#   - gnum: Optional game number. When empty, uses the current game.
+#   - refresh: Optional boolean; when true, triggers `::notify::PosChanged`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Requires an open mask file; otherwise shows a `tk_messageBox`.
+#   - Reads the game via `sc_base getGame` and calls `::tree::mask::feedMask`.
+#   - Sets `::tree::mask::dirty`.
 ################################################################################
 proc ::tree::mask::fillWithGame { {base ""} {gnum ""} {refresh 1} } {
   if {$::tree::mask::maskFile == ""} {
@@ -1597,7 +2130,21 @@ proc ::tree::mask::fillWithGame { {base ""} {gnum ""} {refresh 1} } {
   if {$refresh} { ::notify::PosChanged }
 }
 ################################################################################
-# Take current position information and fill the mask (move, nag, comments, etc)
+# ::tree::mask::feedMask
+#   Adds or updates mask data for a single position/move pair.
+# Visibility:
+#   Private.
+# Inputs:
+#   - fen: Full FEN (may include counters); will be shortened.
+#   - move: SAN move string; when empty, treated as a position-only entry.
+#   - nag: NAG value or 0.
+#   - comment: Comment text.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::mask` and sets `::tree::mask::dirty`.
+#   - May normalise NAG/comment combinations (e.g. non-standard NAGs are folded
+#     into comments).
 ################################################################################
 proc ::tree::mask::feedMask { fen move nag comment } {
   global ::tree::mask::mask
@@ -1652,20 +2199,47 @@ proc ::tree::mask::feedMask { fen move nag comment } {
   setComment $move $comment $fen
 }
 ################################################################################
-#  trim the fen to keep position data only
+# ::tree::mask::toShortFen
+#   Normalises a FEN to a “position-only” key by dropping move counters.
+# Visibility:
+#   Private.
+# Inputs:
+#   - fen: Full FEN list.
+# Returns:
+#   - A shortened FEN list suitable for use as a mask key.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::toShortFen {fen} {
   set ret [lreplace $fen end-1 end]
   return $ret
 }
 ################################################################################
-#
+# ::tree::mask::setCacheFenIndex
+#   Updates the cached “current position” key used by mask helper procs.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::tree::mask::cacheFenIndex` from `sc_pos fen`.
 ################################################################################
 proc ::tree::mask::setCacheFenIndex {} {
   set ::tree::mask::cacheFenIndex [ toShortFen [sc_pos fen] ]
 }
 ################################################################################
-#
+# ::tree::mask::infoMask
+#   Shows basic statistics about the currently loaded mask.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_messageBox`.
 ################################################################################
 proc ::tree::mask::infoMask {} {
   global ::tree::mask::mask
@@ -1679,8 +2253,17 @@ proc ::tree::mask::infoMask {} {
   tk_messageBox -title "Mask info" -type ok -icon info -message "Mask : $::tree::mask::maskFile\n[tr Positions] : $npos\n[tr Moves] : $nmoves"
 }
 ################################################################################
-# Dumps mask content in a tree view widget
-# The current position is the reference base
+# ::tree::mask::displayMask
+#   Opens (or focuses) a window displaying the mask as a navigable tree.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and populates `.displaymask`.
+#   - Binds UI controls and double-click unfolding.
 ################################################################################
 proc ::tree::mask::displayMask {} {
   global ::tree::mask::mask
@@ -1725,7 +2308,17 @@ proc ::tree::mask::displayMask {} {
   $w.f.tree tag bind dblClickTree <Double-Button-1> {::tree::mask::maskTreeUnfold }
 }
 ################################################################################
-#
+# ::tree::mask::updateDisplayMask
+#   Rebuilds the `.displaymask` tree view from the current position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears and repopulates `.displaymask.f.tree`.
+#   - Temporarily switches to `::clipbase_db` and uses `sc_game startBoard`.
 ################################################################################
 proc ::tree::mask::updateDisplayMask {} {
   global ::tree::mask::mask
@@ -1749,8 +2342,17 @@ proc ::tree::mask::updateDisplayMask {} {
   sc_base switch $currentbase
 }
 ################################################################################
-# creates a new image whose name is name1_name2, and concatenates two images.
-# parameters are the markers, not the images names
+# ::tree::mask::createImage
+#   Creates a composite marker image by concatenating two marker images.
+# Visibility:
+#   Private.
+# Inputs:
+#   - marker1: Marker key name (not an image name).
+#   - marker2: Marker key name (not an image name).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a new Tk photo image when it does not already exist.
 ################################################################################
 proc ::tree::mask::createImage {marker1 marker2} {
 
@@ -1769,11 +2371,33 @@ proc ::tree::mask::createImage {marker1 marker2} {
   $marker1$marker2 copy $img2 -from 0 0 -to [expr {$w1 +$margin}] 0
 }
 ################################################################################
-#
+# ::tree::mask::maskTreeUnfold
+#   Expands the selected node and all descendants in the mask display tree.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Defines a helper proc `::tree::mask::unfold`.
+#   - Mutates item open state in `.displaymask.f.tree`.
 ################################################################################
 proc  ::tree::mask::maskTreeUnfold {} {
   set t .displaymask.f.tree
 
+  ################################################################################
+  # ::tree::mask::unfold
+  #   Recursively expands the given tree item and all descendants.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - id: Treeview item id.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Opens items in `.displaymask.f.tree`.
+  ################################################################################
   proc unfold {id} {
     set t .displaymask.f.tree
     foreach c [$t children $id] {
@@ -1786,14 +2410,36 @@ proc  ::tree::mask::maskTreeUnfold {} {
   unfold $id
 }
 ################################################################################
-# returns the first line of multi-line string (separated with \n)
+# ::tree::mask::trimToFirstLine
+# Visibility:
+#   Private.
+# Inputs:
+#   - s: Input string.
+# Returns:
+#   - The first line of the string.
+# Side effects:
+#   - None.
 ################################################################################
 proc ::tree::mask::trimToFirstLine {s} {
   set s [ lindex [ split $s "\n" ] 0 ]
   return $s
 }
 ################################################################################
-#
+# ::tree::mask::populateDisplayMask
+#   Recursively populates the `.displaymask` tree view from a list of mask moves.
+# Visibility:
+#   Private.
+# Inputs:
+#   - moves: List of move entries for the current position.
+#   - parent: Parent treeview item id.
+#   - fen: Shortened FEN key to start from.
+#   - fenSeen: List of FENs already visited (loop prevention).
+#   - posComment: Position comment for this node.
+# Returns:
+#   - None.
+# Side effects:
+#   - Inserts items into `.displaymask.f.tree`.
+#   - Calls `sc_game startBoard` and `sc_move addSan` to traverse positions.
 ################################################################################
 proc ::tree::mask::populateDisplayMask { moves parent fen fenSeen posComment} {
   global ::tree::mask::mask
@@ -1890,7 +2536,17 @@ proc ::tree::mask::populateDisplayMask { moves parent fen fenSeen posComment} {
 
 }
 ################################################################################
-#
+# ::tree::mask::searchMask
+#   Opens (or focuses) the Mask Search window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNumber: Database number used when applying a clicked search result.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.searchmask` and its UI controls.
+#   - Binds click handlers to start `::tree::mask::searchClick`.
 ################################################################################
 proc ::tree::mask::searchMask { baseNumber } {
 
@@ -1979,7 +2635,17 @@ proc ::tree::mask::searchMask { baseNumber } {
 
 }
 ################################################################################
-#
+# ::tree::mask::performSearch
+#   Executes the search against the loaded mask and renders matching entries.
+# Visibility:
+#   Private.
+# Inputs:
+#   - baseNumber: Database number used when applying a clicked search result.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes results to `.searchmask.f2.text`.
+#   - Updates the `.searchmask` window title with match counts.
 ################################################################################
 proc  ::tree::mask::performSearch  { baseNumber } {
   global ::tree::mask::mask
@@ -2061,7 +2727,20 @@ proc  ::tree::mask::performSearch  { baseNumber } {
   wm title .searchmask "[::tr SearchMask] [::tr Positions] $pos_count / $pos_total - [::tr moves] $move_count / $move_total"
 }
 ################################################################################
-#
+# ::tree::mask::searchClick
+#   Handles clicks on the Mask Search results list.
+# Visibility:
+#   Private.
+# Inputs:
+#   - x, y: Mouse coordinates within the widget.
+#   - win: The results text widget.
+#   - baseNumber: Target database number to switch back to.
+# Returns:
+#   - None.
+# Side effects:
+#   - Switches to `::clipbase_db`, loads the clicked position, and refreshes trees.
+#   - Switches back to `baseNumber` and loads the first filtered game when present.
+#   - Otherwise updates the board display.
 ################################################################################
 proc  ::tree::mask::searchClick {x y win baseNumber} {
   set idx [ $win index @$x,$y ]

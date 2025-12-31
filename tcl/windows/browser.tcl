@@ -5,6 +5,27 @@
 namespace eval ::gbrowser {}
 
 
+################################################################################
+# ::gbrowser::new
+#   Opens a game browser window for the specified game, showing a board and a
+#   clickable move list.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base: Database slot number. When < 1, falls back to `[sc_base current]`.
+#   - gnum: Game number within the database slot. Expected to be >= 1.
+#   - ply: Optional initial ply index (0-based). When < 0, starts at ply 0.
+# Returns:
+#   - None.
+# Side effects:
+#   - Registers and/or initialises `::gbrowser::size` via `::options.store`.
+#   - Creates a new toplevel window `.gb<n>` with child widgets.
+#   - Reads game data via `sc_base gamesummary` and stores board snapshots in
+#     `::gbrowser::boards($n)`. (The `sc_game number` call when `gnum < 1` is
+#     currently unused.)
+#   - Binds keyboard/mouse events and initialises `::gbrowser::autoplay($n)`.
+#   - Calls `::gbrowser::update` (and may call `::gbrowser::flip`).
+################################################################################
 proc ::gbrowser::new {base gnum {ply -1}} {
   ::options.store ::gbrowser::size 65
 
@@ -109,6 +130,18 @@ proc ::gbrowser::new {base gnum {ply -1}} {
   }
 }
 
+################################################################################
+# ::gbrowser::mousewheelHandler
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Browser window index (as used in `.gb<n>`).
+#   - direction: Mouse wheel direction (negative for backwards).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::gbrowser::update` with -1/+1.
+################################################################################
 proc gbrowser::mousewheelHandler {n direction} {
   if {$direction < 0} {
     ::gbrowser::update $n -1
@@ -117,10 +150,38 @@ proc gbrowser::mousewheelHandler {n direction} {
   }
 }
 
+################################################################################
+# ::gbrowser::flip
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Browser window index (as used in `.gb<n>`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::board::flip` for `.gb<n>.bd`.
+################################################################################
 proc ::gbrowser::flip {n} {
   ::board::flip .gb$n.bd
 }
 
+################################################################################
+# ::gbrowser::update
+#   Updates the displayed board and move list highlight for the specified ply.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Browser window index (as used in `.gb<n>`).
+#   - ply: Target ply. May be an integer, a relative delta ("+N"/"-N"), or one of
+#     {start, end, forward, back}.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::gbrowser::ply($n)`.
+#   - Calls `::board::update` for `.gb<n>.bd`.
+#   - Updates tags in `.gb<n>.t.text` to highlight the current move.
+#   - When autoplay is enabled, schedules the next update via `after`.
+################################################################################
 proc ::gbrowser::update {n ply} {
   set w .gb$n
   if {! [winfo exists $w]} { return }
@@ -160,6 +221,20 @@ proc ::gbrowser::update {n ply} {
   }
 }
 
+################################################################################
+# ::gbrowser::autoplay
+#   Toggles autoplay for the specified browser window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - n: Browser window index (as used in `.gb<n>`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Toggles `::gbrowser::autoplay($n)`.
+#   - Updates `.gb<n>.b.autoplay` image (tb_play/tb_stop).
+#   - When enabling autoplay, calls `::gbrowser::update $n +1`.
+################################################################################
 proc ::gbrowser::autoplay {n} {
   if {$::gbrowser::autoplay($n)} {
     set ::gbrowser::autoplay($n) 0

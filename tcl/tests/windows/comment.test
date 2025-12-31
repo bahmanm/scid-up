@@ -1,0 +1,625 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::win {}
+namespace eval ::notify {}
+namespace eval ::windows {}
+
+# Minimal translation helper used during window creation.
+if {![llength [info commands tr]]} {
+    proc tr {s} { return $s }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows comment.tcl]
+
+namespace eval ::comment_test {
+    variable stubbedCommands {}
+
+    variable afterCalls {}
+    variable focusCalls {}
+    variable notifyCalls {}
+    variable undoCalls {}
+    variable winCalls {}
+
+    variable scPosCalls {}
+
+    variable createdWidgets {}
+
+    variable posComment ""
+    variable posNags 0
+    variable isAtVstart 0
+
+    variable nagButtons {}
+}
+
+proc ::comment_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::comment_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+# Defines a lightweight entry widget command double.
+#
+# Supported subcommands:
+#   - `$w configure -opt value ...`
+#   - `$w cget -opt`
+#   - `$w delete 0 end`
+#   - `$w insert <index> <text>`
+#   - `$w get`
+proc ::comment_test::defineEntry {path} {
+    if {[llength [info commands $path]]} {
+        error "Entry widget command already exists: $path"
+    }
+    lappend ::comment_test::createdWidgets $path
+
+    set ::comment_test::entryValue($path) ""
+    interp alias {} $path {} ::comment_test::dispatchEntry $path
+    return $path
+}
+
+proc ::comment_test::dispatchEntry {path subcmd args} {
+    lappend ::comment_test::entryCalls($path) [list $subcmd {*}$args]
+
+    switch -- $subcmd {
+        configure {
+            if {[llength $args] % 2 != 0} {
+                error "Entry $path configure expects option/value pairs, got: $args"
+            }
+            foreach {opt val} $args {
+                set ::comment_test::entryState($path,$opt) $val
+            }
+            return
+        }
+        cget {
+            set opt [lindex $args 0]
+            if {![info exists ::comment_test::entryState($path,$opt)]} {
+                error "Entry $path missing option $opt"
+            }
+            return $::comment_test::entryState($path,$opt)
+        }
+        delete {
+            set ::comment_test::entryValue($path) ""
+            return
+        }
+        insert {
+            # Expected: insert <index> <text>
+            set inserted [lindex $args 1]
+            append ::comment_test::entryValue($path) $inserted
+            return
+        }
+        get {
+            return $::comment_test::entryValue($path)
+        }
+        default {
+            error "Entry $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+# Defines a lightweight text widget command double.
+#
+# Supported subcommands:
+#   - `$w configure ...`          (accepted, ignored)
+#   - `$w delete 1.0 end`
+#   - `$w insert <index> <text>`
+#   - `$w get 1.0 end-1c`
+#   - `$w edit modified ?bool?`  (get/set; coerces common boolean spellings)
+proc ::comment_test::defineText {path} {
+    if {[llength [info commands $path]]} {
+        error "Text widget command already exists: $path"
+    }
+    lappend ::comment_test::createdWidgets $path
+
+    set ::comment_test::textValue($path) ""
+    set ::comment_test::textModified($path) 0
+
+    interp alias {} $path {} ::comment_test::dispatchText $path
+    return $path
+}
+
+proc ::comment_test::dispatchText {path subcmd args} {
+    lappend ::comment_test::textCalls($path) [list $subcmd {*}$args]
+
+    switch -- $subcmd {
+        configure {
+            return
+        }
+        delete {
+            set ::comment_test::textValue($path) ""
+            return
+        }
+        insert {
+            # Expected: insert <index> <text>
+            set inserted [lindex $args 1]
+            append ::comment_test::textValue($path) $inserted
+            return
+        }
+        get {
+            return $::comment_test::textValue($path)
+        }
+        edit {
+            set editSubcmd [lindex $args 0]
+            if {$editSubcmd ne "modified"} {
+                error "Text $path edit $editSubcmd not stubbed"
+            }
+            if {[llength $args] == 1} {
+                return $::comment_test::textModified($path)
+            }
+
+            set val [lindex $args 1]
+            switch -nocase -- $val {
+                1 - true - yes - on { set val 1 }
+                0 - false - no - off - "" { set val 0 }
+                default {
+                    if {[string is integer -strict $val]} {
+                        set val [expr {$val != 0}]
+                    } else {
+                        error "Text $path edit modified expects boolean, got: $val"
+                    }
+                }
+            }
+
+            set ::comment_test::textModified($path) $val
+            return
+        }
+        default {
+            error "Text $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::comment_test::setup {} {
+    ::comment_test::restoreStubs
+
+    set ::comment_test::afterCalls {}
+    set ::comment_test::focusCalls {}
+    set ::comment_test::notifyCalls {}
+    set ::comment_test::undoCalls {}
+    set ::comment_test::winCalls {}
+
+    set ::comment_test::scPosCalls {}
+
+    set ::comment_test::posComment ""
+    set ::comment_test::posNags 0
+    set ::comment_test::isAtVstart 0
+
+    set ::comment_test::nagButtons {}
+
+    catch {array unset ::comment_test::entryValue}
+    catch {array unset ::comment_test::entryState}
+    catch {array unset ::comment_test::entryCalls}
+
+    catch {array unset ::comment_test::textValue}
+    catch {array unset ::comment_test::textModified}
+    catch {array unset ::comment_test::textCalls}
+
+    set ::comment_test::createdWidgets {}
+
+    # Core stubs.
+    ::comment_test::stubCommand after {args} {
+        lappend ::comment_test::afterCalls $args
+        return
+    }
+
+    ::comment_test::stubCommand focus {w} {
+        lappend ::comment_test::focusCalls $w
+        return
+    }
+
+    ::comment_test::stubCommand undoFeature {subcmd args} {
+        lappend ::comment_test::undoCalls [list $subcmd {*}$args]
+        return
+    }
+
+    ::comment_test::stubCommand ::notify::PosChanged {args} {
+        lappend ::comment_test::notifyCalls $args
+        return
+    }
+
+    ::comment_test::stubCommand ::win::createWindow {w title geometry} {
+        lappend ::comment_test::winCalls [list createWindow $w $title $geometry]
+        return 0
+    }
+
+    ::comment_test::stubCommand ::win::makeVisible {w} {
+        lappend ::comment_test::winCalls [list makeVisible $w]
+        return
+    }
+
+    ::comment_test::stubCommand ::win::closeWindow {w} {
+        lappend ::comment_test::winCalls [list closeWindow $w]
+        return
+    }
+
+    ::comment_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set w [lindex $args 0]
+                if {$w eq $::windows::commenteditor::w_} {
+                    return 1
+                }
+                return 0
+            }
+            children {
+                set w [lindex $args 0]
+                if {$w eq "$::windows::commenteditor::w_.nf.b"} {
+                    return $::comment_test::nagButtons
+                }
+                return {}
+            }
+            default {
+                error "winfo $subcmd not stubbed in comment tests"
+            }
+        }
+    }
+
+    ::comment_test::stubCommand sc_pos {subcmd args} {
+        lappend ::comment_test::scPosCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            getComment { return $::comment_test::posComment }
+            setComment {
+                set ::comment_test::posComment [lindex $args 0]
+                return
+            }
+            getNags { return $::comment_test::posNags }
+            clearNags {
+                set ::comment_test::posNags 0
+                return
+            }
+            addNag {
+                # Persist as a space-separated string, matching the entry format.
+                set nag [lindex $args 0]
+                if {$::comment_test::posNags eq 0 || $::comment_test::posNags eq "0"} {
+                    set ::comment_test::posNags "$nag"
+                } else {
+                    append ::comment_test::posNags " $nag"
+                }
+                return
+            }
+            isAt {
+                if {[lindex $args 0] ne "vstart"} {
+                    error "sc_pos isAt only stubbed for vstart"
+                }
+                return $::comment_test::isAtVstart
+            }
+            default {
+                error "sc_pos $subcmd not stubbed in comment tests"
+            }
+        }
+    }
+
+    # Provide minimal widget doubles used by store*/Refresh.
+    ::comment_test::defineText $::windows::commenteditor::w_.cf.txtframe.text
+    ::comment_test::defineEntry $::windows::commenteditor::w_.nf.text
+
+    ::scid_test::widgets::defineWidget $::windows::commenteditor::w_.nf.clear
+
+    # Two representative NAG button widgets.
+    set ::comment_test::nagButtons [list \
+        $::windows::commenteditor::w_.nf.b.b0 \
+        $::windows::commenteditor::w_.nf.b.b1 \
+    ]
+    foreach b $::comment_test::nagButtons {
+        ::scid_test::widgets::defineWidget $b
+    }
+
+    # Reset editor state.
+    set ::windows::commenteditor::needNotify_ 0
+    set ::windows::commenteditor::undoComment_ 1
+    set ::windows::commenteditor::undoNAGs_ 1
+}
+
+proc ::comment_test::cleanup {} {
+    ::comment_test::restoreStubs
+
+    foreach w $::comment_test::createdWidgets {
+        catch {rename $w ""}
+    }
+
+    ::scid_test::widgets::reset
+
+    catch {unset ::comment_test::createdWidgets}
+}
+
+# ---- Tests ----
+
+test comment-clearComment-noop-when-empty-1.0 {clearComment_ is a no-op when the position comment is already empty} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set ::comment_test::posComment ""
+    set ::windows::commenteditor::needNotify_ 0
+
+    # Act
+    ::windows::commenteditor::clearComment_
+
+    # Assert
+    list $::comment_test::posComment $::windows::commenteditor::needNotify_ $::comment_test::undoCalls $::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {{} 0 {} {}}
+
+
+test comment-clearComment-clears-and-schedules-notify-1.0 {clearComment_ clears the comment and schedules a notification} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set ::comment_test::posComment "Hello"
+    set ::windows::commenteditor::needNotify_ 0
+
+    # Act
+    ::windows::commenteditor::clearComment_
+
+    # Assert
+    list \
+        $::comment_test::posComment \
+        $::windows::commenteditor::needNotify_ \
+        $::comment_test::undoCalls \
+        $::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {{} 1 save {{cancel {::notify::PosChanged pgnonly}} {idle {::notify::PosChanged pgnonly}}}}
+
+
+test comment-clearNags-noop-when-empty-1.0 {clearNAGs_ is a no-op when there are no NAGs} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set ::comment_test::posNags 0
+    set ::windows::commenteditor::needNotify_ 0
+
+    # Act
+    ::windows::commenteditor::clearNAGs_
+
+    # Assert
+    list $::comment_test::posNags $::windows::commenteditor::needNotify_ $::comment_test::undoCalls $::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {0 0 {} {}}
+
+
+test comment-clearNags-clears-and-schedules-notify-1.0 {clearNAGs_ clears NAGs and schedules a notification} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set ::comment_test::posNags "1"
+    set ::windows::commenteditor::needNotify_ 0
+
+    # Act
+    ::windows::commenteditor::clearNAGs_
+
+    # Assert
+    list \
+        $::comment_test::posNags \
+        $::windows::commenteditor::needNotify_ \
+        $::comment_test::undoCalls \
+        $::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {0 1 save {{cancel {::notify::PosChanged pgnonly}} {idle {::notify::PosChanged pgnonly}}}}
+
+
+test comment-notifyCancel-cancels-pending-notify-1.0 {notifyCancel_ cancels any pending PosChanged notification} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set ::comment_test::afterCalls {}
+
+    # Act
+    ::windows::commenteditor::notifyCancel_
+
+    # Assert
+    set ::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {{cancel {::notify::PosChanged pgnonly}}}
+
+
+test comment-storeComment-noop-when-not-modified-1.0 {storeComment_ is a no-op when the text widget is not modified} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set w $::windows::commenteditor::w_
+    set ::comment_test::textModified($w.cf.txtframe.text) 0
+    set ::comment_test::scPosCalls {}
+
+    # Act
+    ::windows::commenteditor::storeComment_
+
+    # Assert
+    list $::comment_test::scPosCalls $::comment_test::undoCalls $::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {{} {} {}}
+
+
+test comment-storeComment-saves-once-and-updates-comment-1.0 {storeComment_ saves undo once and updates the comment when modified} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set w $::windows::commenteditor::w_
+
+    set ::comment_test::posComment "Old"
+    set ::comment_test::textValue($w.cf.txtframe.text) "New"
+    set ::comment_test::textModified($w.cf.txtframe.text) 1
+
+    # Act
+    ::windows::commenteditor::storeComment_
+    set after1 [list \
+        $::comment_test::posComment \
+        $::windows::commenteditor::undoComment_ \
+        $::comment_test::undoCalls \
+        $::comment_test::afterCalls \
+        $::comment_test::textModified($w.cf.txtframe.text)
+    ]
+
+    set ::comment_test::textValue($w.cf.txtframe.text) "New2"
+    set ::comment_test::textModified($w.cf.txtframe.text) 1
+    ::windows::commenteditor::storeComment_
+
+    # Assert
+    list \
+        $after1 \
+        $::comment_test::posComment \
+        $::comment_test::undoCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {{New 0 save {{cancel {::notify::PosChanged pgnonly}} {1500 {::notify::PosChanged pgnonly}}} 0} New2 save}
+
+
+test comment-storeNags-noop-when-unchanged-1.0 {storeNAGs_ is a no-op when NAGs text matches stored value} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set w $::windows::commenteditor::w_
+
+    set ::comment_test::posNags 0
+    set ::comment_test::entryValue($w.nf.text) ""
+
+    set ::comment_test::afterCalls {}
+    set ::comment_test::undoCalls {}
+
+    # Act
+    ::windows::commenteditor::storeNAGs_
+
+    # Assert
+    list $::comment_test::posNags $::comment_test::undoCalls $::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {0 {} {}}
+
+
+test comment-storeNags-saves-once-and-updates-nags-1.0 {storeNAGs_ saves undo once and updates nags when changed} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set w $::windows::commenteditor::w_
+
+    set ::comment_test::posNags "1"
+    set ::comment_test::entryValue($w.nf.text) "1 2"
+
+    # Act
+    ::windows::commenteditor::storeNAGs_
+    set after1 [list \
+        $::comment_test::posNags \
+        $::windows::commenteditor::undoNAGs_ \
+        $::comment_test::undoCalls \
+        $::comment_test::afterCalls
+    ]
+
+    set ::comment_test::entryValue($w.nf.text) "3"
+    ::windows::commenteditor::storeNAGs_
+
+    # Assert
+    list $after1 $::comment_test::posNags $::comment_test::undoCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {{{1 2} 0 save {{cancel {::notify::PosChanged pgnonly}} {1500 {::notify::PosChanged pgnonly}}}} 3 save}
+
+
+test comment-Refresh-populates-and-disables-at-vstart-1.0 {Refresh populates widgets and disables NAG controls at vstart} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set w $::windows::commenteditor::w_
+
+    set ::comment_test::posComment "Hello"
+    set ::comment_test::posNags "1"
+    set ::comment_test::isAtVstart 1
+
+    set ::comment_test::textValue($w.cf.txtframe.text) "Old"
+    set ::comment_test::textModified($w.cf.txtframe.text) 1
+
+    set ::comment_test::afterCalls {}
+
+    # Act
+    ::windows::commenteditor::Refresh
+
+    # Assert
+    set finalComment $::comment_test::textValue($w.cf.txtframe.text)
+    set finalNags $::comment_test::entryValue($w.nf.text)
+
+    set clearState [::scid_test::widgets::getState $w.nf.clear -state]
+    set entryState $::comment_test::entryState($w.nf.text,-state)
+
+    set button0State [::scid_test::widgets::getState $w.nf.b.b0 -state]
+    set button1State [::scid_test::widgets::getState $w.nf.b.b1 -state]
+
+    list \
+        $finalComment \
+        $finalNags \
+        $clearState \
+        $entryState \
+        $button0State \
+        $button1State \
+        $::comment_test::textModified($w.cf.txtframe.text) \
+        $::comment_test::afterCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {Hello 1 disabled disabled disabled disabled 0 {{cancel {::notify::PosChanged pgnonly}}}}
+
+
+test comment-createWin-focus-existing-window-1.0 {createWin focuses the existing comment window by default} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set w $::windows::commenteditor::w_
+    set ::comment_test::winCalls {}
+    set ::comment_test::focusCalls {}
+
+    # Act
+    ::windows::commenteditor::createWin 1
+
+    # Assert
+    list $::comment_test::winCalls $::comment_test::focusCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -match glob -result {{{createWindow .commentWin * 530x220} {makeVisible .commentWin}} .commentWin.cf.txtframe.text}
+
+
+test comment-createWin-close-existing-window-1.0 {createWin closes the window when focus_if_exists is false} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set ::comment_test::winCalls {}
+
+    # Act
+    ::windows::commenteditor::createWin 0
+
+    # Assert
+    set ::comment_test::winCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -match glob -result {{createWindow .commentWin * 530x220} {closeWindow .commentWin}}
+
+
+test comment-makeCommentWin-toggle-passes-flag-1.0 {makeCommentWin passes the correct focus flag to createWin} -setup {
+    ::comment_test::setup
+} -body {
+    # Arrange
+    set ::comment_test::createWinCalls {}
+    ::comment_test::stubCommand ::windows::commenteditor::createWin {focus_if_exists} {
+        lappend ::comment_test::createWinCalls $focus_if_exists
+        return
+    }
+
+    # Act
+    makeCommentWin
+    makeCommentWin toggle
+
+    # Assert
+    set ::comment_test::createWinCalls
+} -cleanup {
+    ::comment_test::cleanup
+} -result {-1 0}
+
+
+cleanupTests

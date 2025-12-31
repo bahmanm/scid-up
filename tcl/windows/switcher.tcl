@@ -492,6 +492,18 @@ set numBaseTypeIcons [llength $::windows::switcher::base_types]
 
 set temp_dbtype 0
 
+################################################################################
+# getBaseType
+#   Returns the configured “type” tag for a database slot.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseId: Database slot number.
+# Returns:
+#   - dbType: Integer type identifier from `sc_base extra`, or 0 when absent.
+# Side effects:
+#   - Reads database metadata via `sc_base extra $baseId`.
+################################################################################
 proc getBaseType {baseId} {
   foreach {tagname tagvalue} [sc_base extra $baseId] {
     if {$tagname eq "type"} {
@@ -501,6 +513,19 @@ proc getBaseType {baseId} {
   return 0
 }
 
+################################################################################
+# selectBaseType
+#   Records the selected database-type icon for the Change Icon dialog.
+# Visibility:
+#   Private.
+# Inputs:
+#   - type: Integer type identifier selected in the UI.
+# Returns:
+#   - None.
+# Side effects:
+#   - Does nothing unless `.btypeWin` exists.
+#   - Updates the global `::temp_dbtype`.
+################################################################################
 proc selectBaseType {type} {
   global temp_dbtype
   set w .btypeWin
@@ -508,6 +533,23 @@ proc selectBaseType {type} {
   set temp_dbtype $type
 }
 
+################################################################################
+# changeBaseType
+#   Opens the Change Icon dialog for a database slot and persists the selection.
+# Visibility:
+#   Public.
+# Inputs:
+#   - baseNum: Database slot number whose icon/type is being edited.
+# Returns:
+#   - None.
+# Side effects:
+#   - Returns immediately when `$baseNum > [sc_info limit bases]`.
+#   - Creates `.btypeWin` and binds navigation keys for selecting an icon type.
+#   - On confirmation, attempts to persist the selection via
+#     `sc_base extra $baseNum type $::temp_dbtype` (errors are caught and ignored),
+#     then refreshes via `::windows::switcher::Refresh` and `::maint::Refresh`.
+#   - Uses and updates `::temp_dbtype`.
+################################################################################
 proc changeBaseType {baseNum} {
   global temp_dbtype ::windows::switcher::base_types numBaseTypeIcons
   if {$baseNum > [sc_info limit bases]} { return }
@@ -576,6 +618,20 @@ proc changeBaseType {baseNum} {
 
 
 
+################################################################################
+# ::windows::switcher::pressMouseEvent
+#   Updates cursor feedback while dragging a database tile in the switcher.
+# Visibility:
+#   Private.
+# Inputs:
+#   - i: Base index being dragged.
+#   - w (optional): Switcher window path. Defaults to `.baseWin`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Does nothing unless `$w` exists.
+#   - Configures the cursor for tile subwidgets to `exchange`.
+################################################################################
 proc ::windows::switcher::pressMouseEvent {i {w .baseWin}} {
   if {! [winfo exists $w]} {return}
   foreach win {"" .img .name .ngames} {
@@ -583,6 +639,29 @@ proc ::windows::switcher::pressMouseEvent {i {w .baseWin}} {
   }
 }
 
+################################################################################
+# ::windows::switcher::releaseMouseEvent
+#   Handles drop logic after dragging a database tile in the switcher.
+# Visibility:
+#   Private.
+# Inputs:
+#   - fromBase: Source base index being dragged.
+#   - x: Screen x coordinate (pixels).
+#   - y: Screen y coordinate (pixels).
+#   - w (optional): Switcher window path. Defaults to `.baseWin`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Does nothing unless `$w` exists.
+#   - Clears the cursor for the dragged tile subwidgets.
+#   - If dropped on the same base, switches to it via `::file::SwitchToBase`.
+#   - If dropped on a different base, calls `::windows::gamelist::CopyGames`.
+#
+# Notes:
+#   - The target base index is derived by extracting digits from the drop point
+#     widget path. This is ambiguous for multi-digit base indices (e.g. “12”
+#     is parsed as “2”).
+################################################################################
 proc ::windows::switcher::releaseMouseEvent {fromBase x y {w .baseWin}} {
   if {! [winfo exists $w]} {return}
   foreach win {"" .img .name .ngames} {
@@ -598,6 +677,25 @@ proc ::windows::switcher::releaseMouseEvent {fromBase x y {w .baseWin}} {
   }
 }
 
+################################################################################
+# ::windows::switcher::popupmenu
+#   Displays the switcher context menu for a given base tile.
+# Visibility:
+#   Private.
+# Inputs:
+#   - switcherWin (optional): Switcher toplevel path (unused).
+#   - w: Base tile frame path (provides `$w.menu`).
+#   - abs_x: Screen x coordinate (pixels) for menu popup.
+#   - abs_y: Screen y coordinate (pixels) for menu popup.
+#   - baseIdx: Database slot number for the menu actions.
+# Returns:
+#   - None.
+# Side effects:
+#   - Rebuilds the `$w.menu` menu items based on database state (e.g. read-only,
+#     clipbase, autoload membership).
+#   - May show a database information message box.
+#   - Pops up the menu via `tk_popup`.
+################################################################################
 proc ::windows::switcher::popupmenu { {switcherWin} {w} {abs_x} {abs_y} {baseIdx} } {
   $w.menu delete 0 end
   $w.menu add command -label "[tr NewGameListWindow]" -command [list ::windows::gamelist::Open $baseIdx]
@@ -644,6 +742,21 @@ set baseWin 0
 set sw_nBases_ [sc_info limit bases]
 set ::windows::switcher::wins {}
 
+################################################################################
+# ::windows::switcher::Open
+#   Opens the database switcher window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w (optional): Switcher window path. Defaults to `.baseWin`.
+# Returns:
+#   - Result of `::win::closeWindow` when `::win::createWindow` fails; otherwise
+#     returns the implicit empty string.
+# Side effects:
+#   - Creates `$w` via `::win::createWindow` and builds its contents via
+#     `::windows::switcher::Create`.
+#   - Registers bindings for Help and window-destroy cleanup.
+################################################################################
 proc ::windows::switcher::Open {{w .baseWin}} {
   if {! [::win::createWindow $w [tr WindowsSwitcher]]} {
     return [::win::closeWindow $w]
@@ -656,6 +769,21 @@ proc ::windows::switcher::Open {{w .baseWin}} {
   bind $w <F1> { helpWindow Switcher }
 }
 
+################################################################################
+# ::windows::switcher::Create
+#   Builds the switcher UI for listing/opening databases.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Switcher window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates widgets under `$w`, including `$w.c` (canvas) and per-base frames.
+#   - Registers event bindings for drag-and-drop, context menu, and notifications.
+#   - Adds `$w` to `::windows::switcher::wins` and schedules an initial
+#     `::windows::switcher::Update_` via `after idle`.
+################################################################################
 proc ::windows::switcher::Create {{w}} {
   ttk::frame $w.border
   grid $w.border -sticky news
@@ -697,12 +825,30 @@ proc ::windows::switcher::Create {{w}} {
       ::windows::switcher::Update_ %W
     }
   } ::} $w]
-  bind $w <Destroy> { set idx [lsearch $::windows::switcher::wins %W]; set ::windows::switcher::wins [lreplace $::windows::switcher::wins $idx $idx] }
+  bind $w <Destroy> {
+    set idx [lsearch $::windows::switcher::wins %W]
+    set ::windows::switcher::wins [lreplace $::windows::switcher::wins $idx $idx]
+  }
   lappend ::windows::switcher::wins $w
 
   after idle "::windows::switcher::Update_ $w"
 }
 
+################################################################################
+# ::windows::switcher::calcSpace
+#   Updates visible base tiles and returns layout measurements for rendering.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Switcher window path.
+#   - selected (optional): Currently selected base index.
+# Returns:
+#   - {n_bases iconWidth iconHeight}: Number of bases displayed and per-tile size.
+# Side effects:
+#   - Updates tile widgets with database names, counts, and icons.
+#   - Shows/hides canvas items for the available bases.
+#   - Reads database state via `sc_base list`, `sc_base extra`, and related helpers.
+################################################################################
 proc ::windows::switcher::calcSpace {{w} {selected}} {
   global numBaseTypeIcons
 
@@ -733,6 +879,22 @@ proc ::windows::switcher::calcSpace {{w} {selected}} {
   return [list $n_bases $iconWidth $iconHeight]
 }
 
+################################################################################
+# ::windows::switcher::Draw
+#   Positions base tiles on the canvas and updates the canvas scroll region.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Switcher window path.
+#   - numColumns: Number of columns in the grid layout.
+#   - iconWidth: Tile width (pixels).
+#   - iconHeight: Tile height (pixels).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates canvas item coordinates for each base tile.
+#   - Updates canvas `-scrollregion` sizing.
+################################################################################
 proc ::windows::switcher::Draw {{w} {numColumns} {iconWidth} {iconHeight} } {
   set numRows 0
   set column 0
@@ -757,12 +919,39 @@ proc ::windows::switcher::Draw {{w} {numColumns} {iconWidth} {iconHeight} } {
   $w.c configure -scrollregion [list 0 0 $right $bottom] -borderwidth 4 -relief flat
 }
 
+################################################################################
+# ::windows::switcher::Refresh
+#   Refreshes all open switcher windows.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base (optional): Unused.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::windows::switcher::Update_` for each window in
+#     `::windows::switcher::wins`.
+################################################################################
 proc ::windows::switcher::Refresh {{base ""}} {
   foreach w $::windows::switcher::wins {
     ::windows::switcher::Update_ $w
   }
 }
 
+################################################################################
+# ::windows::switcher::Update_
+#   Recomputes layout for a switcher window and redraws its base tiles.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Switcher window path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads the current base from `::curr_db`.
+#   - Calls `::windows::switcher::calcSpace` and `::windows::switcher::Draw`.
+#   - Queries `$w.c` width to compute the number of columns (clamped to 1).
+################################################################################
 proc ::windows::switcher::Update_ {w} {
   set curr_base $::curr_db
   set space [::windows::switcher::calcSpace $w $curr_base]

@@ -1,0 +1,375 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::windows {}
+namespace eval ::windows::gamelist {}
+namespace eval ::utils {}
+namespace eval ::file {}
+namespace eval ::notify {}
+
+# Minimal `image` stub for sourcing modules that create Tk images at load time.
+# The real command is provided by Tk (`wish`).
+if {![llength [info commands image]]} {
+    proc image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        # `image create <type> <name> ?options...?`
+        if {[llength $args] < 2} {
+            error "image create missing type/name"
+        }
+        return [lindex $args 1]
+    }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows gamelist.tcl]
+
+namespace eval ::gamelist_test {
+    variable stubbedCommands {}
+
+    variable tkMessageBoxCalls {}
+    variable notifyCalls {}
+    variable progressCalls {}
+    variable scFilterCalls {}
+    variable scBaseCalls {}
+    variable fileBaseNameCalls {}
+}
+
+proc ::gamelist_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::gamelist_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::gamelist_test::setup {} {
+    ::gamelist_test::restoreStubs
+
+    set ::gamelist_test::tkMessageBoxCalls {}
+    set ::gamelist_test::notifyCalls {}
+    set ::gamelist_test::progressCalls {}
+    set ::gamelist_test::scFilterCalls {}
+    set ::gamelist_test::scBaseCalls {}
+    set ::gamelist_test::fileBaseNameCalls {}
+
+    catch {unset ::awe_guess}
+    catch {unset ::awe_min}
+    catch {unset ::awe_max}
+
+    if {![info exists ::tr]} { array set ::tr {} }
+    set ::tr(noGames) "no games"
+    set ::tr(all) "all"
+
+    set ::tr(CopyErr) "Copy error"
+    set ::tr(CopyErrSource) "Source error:"
+    set ::tr(CopyErrNoGames) "No games"
+    set ::tr(CopyErrTarget) "Target error:"
+    set ::tr(CopyErrReadOnly) "Read-only"
+    set ::tr(CopyGames) "Copy games"
+    set ::tr(Cancel) "Cancel"
+    set ::tr(CopyConfirm) "Confirm copy?"
+
+    ::gamelist_test::stubCommand tr {key} {
+        if {![info exists ::tr($key)]} {
+            return $key
+        }
+        return [uplevel 1 [list subst $::tr($key)]]
+    }
+
+    ::gamelist_test::stubCommand ::utils::thousands {n limit} {
+        return $n
+    }
+}
+
+proc ::gamelist_test::cleanup {} {
+    ::gamelist_test::restoreStubs
+
+    catch {unset ::awe_guess}
+    catch {unset ::awe_min}
+    catch {unset ::awe_max}
+}
+
+# ---- Tests ----
+
+test gamelist-formatFilterText-no-games-1.0 {formatFilterText returns no-games text when game count is zero} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::formatFilterText 0 0
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {no games}
+
+
+test gamelist-formatFilterText-all-1.0 {formatFilterText returns all/total when filter matches total} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::formatFilterText 100 100
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {all / 100}
+
+
+test gamelist-formatFilterText-partial-1.0 {formatFilterText returns filter/total when filter is partial} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::formatFilterText 5 10
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {5 / 10}
+
+
+test gamelist-AweGuess-player-simple-1.0 {AweGuess defaults to -player for a bare token} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::AweGuess carlsen
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {{-player carlsen}}
+
+
+test gamelist-AweGuess-explicit-white-then-opponent-1.0 {AweGuess parses explicit white token and then guesses the remaining player} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::AweGuess "white carlsen kramnik"
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {{-white carlsen} {-player kramnik}}
+
+
+test gamelist-AweParse-player-negation-1.0 {AweParse moves ! from value into the parameter suffix} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::AweParse "!carlsen"
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {-player! carlsen}
+
+
+test gamelist-AweParse-eco-range-1.0 {AweParse expands an ECO range into a two-value range} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::AweParse "A00-B99"
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {-eco {A00 B99}}
+
+
+test gamelist-AweParse-elo-less-than-1.0 {AweParse expands <N into a range using awe_min for the type} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange / Act
+    ::windows::gamelist::AweParse "<2500"
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {-elo {0 2500}}
+
+
+test gamelist-CopyGames-no-games-shows-error-1.0 {CopyGames shows an error and does not attempt copy when source filter is empty} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange
+    ::gamelist_test::stubCommand ::file::BaseName {base} {
+        lappend ::gamelist_test::fileBaseNameCalls $base
+        return "Base$base"
+    }
+    ::gamelist_test::stubCommand sc_filter {subcmd args} {
+        lappend ::gamelist_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::gamelist_test::stubCommand sc_base {subcmd args} {
+        lappend ::gamelist_test::scBaseCalls [list $subcmd {*}$args]
+        if {$subcmd ne "isReadOnly"} { error "sc_base $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::gamelist_test::stubCommand tk_messageBox {args} {
+        lappend ::gamelist_test::tkMessageBoxCalls $args
+        return "ok"
+    }
+    ::gamelist_test::stubCommand progressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list progressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand closeProgressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list closeProgressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand ::notify::DatabaseModified {args} {
+        lappend ::gamelist_test::notifyCalls [list DatabaseModified {*}$args]
+        return
+    }
+
+    # Act
+    ::windows::gamelist::CopyGames "" 1 2 dbfilter true
+
+    # Assert
+    list \
+        [llength $::gamelist_test::tkMessageBoxCalls] \
+        $::gamelist_test::progressCalls \
+        $::gamelist_test::notifyCalls
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {1 {} {}}
+
+
+test gamelist-CopyGames-target-readonly-shows-error-1.0 {CopyGames shows an error and does not attempt copy when target is read-only} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange
+    ::gamelist_test::stubCommand ::file::BaseName {base} {
+        lappend ::gamelist_test::fileBaseNameCalls $base
+        return "Base$base"
+    }
+    ::gamelist_test::stubCommand sc_filter {subcmd args} {
+        lappend ::gamelist_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in this test" }
+        return 5
+    }
+    ::gamelist_test::stubCommand sc_base {subcmd args} {
+        lappend ::gamelist_test::scBaseCalls [list $subcmd {*}$args]
+        if {$subcmd ne "isReadOnly"} { error "sc_base $subcmd not stubbed in this test" }
+        return 1
+    }
+    ::gamelist_test::stubCommand tk_messageBox {args} {
+        lappend ::gamelist_test::tkMessageBoxCalls $args
+        return "ok"
+    }
+    ::gamelist_test::stubCommand progressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list progressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand closeProgressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list closeProgressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand ::notify::DatabaseModified {args} {
+        lappend ::gamelist_test::notifyCalls [list DatabaseModified {*}$args]
+        return
+    }
+
+    # Act
+    ::windows::gamelist::CopyGames "" 1 2 dbfilter true
+
+    # Assert
+    list \
+        [llength $::gamelist_test::tkMessageBoxCalls] \
+        $::gamelist_test::progressCalls \
+        $::gamelist_test::notifyCalls
+} -cleanup {
+    ::gamelist_test::cleanup
+} -result {1 {} {}}
+
+
+test gamelist-CopyGames-ask-cancel-does-not-copy-1.0 {CopyGames honours confirmation cancel and does not copy} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange
+    set ::clipbase_db 99
+    ::gamelist_test::stubCommand ::file::BaseName {base} { return "Base$base" }
+    ::gamelist_test::stubCommand sc_filter {subcmd args} {
+        lappend ::gamelist_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in this test" }
+        return 5
+    }
+    ::gamelist_test::stubCommand sc_base {subcmd args} {
+        lappend ::gamelist_test::scBaseCalls [list $subcmd {*}$args]
+        if {$subcmd ne "isReadOnly"} { error "sc_base $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::gamelist_test::stubCommand tk_messageBox {args} {
+        lappend ::gamelist_test::tkMessageBoxCalls $args
+        return "cancel"
+    }
+    ::gamelist_test::stubCommand progressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list progressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand closeProgressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list closeProgressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand ::notify::DatabaseModified {args} {
+        lappend ::gamelist_test::notifyCalls [list DatabaseModified {*}$args]
+        return
+    }
+
+    # Act
+    ::windows::gamelist::CopyGames "" 1 2 dbfilter true
+
+    # Assert
+    list \
+        [llength $::gamelist_test::tkMessageBoxCalls] \
+        $::gamelist_test::progressCalls \
+        $::gamelist_test::notifyCalls \
+        [lsearch -all -inline $::gamelist_test::scBaseCalls {copygames *}]
+} -cleanup {
+    catch {unset ::clipbase_db}
+    ::gamelist_test::cleanup
+} -result {1 {} {} {}}
+
+
+test gamelist-CopyGames-ask-ok-copies-and-notifies-1.0 {CopyGames performs copy, shows progress, and notifies on success when confirmed} -setup {
+    ::gamelist_test::setup
+} -body {
+    # Arrange
+    set ::clipbase_db 99
+    ::gamelist_test::stubCommand ::file::BaseName {base} { return "Base$base" }
+    ::gamelist_test::stubCommand sc_filter {subcmd args} {
+        lappend ::gamelist_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in this test" }
+        return 5
+    }
+    ::gamelist_test::stubCommand sc_base {subcmd args} {
+        lappend ::gamelist_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            isReadOnly { return 0 }
+            copygames { return }
+            default { error "sc_base $subcmd not stubbed in this test" }
+        }
+    }
+    ::gamelist_test::stubCommand tk_messageBox {args} {
+        lappend ::gamelist_test::tkMessageBoxCalls $args
+        return "ok"
+    }
+    ::gamelist_test::stubCommand progressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list progressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand closeProgressWindow {args} {
+        lappend ::gamelist_test::progressCalls [list closeProgressWindow {*}$args]
+        return
+    }
+    ::gamelist_test::stubCommand ::notify::DatabaseModified {args} {
+        lappend ::gamelist_test::notifyCalls [list DatabaseModified {*}$args]
+        return
+    }
+
+    # Act
+    ::windows::gamelist::CopyGames "" 1 2 dbfilter true
+
+    # Assert
+    list \
+        $::gamelist_test::progressCalls \
+        [lsearch -all -inline $::gamelist_test::scBaseCalls {copygames *}] \
+        $::gamelist_test::notifyCalls
+} -cleanup {
+    catch {unset ::clipbase_db}
+    ::gamelist_test::cleanup
+} -result {{{progressWindow Scid {Copy games...} Cancel} closeProgressWindow} {{copygames 1 dbfilter 2}} {{DatabaseModified 2}}}
+
+
+cleanupTests

@@ -1,0 +1,386 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::plist {}
+namespace eval ::pinfo {}
+namespace eval ::utils {}
+namespace eval ::utils::history {}
+namespace eval ::utils::validate {}
+namespace eval ::win {}
+
+# `pfinder.tcl` installs variable traces that call `::utils::validate::Integer`.
+# Ensure a harmless implementation exists in this headless test environment.
+if {![llength [info procs ::utils::validate::Integer]]} {
+    proc ::utils::validate::Integer {args} {
+        return 1
+    }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows pfinder.tcl]
+
+namespace eval ::pfinder_test {
+    variable stubbedCommands {}
+
+    variable busyCalls {}
+    variable historyCalls {}
+    variable scNameCalls {}
+    variable winCloseCalls {}
+    variable openCalls {}
+}
+
+proc ::pfinder_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::pfinder_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::pfinder_test::setup {} {
+    ::pfinder_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::pfinder_test::busyCalls {}
+    set ::pfinder_test::historyCalls {}
+    set ::pfinder_test::scNameCalls {}
+    set ::pfinder_test::winCloseCalls {}
+    set ::pfinder_test::openCalls {}
+
+    # Minimal translation function used by pfinder.tcl.
+    ::pfinder_test::stubCommand tr {key} { return $key }
+}
+
+proc ::pfinder_test::cleanup {} {
+    ::pfinder_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::plistWin}
+}
+
+# ---- Tests ----
+
+test pfinder-defaults-resets-fields-1.0 {defaults resets all configured search fields} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    set ::plist::name "X"
+    set ::plist::minGames 10
+    set ::plist::maxGames 20
+    set ::plist::minElo 1000
+    set ::plist::maxElo 2000
+    set ::plist::size 500
+
+    # Act
+    ::plist::defaults
+
+    # Assert
+    list \
+        $::plist::name \
+        $::plist::minGames \
+        $::plist::maxGames \
+        $::plist::minElo \
+        $::plist::maxElo \
+        $::plist::size
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {{} {} {} {} {} 50}
+
+
+test pfinder-check-swaps-game-range-1.0 {check swaps min/max games when minGames exceeds maxGames} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    set ::plist::minGames 20
+    set ::plist::maxGames 10
+
+    # Act
+    ::plist::check
+
+    # Assert
+    list $::plist::minGames $::plist::maxGames
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {10 20}
+
+
+test pfinder-check-swaps-elo-range-1.0 {check swaps min/max elo when minElo exceeds maxElo} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    set ::plist::minElo 2800
+    set ::plist::maxElo 2500
+
+    # Act
+    ::plist::check
+
+    # Assert
+    list $::plist::minElo $::plist::maxElo
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {2500 2800}
+
+
+test pfinder-getSearchOptions-defaults-1.0 {getSearchOptions includes size and lowercased sort by default} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    ::plist::defaults
+    set ::plist::sort Name
+
+    # Act
+    ::plist::getSearchOptions
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {-size 50 -sort name}
+
+
+test pfinder-getSearchOptions-all-fields-1.0 {getSearchOptions emits the configured filters and lowercases sort} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    ::plist::defaults
+    set ::plist::name "Carlsen"
+    set ::plist::size 100
+    set ::plist::minGames 5
+    set ::plist::maxGames 20
+    set ::plist::minElo 2500
+    set ::plist::maxElo 2800
+    set ::plist::sort Elo
+
+    # Act
+    ::plist::getSearchOptions
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {-name Carlsen -size 100 -minGames 5 -maxGames 20 -minElo 2500 -maxElo 2800 -sort elo}
+
+
+test pfinder-toggle-closes-when-window-exists-1.0 {toggle closes the window when it exists} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    ::pfinder_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".plist"} { return 1 }
+        return 0
+    }
+    ::pfinder_test::stubCommand ::win::closeWindow {w} {
+        lappend ::pfinder_test::winCloseCalls $w
+        return
+    }
+    ::pfinder_test::stubCommand ::plist::Open {} {
+        error "::plist::Open should not be called when .plist exists"
+    }
+
+    # Act
+    ::plist::toggle
+
+    # Assert
+    set ::pfinder_test::winCloseCalls
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {.plist}
+
+
+test pfinder-toggle-opens-when-window-missing-1.0 {toggle opens the window when it does not exist} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    ::pfinder_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::pfinder_test::stubCommand ::plist::Open {} {
+        lappend ::pfinder_test::openCalls open
+        return
+    }
+    ::pfinder_test::stubCommand ::win::closeWindow {w} {
+        error "::win::closeWindow should not be called when .plist does not exist"
+    }
+
+    # Act
+    ::plist::toggle
+
+    # Assert
+    set ::pfinder_test::openCalls
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {open}
+
+
+test pfinder-open-returns-early-when-already-open-1.0 {Open returns immediately when the window already exists} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    set ::plistWin 0
+    ::pfinder_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".plist"} { return 1 }
+        return 0
+    }
+    ::pfinder_test::stubCommand ::createToplevel {w} {
+        error "::createToplevel should not be called when .plist already exists"
+    }
+
+    # Act
+    ::plist::Open
+
+    # Assert
+    set ::plistWin
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {0}
+
+
+test pfinder-refresh-noop-when-window-missing-1.0 {refresh is a no-op when the window does not exist} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    ::pfinder_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::pfinder_test::stubCommand busyCursor {args} {
+        error "busyCursor should not be called when .plist does not exist"
+    }
+
+    # Act
+    ::plist::refresh
+
+    # Assert
+    return ok
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {ok}
+
+
+test pfinder-refresh-success-renders-players-1.0 {refresh renders players and binds click handlers on success} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    ::scid_test::widgets::defineTextWidget .plist.t.text
+
+    ::pfinder_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".plist"} { return 1 }
+        return 0
+    }
+    ::pfinder_test::stubCommand busyCursor {w} {
+        lappend ::pfinder_test::busyCalls [list busyCursor $w]
+        return
+    }
+    ::pfinder_test::stubCommand unbusyCursor {w} {
+        lappend ::pfinder_test::busyCalls [list unbusyCursor $w]
+        return
+    }
+    ::pfinder_test::stubCommand ::utils::history::AddEntry {varName value} {
+        lappend ::pfinder_test::historyCalls [list $varName $value]
+        return
+    }
+    ::pfinder_test::stubCommand sc_name {subcmd args} {
+        lappend ::pfinder_test::scNameCalls [list $subcmd {*}$args]
+        if {$subcmd ne "plist"} { error "sc_name $subcmd not stubbed in this test" }
+        return [list \
+            [list 10 1990.01.01 2020.01.01 2850 {Magnus Carlsen}] \
+            [list 7  2001.01.01 2010.01.01 2700 {Viswanathan Anand}] \
+        ]
+    }
+
+    ::plist::defaults
+    set ::plist::sort Name
+    set ::plist::name "Carlsen"
+
+    # Act
+    ::plist::refresh
+
+    # Assert
+    set state [::scid_test::widgets::getState .plist.t.text -state]
+    set inserted [::scid_test::widgets::getText .plist.t.text]
+
+    set binds [::scid_test::widgets::getTagBindCalls .plist.t.text]
+
+    # Header click binding exists to sort by the selected column and refresh.
+    # `pfinder.tcl` currently uses `apply`, but older versions used a plain script.
+    set headerBound 0
+    foreach bind $binds {
+        lassign $bind tagName sequence script
+        if {$tagName ne "sGames" || ($sequence ni {<1> <Button-1> <ButtonPress-1>})} { continue }
+
+        if {[llength $script] >= 2 && [lindex $script 0] eq "apply"} {
+            # Expected shape:
+            #   apply {{i} {...} ::} Games
+            if {[lindex $script end] eq "Games"} {
+                set lambda [lindex $script 1]
+                set body [lindex $lambda 1]
+                set headerBound [expr {[string match "*set ::plist::sort*" $body] && [string match "*::plist::refresh*" $body]}]
+            }
+        } else {
+            # Legacy shape:
+            #   set ::plist::sort Games; ::plist::refresh
+            set headerBound [expr {[string match "*set ::plist::sort Games*" $script] && [string match "*::plist::refresh*" $script]}]
+        }
+        break
+    }
+
+    set headerHoverScript ".plist.t.text tag config sGames -foreground red"
+    set headerHoverBound [expr {[lsearch -exact $binds [list sGames <Any-Enter> $headerHoverScript]] != -1}]
+    set carlsenBound [expr {[lsearch -exact $binds [list p1 <ButtonPress-1> [list ::pinfo::playerInfo {Magnus Carlsen}]]] != -1}]
+    set anandBound [expr {[lsearch -exact $binds [list p2 <ButtonPress-1> [list ::pinfo::playerInfo {Viswanathan Anand}]]] != -1}]
+
+    list \
+        $::pfinder_test::scNameCalls \
+        $state \
+        [expr {[string first "Magnus Carlsen" $inserted] >= 0}] \
+        [expr {[string first "Viswanathan Anand" $inserted] >= 0}] \
+        $headerBound \
+        $headerHoverBound \
+        $carlsenBound \
+        $anandBound \
+        $::pfinder_test::busyCalls
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {{{plist -name Carlsen -size 50 -sort name}} disabled 1 1 1 1 1 1 {{busyCursor .} {unbusyCursor .}}}
+
+
+test pfinder-refresh-scname-error-renders-message-1.0 {refresh renders the sc_name error and returns early} -setup {
+    ::pfinder_test::setup
+} -body {
+    # Arrange
+    ::scid_test::widgets::defineTextWidget .plist.t.text
+
+    ::pfinder_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".plist"} { return 1 }
+        return 0
+    }
+    ::pfinder_test::stubCommand busyCursor {w} { return }
+    ::pfinder_test::stubCommand unbusyCursor {w} { lappend ::pfinder_test::busyCalls unbusy; return }
+    ::pfinder_test::stubCommand ::utils::history::AddEntry {varName value} { return }
+    ::pfinder_test::stubCommand sc_name {subcmd args} {
+        error "boom"
+    }
+
+    ::plist::defaults
+    set ::plist::sort Name
+
+    # Act
+    ::plist::refresh
+
+    # Assert
+    set state [::scid_test::widgets::getState .plist.t.text -state]
+    set inserted [::scid_test::widgets::getText .plist.t.text]
+    list \
+        $state \
+        [expr {[string first "boom" $inserted] >= 0}] \
+        $::pfinder_test::busyCalls
+} -cleanup {
+    ::pfinder_test::cleanup
+} -result {normal 1 unbusy}
+
+
+cleanupTests

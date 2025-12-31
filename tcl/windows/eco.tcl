@@ -6,6 +6,19 @@ set ::windows::eco::code ""
 set ::windows::eco::count 0
 set ::windows::eco::isOpen 0
 
+################################################################################
+# ::windows::eco::OpenClose
+#   Toggles the ECO browser window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys `.ecograph` if it exists.
+#   - Calls `::windows::eco::Refresh` if the window is not open.
+################################################################################
 proc ::windows::eco::OpenClose {} {
   if {[winfo exists .ecograph]} {
     destroy .ecograph
@@ -14,12 +27,24 @@ proc ::windows::eco::OpenClose {} {
   }
 }
 
+################################################################################
 # ::windows::eco::Refresh
-#
-#    Updates the ECO Browser window, opening it if necessary.
-#    If the ECO code "code" is "x", then the value of the
-#    variable ::windows::eco::code is used instead.
-#
+#   Opens (if needed) and refreshes the ECO browser window for the specified ECO
+#   code.
+# Visibility:
+#   Public.
+# Inputs:
+#   - code: ECO code string to display. When the value is "x", the current value
+#     of `::windows::eco::code` is used.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates, configures, binds, and finalises the `.ecograph` toplevel and its
+#     child widgets when not already present.
+#   - Updates `::windows::eco::code` when `code` is not "x".
+#   - Updates `::windows::eco::isOpen` (via creation and <Destroy> binding).
+#   - Calls `::windows::eco::update`.
+################################################################################
 proc ::windows::eco::Refresh {{code "x"}} {
   set w .ecograph
   set graph $w.pane.graph
@@ -99,6 +124,22 @@ proc ::windows::eco::Refresh {{code "x"}} {
   ::windows::eco::update
 }
 
+################################################################################
+# ::windows::eco::update
+#   Rebuilds the ECO frequency graph and summary text for the current ECO code.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads `::windows::eco::code`.
+#   - Sets `::curr_db` to the current database (via `sc_base current`).
+#   - Updates `::windows::eco::count` to the number of displayed sub-codes.
+#   - Writes to the graph canvas and to `.ecograph.pane.text.text`.
+#   - Updates the `.ecograph.title` entry text.
+################################################################################
 proc ::windows::eco::update {} {
   set w .ecograph
   set graph $w.pane.graph
@@ -191,6 +232,20 @@ proc ::windows::eco::update {} {
   set ::windows::eco::count $count
 }
 
+################################################################################
+# ::windows::eco::Select
+#   Updates the ECO code based on a graph click (x coordinate) and refreshes.
+# Visibility:
+#   Private.
+# Inputs:
+#   - xc: X coordinate (pixels) from a graph-canvas click event.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads `::windows::eco::count` and `::windows::eco::code`.
+#   - Updates `::windows::eco::code` when a selection is made.
+#   - Calls `::windows::eco::Refresh` on successful selection.
+################################################################################
 proc ::windows::eco::Select {xc} {
   variable count
   variable code
@@ -217,10 +272,21 @@ proc ::windows::eco::Select {xc} {
   ::windows::eco::Refresh
 }
 
+################################################################################
 # ::windows::eco::KeyPress
-#
-#    Handles keyboard events in ECO browser window
-#
+#   Updates the current ECO code based on a key press and refreshes the view.
+# Visibility:
+#   Private.
+# Inputs:
+#   - key: Key identifier. Special values:
+#       - "<": delete one character.
+#       - "top": reset to the top level.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::windows::eco::code`.
+#   - Calls `::windows::eco::Refresh` when a recognised key is processed.
+################################################################################
 proc ::windows::eco::KeyPress {key} {
   set code $::windows::eco::code
   set len [string length $code]

@@ -1,0 +1,375 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::crosstab {}
+namespace eval ::win {}
+namespace eval ::notify {}
+namespace eval ::htext {}
+
+# Minimal translation helper used by the crosstable UI.
+if {![llength [info commands tr]]} {
+    proc tr {s} { return $s }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows crosstab.tcl]
+
+namespace eval ::crosstab_test {
+    variable stubbedCommands {}
+
+    variable winCalls {}
+    variable scBaseCalls {}
+    variable scGameCalls {}
+    variable notifyCalls {}
+    variable htextCalls {}
+
+    variable packCalls {}
+    variable grabCalls {}
+    variable cursorCalls {}
+    variable updateCalls {}
+    variable raiseCalls {}
+
+    variable dbaseCurrent 1
+    variable crosstableResult ""
+}
+
+proc ::crosstab_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::crosstab_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::crosstab_test::setup {} {
+    ::crosstab_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::crosstab_test::winCalls {}
+    set ::crosstab_test::scBaseCalls {}
+    set ::crosstab_test::scGameCalls {}
+    set ::crosstab_test::notifyCalls {}
+    set ::crosstab_test::htextCalls {}
+
+    set ::crosstab_test::packCalls {}
+    set ::crosstab_test::grabCalls {}
+    set ::crosstab_test::cursorCalls {}
+    set ::crosstab_test::updateCalls {}
+    set ::crosstab_test::raiseCalls {}
+
+    set ::crosstab_test::dbaseCurrent 1
+    set ::crosstab_test::crosstableResult ""
+
+    # Default crosstab options.
+    set ::crosstab(sort) score
+    set ::crosstab(type) auto
+    set ::crosstab(ages) "+ages"
+    set ::crosstab(colors) "+colors"
+    set ::crosstab(ratings) "+ratings"
+    set ::crosstab(countries) "+countries"
+    set ::crosstab(flags) "-flags"
+    set ::crosstab(titles) "+titles"
+    set ::crosstab(groups) "-groups"
+    set ::crosstab(breaks) "-breaks"
+    set ::crosstab(deleted) "-deleted"
+    set ::crosstab(cnumbers) "-numcolumns"
+    set ::crosstab(text) hypertext
+
+    # Common stubs.
+    ::crosstab_test::stubCommand ::win::closeWindow {w} {
+        lappend ::crosstab_test::winCalls [list closeWindow $w]
+        return
+    }
+
+    ::crosstab_test::stubCommand ::win::makeVisible {w} {
+        lappend ::crosstab_test::winCalls [list makeVisible $w]
+        return
+    }
+
+    ::crosstab_test::stubCommand win::createWindow {w title args} {
+        lappend ::crosstab_test::winCalls [list createWindow $w $title {*}$args]
+        return 0
+    }
+
+    ::crosstab_test::stubCommand pack {args} {
+        lappend ::crosstab_test::packCalls $args
+        return
+    }
+
+    ::crosstab_test::stubCommand grab {args} {
+        lappend ::crosstab_test::grabCalls $args
+        return
+    }
+
+    ::crosstab_test::stubCommand busyCursor {w} {
+        lappend ::crosstab_test::cursorCalls [list busy $w]
+        return
+    }
+
+    ::crosstab_test::stubCommand unbusyCursor {w} {
+        lappend ::crosstab_test::cursorCalls [list unbusy $w]
+        return
+    }
+
+    ::crosstab_test::stubCommand update {args} {
+        lappend ::crosstab_test::updateCalls $args
+        return
+    }
+
+    ::crosstab_test::stubCommand raiseWin {w} {
+        lappend ::crosstab_test::raiseCalls $w
+        return
+    }
+
+    ::crosstab_test::stubCommand ::htext::display {w text} {
+        lappend ::crosstab_test::htextCalls [list display $w $text]
+        return
+    }
+
+    ::crosstab_test::stubCommand ::notify::filter {base filterName} {
+        lappend ::crosstab_test::notifyCalls [list $base $filterName]
+        return
+    }
+
+    ::crosstab_test::stubCommand sc_base {subcmd args} {
+        lappend ::crosstab_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            current { return $::crosstab_test::dbaseCurrent }
+            switch { return }
+            default { error "sc_base $subcmd not stubbed in crosstab tests" }
+        }
+    }
+
+    ::crosstab_test::stubCommand sc_game {subcmd args} {
+        lappend ::crosstab_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd ne "crosstable"} {
+            error "sc_game $subcmd not stubbed in crosstab tests"
+        }
+        if {[llength $args] >= 1 && [lindex $args 0] eq "filter"} {
+            return
+        }
+        return $::crosstab_test::crosstableResult
+    }
+}
+
+# Defines widget doubles required by `::crosstab::Refresh`.
+#
+# Supported widget subcommands relied upon by the SUT:
+#   - `$w configure -opt value ...`
+#   - `$w cget -opt`
+#   - `$w delete 1.0 end`
+#   - `$w insert end <text>`
+proc ::crosstab_test::setupWindowWidgets {} {
+    set w $::crosstab::win
+
+    ::scid_test::widgets::defineWidget $w.b.type
+    ::scid_test::widgets::defineWidget $w.b.stop
+    ::scid_test::widgets::defineWidget $w.b.update
+    ::scid_test::widgets::defineWidget $w.b.cancel
+    ::scid_test::widgets::defineWidget $w.b.setfilter
+    ::scid_test::widgets::defineWidget $w.b.addfilter
+
+    ::scid_test::widgets::defineWidget $w.f.text
+
+    return $w
+}
+
+proc ::crosstab_test::cleanup {} {
+    ::crosstab_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::crosstab::dbase_}
+}
+
+# ---- Tests ----
+
+test crosstab-OpenClose-closes-when-open-1.0 {OpenClose closes the crosstable window when it exists} -setup {
+    ::crosstab_test::setup
+} -body {
+    # Arrange
+    ::crosstab_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed" }
+        return 1
+    }
+
+    # Act
+    ::crosstab::OpenClose
+
+    # Assert
+    list $::crosstab_test::winCalls
+} -cleanup {
+    ::crosstab_test::cleanup
+} -result {{{closeWindow .crosstableWin}}}
+
+
+test crosstab-OpenClose-opens-when-closed-1.0 {OpenClose opens the crosstable window when it does not exist} -setup {
+    ::crosstab_test::setup
+} -body {
+    # Arrange
+    set ::crosstab_test::openCalls {}
+
+    ::crosstab_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed" }
+        return 0
+    }
+
+    ::crosstab_test::stubCommand ::crosstab::Open {} {
+        lappend ::crosstab_test::openCalls open
+        return
+    }
+
+    # Act
+    ::crosstab::OpenClose
+
+    # Assert
+    set ::crosstab_test::openCalls
+} -cleanup {
+    ::crosstab_test::cleanup
+} -result {open}
+
+
+test crosstab-Open-early-return-refreshes-existing-window-1.0 {Open focuses an existing window and refreshes it} -setup {
+    ::crosstab_test::setup
+} -body {
+    # Arrange
+    set ::crosstab_test::refreshCalls {}
+
+    ::crosstab_test::stubCommand ::crosstab::Refresh {} {
+        lappend ::crosstab_test::refreshCalls refresh
+        return
+    }
+
+    # Act
+    ::crosstab::Open
+
+    # Assert
+    list $::crosstab_test::winCalls $::crosstab_test::refreshCalls
+} -cleanup {
+    ::crosstab_test::cleanup
+} -result {{{createWindow .crosstableWin ToolsCross} {makeVisible .crosstableWin}} refresh}
+
+
+test crosstab-AddToFilter-switches-base-and-notifies-1.0 {AddToFilter switches to the base, generates filter, switches back, and notifies} -setup {
+    ::crosstab_test::setup
+} -body {
+    # Arrange
+    set ::crosstab::dbase_ 5
+    set ::crosstab_test::dbaseCurrent 2
+
+    # Act
+    ::crosstab::AddToFilter
+
+    # Assert
+    list $::crosstab_test::scBaseCalls $::crosstab_test::scGameCalls $::crosstab_test::notifyCalls
+} -cleanup {
+    ::crosstab_test::cleanup
+} -result {{current {switch 5} {switch 2}} {{crosstable filter}} {{5 dbfilter}}}
+
+
+test crosstab-Refresh-noop-when-window-missing-1.0 {Refresh returns immediately when the window does not exist} -setup {
+    ::crosstab_test::setup
+} -body {
+    # Arrange
+    ::crosstab_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed" }
+        return 0
+    }
+
+    catch {unset ::crosstab::dbase_}
+
+    # Act
+    ::crosstab::Refresh
+
+    # Assert
+    list [info exists ::crosstab::dbase_] $::crosstab_test::scGameCalls $::crosstab_test::packCalls
+} -cleanup {
+    ::crosstab_test::cleanup
+} -result {0 {} {}}
+
+
+test crosstab-Refresh-plain-inserts-text-1.0 {Refresh inserts plain text output into the widget and restores button state} -setup {
+    ::crosstab_test::setup
+} -body {
+    # Arrange
+    ::crosstab_test::setupWindowWidgets
+
+    ::crosstab_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed" }
+        return 1
+    }
+
+    set ::crosstab(type) auto
+    set ::crosstab(text) plain
+
+    set ::crosstab_test::dbaseCurrent 7
+    set ::crosstab_test::crosstableResult "PLAIN_RESULT"
+
+    # Act
+    ::crosstab::Refresh
+
+    # Assert
+    set w $::crosstab::win
+
+    set stopState [::scid_test::widgets::getState $w.b.stop -state]
+    set updateState [::scid_test::widgets::getState $w.b.update -state]
+    set cancelState [::scid_test::widgets::getState $w.b.cancel -state]
+    set setfilterState [::scid_test::widgets::getState $w.b.setfilter -state]
+    set addfilterState [::scid_test::widgets::getState $w.b.addfilter -state]
+
+    list \
+        $::crosstab::dbase_ \
+        [::scid_test::widgets::getText $w.f.text] \
+        $stopState $updateState $cancelState $setfilterState $addfilterState \
+        [::scid_test::widgets::getState $w.b.type -text] \
+        $::crosstab_test::htextCalls \
+        $::crosstab_test::packCalls
+} -cleanup {
+    ::crosstab_test::cleanup
+} -result {7 PLAIN_RESULT disabled normal normal normal normal CrosstabOptAuto {} {{.crosstableWin.b.stop -side right -padx 5 -pady 3} {forget .crosstableWin.b.stop}}}
+
+
+test crosstab-Refresh-hypertext-calls-htext-display-1.0 {Refresh uses htext::display when hypertext output is selected} -setup {
+    ::crosstab_test::setup
+} -body {
+    # Arrange
+    ::crosstab_test::setupWindowWidgets
+
+    ::crosstab_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed" }
+        return 1
+    }
+
+    set ::crosstab(type) swiss
+    set ::crosstab(text) hypertext
+
+    set ::crosstab_test::dbaseCurrent 3
+    set ::crosstab_test::crosstableResult "HYPER_RESULT"
+
+    # Act
+    ::crosstab::Refresh
+
+    # Assert
+    set w $::crosstab::win
+
+    set stopState [::scid_test::widgets::getState $w.b.stop -state]
+    set updateState [::scid_test::widgets::getState $w.b.update -state]
+    set cancelState [::scid_test::widgets::getState $w.b.cancel -state]
+    set setfilterState [::scid_test::widgets::getState $w.b.setfilter -state]
+    set addfilterState [::scid_test::widgets::getState $w.b.addfilter -state]
+
+    list \
+        $::crosstab::dbase_ \
+        $::crosstab_test::htextCalls \
+        $stopState $updateState $cancelState $setfilterState $addfilterState \
+        [::scid_test::widgets::getState $w.b.type -text]
+} -cleanup {
+    ::crosstab_test::cleanup
+} -result {3 {{display .crosstableWin.f.text HYPER_RESULT}} disabled normal normal normal normal CrosstabOptSwiss}
+
+
+cleanupTests

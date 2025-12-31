@@ -10,7 +10,21 @@
 
 namespace eval ::preferences {}
 
-### Switch to a new selected preferences dialog from the list
+################################################################################
+# ::preferences::replaceConfig
+#   Switches to the selected preferences pane within the preferences window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - nr: Index of the selected configuration pane.
+#   - w: Canvas widget path hosting the configuration panes.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::preferences::aktConfig`.
+#   - Reconfigures the canvas layout via `grid forget` / `grid`.
+#   - Resets the canvas scroll position via `$w xview` and `$w yview`.
+################################################################################
 proc ::preferences::replaceConfig { nr w } {
   if {[info exists ::preferences::aktConfig]} {
     grid forget $::preferences::aktConfig
@@ -21,12 +35,40 @@ proc ::preferences::replaceConfig { nr w } {
   $w yview moveto 0
 }
 
+################################################################################
+# ::preferences::updateScrollBar
+#   Updates the preferences canvas scroll region to match its embedded frame size.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Canvas widget path hosting the embedded frame `$w.f`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Queries widget geometry via `winfo reqwidth/reqheight`.
+#   - Updates `$w` canvas `-scrollregion`, `-width`, and `-height`.
+################################################################################
 proc ::preferences::updateScrollBar { w } {
   set l [winfo reqwidth $w.f]
   set h [winfo reqheight $w.f]
   $w configure -scrollregion [list 0 0 $l $h] -width $l -height $h
 }
 
+################################################################################
+# ::preferences::Open
+#   Opens (or focuses) the Scid preferences window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - toggle (optional): Unused.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.preferences` and builds its option list and config panes.
+#   - Calls a set of preference pane initialisers (e.g. `chooseBoardColors`,
+#     `::preferences::fonts`, `::preferences::internationalization`, etc.).
+#   - Updates `::preferences::aktConfig` via selection.
+################################################################################
 proc ::preferences::Open { {toggle ""} } {
   set w .preferences
   if {! [::win::createWindow $w "$::menuLabel($::language,ConfigureScid)"]} {
@@ -84,7 +126,24 @@ proc ::preferences::Open { {toggle ""} } {
   focus $w.options
 }
 
-### wrapper function: checking for valid file or directory and changed value then calling the setter function
+################################################################################
+# ::preferences::checkFileDir
+#   Validates a file/directory entry and invokes the associated setter on change.
+# Visibility:
+#   Private.
+# Inputs:
+#   - widget: Entry widget path providing the candidate path via `$widget get`.
+#   - command: Setter command to invoke when the value is valid and changed.
+#   - type: File predicate subcommand for `file` (e.g. `isfile`, `isdirectory`).
+#   - oldvalue: Name of a variable containing the existing value to compare
+#     against (optional; may not exist).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates entry styling (`Error.TEntry` / `TEntry`) based on validity.
+#   - Grabs the toplevel window containing the widget.
+#   - Invokes `$command $filename` when the value is valid and changed.
+################################################################################
 proc ::preferences::checkFileDir { widget command type oldvalue} {
     global spellCheckFile
 
@@ -101,6 +160,20 @@ proc ::preferences::checkFileDir { widget command type oldvalue} {
     $command "$filename"
 }
 
+################################################################################
+# ::preferences::resources
+#   Opens the “Scid Resources” dialog for configuring resource file/directories.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.resDialog` as a modal dialog (uses `grab`).
+#   - Builds entry fields and browse buttons for multiple resource locations.
+#   - Schedules validation via `after` calling `::preferences::checkFileDir`.
+################################################################################
 proc ::preferences::resources { } {
     # Directories
     set w .resDialog
@@ -110,11 +183,47 @@ proc ::preferences::resources { } {
     ::setTitle $w "Scid Resources"
 
     set idx 0
-    foreach file { ::ThemePackageFile ::spellCheckFile ::ecoFile ::scidBooksDir ::scidBasesDir ::scidPhotoDir ::utils::sound::soundFolder } \
-        label { OptionsThemeDir OptionsSpell OptionsECO OptionsBooksDir OptionsTacticsBasesDir OptionsPhotosDir SoundsFolder} \
-        valtype { isfile isfile isfile isdirectory isdirectory isdirectory isdirectory } \
-        command { getThemePkgFile getSpellCheckFile getECOFile getBooksDir getTacticsBasesDir getPhotoDir ::utils::sound::GetDialogChooseFolder } \
-        checkvaluecommand { readThemePkgFile readSpellCheckFile readECOFile setBooksDir setTacticsBasesDir setPhotoDir ::utils::sound::OptionsDialogChooseFolder } {
+    foreach file {
+        ::ThemePackageFile
+        ::spellCheckFile
+        ::ecoFile
+        ::scidBooksDir
+        ::scidBasesDir
+        ::scidPhotoDir
+        ::utils::sound::soundFolder
+    } label {
+        OptionsThemeDir
+        OptionsSpell
+        OptionsECO
+        OptionsBooksDir
+        OptionsTacticsBasesDir
+        OptionsPhotosDir
+        SoundsFolder
+    } valtype {
+        isfile
+        isfile
+        isfile
+        isdirectory
+        isdirectory
+        isdirectory
+        isdirectory
+    } command {
+        getThemePkgFile
+        getSpellCheckFile
+        getECOFile
+        getBooksDir
+        getTacticsBasesDir
+        getPhotoDir
+        ::utils::sound::GetDialogChooseFolder
+    } checkvaluecommand {
+        readThemePkgFile
+        readSpellCheckFile
+        readECOFile
+        setBooksDir
+        setTacticsBasesDir
+        setPhotoDir
+        ::utils::sound::OptionsDialogChooseFolder
+    } {
         incr idx
         ttk::label $w.$file -text [tr $label]:
         ttk::frame $w.$idx
@@ -149,6 +258,19 @@ proc ::preferences::resources { } {
     grab $w
 }
 
+################################################################################
+# ::preferences::validateautoplay
+#   Validates and applies the autoplay delay from the moves preferences pane.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - ok: 1 when `::tempdelay` is a digit string, otherwise 0.
+# Side effects:
+#   - Reads and updates the globals `::tempdelay` and `::autoplayDelay`.
+#   - Clamps `::autoplayDelay` to a minimum of 0.1.
+################################################################################
 proc ::preferences::validateautoplay { } {
     global autoplayDelay tempdelay
     if { ! [string is digit $tempdelay] } {
@@ -162,7 +284,21 @@ proc ::preferences::validateautoplay { } {
     return 1
 }
 
-# preferences dialog for moves
+################################################################################
+# ::preferences::moves
+#   Populates the “Moves” preferences pane within the preferences window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - t: Container widget path for the pane.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures multiple widgets under `$t` bound to global
+#     preferences variables (e.g. `::pgn::moveNumberSpaces`, `moveEntry(*)`,
+#     `::highlightLastMove`, etc.).
+#   - Initialises `::tempdelay` from `::autoplayDelay`.
+################################################################################
 proc ::preferences::moves { t } {
     global autoplayDelay tempdelay
 
@@ -170,7 +306,8 @@ proc ::preferences::moves { t } {
     ttk::frame $t.ani
     ttk::label $t.ani.al -text [tr OptionsMovesAnimate]
     ttk::label $t.ani.ms -text "ms"
-    ttk::combobox $t.ani.animate -width 4 -textvar animateDelay -values {0 100 150 200 250 300 400 500 600 800 1000}
+    ttk::combobox $t.ani.animate -width 4 -textvar animateDelay \
+        -values {0 100 150 200 250 300 400 500 600 800 1000}
     pack $t.ani.al $t.ani.animate $t.ani.ms -side left -anchor w -padx "0 5"
     ttk::checkbutton $t.omc -variable  moveEntry(Coord) -text [tr OptionsMovesCoord]
     ttk::checkbutton $t.omk -variable  moveEntry(AutoExpand) -text [tr OptionsMovesKey]
@@ -203,6 +340,19 @@ proc ::preferences::moves { t } {
     pack $t.high -side top -anchor w -pady "5 0"
 }
 
+################################################################################
+# ::preferences::numbers
+#   Applies the selected numeric formatting (decimal/thousands separator pair).
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Combobox widget path providing the selected index via `$w current`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::locale(numeric)`.
+#   - Calls `updateLocale`.
+################################################################################
 proc ::preferences::numbers { w } {
     global locale
     set numeric {".,"   ". "   ",."   ", "   "."   ","}
@@ -210,7 +360,21 @@ proc ::preferences::numbers { w } {
     updateLocale
 }
 
-# preferences dialog for internationalization settings
+################################################################################
+# ::preferences::internationalization
+#   Populates the “Internationalisation” preferences pane.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Container widget path for the pane.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates widgets under `$w` bound to internationalisation-related globals.
+#   - Updates `::newNumbers` and wires selection to `::preferences::numbers`.
+#   - Calls `setLanguage` / `::notify::PosChanged pgnonly` when toggling
+#     piece translation.
+################################################################################
 proc ::preferences::internationalization { w } {
     global locale
 
@@ -230,13 +394,27 @@ proc ::preferences::internationalization { w } {
     }
     ttk::frame $w.n
     ttk::label $w.n.nlb -text [tr OptionsNumbers]
-    ttk::combobox $w.n.number -width 9 -textvar ::newNumbers -values $numList -state readonly -font font_Fixed \
+    ttk::combobox $w.n.number -width 9 -textvar ::newNumbers -values $numList \
+        -state readonly -font font_Fixed \
         -postcommand [list ::preferences::configureComboboxListboxFont $w.n.number font_Fixed]
     bind $w.n.number <<ComboboxSelected>> [list ::preferences::numbers $w.n.number]
     pack $w.n.nlb $w.n.number -side left -padx "0 5"
     pack $w.n $w.tp  -side top -anchor w
 }
 
+################################################################################
+# ::preferences::configureComboboxListboxFont
+#   Schedules configuration of a combobox popdown listbox font.
+# Visibility:
+#   Private.
+# Inputs:
+#   - combo: Combobox widget path.
+#   - font: Font name to apply to the posted listbox.
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules `::preferences::configureComboboxListboxFont_` via `after idle`.
+################################################################################
 proc ::preferences::configureComboboxListboxFont {combo font} {
     if {![winfo exists $combo]} { return }
 
@@ -245,6 +423,20 @@ proc ::preferences::configureComboboxListboxFont {combo font} {
     after idle [list ::preferences::configureComboboxListboxFont_ $combo $font]
 }
 
+################################################################################
+# ::preferences::configureComboboxListboxFont_
+#   Applies a font to the posted combobox listbox (implementation helper).
+# Visibility:
+#   Private.
+# Inputs:
+#   - combo: Combobox widget path.
+#   - font: Font name to apply.
+# Returns:
+#   - None.
+# Side effects:
+#   - Walks the widget tree below the posted popdown window to find a Listbox.
+#   - Attempts to configure the Listbox font (errors are caught and ignored).
+################################################################################
 proc ::preferences::configureComboboxListboxFont_ {combo font} {
     if {![winfo exists $combo]} { return }
 
@@ -273,7 +465,19 @@ proc ::preferences::configureComboboxListboxFont_ {combo font} {
     }
 }
 
-# preferences dialog for fonts
+################################################################################
+# ::preferences::fonts
+#   Populates the “Fonts” preferences pane.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Container widget path for the pane.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates sample labels and a font picker button per font category.
+#   - Updates `::fontOptions(*)` when the user selects a new font.
+################################################################################
 proc ::preferences::fonts { w } {
     global locale
 

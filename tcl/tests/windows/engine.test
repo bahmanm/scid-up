@@ -1,0 +1,465 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::engine {}
+namespace eval ::enginewin {}
+namespace eval ::notify {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows engine.tcl]
+
+namespace eval ::enginewin_test {
+    variable stubbedCommands {}
+
+    variable updateDisplayCalls {}
+    variable engineSendCalls {}
+    variable sendPositionCalls {}
+    variable undoFeatureCalls {}
+    variable scGameCalls {}
+    variable scMoveCalls {}
+    variable notifyCalls {}
+
+    variable scGameUciCurrentPosCalls 0
+
+    variable untransCalls {}
+}
+
+proc ::enginewin_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::enginewin_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::enginewin_test::sortById {listOfLists} {
+    proc ::enginewin_test::_cmpId {a b} {
+        expr {[lindex $a 0] - [lindex $b 0]}
+    }
+    return [lsort -command ::enginewin_test::_cmpId $listOfLists]
+}
+
+# Defines a minimal text widget double that supports the subset of `text` widget
+# functionality required by `::enginewin::getMoves` and friends.
+#
+# Supported subcommands:
+#   - tag nextrange <tag> <index> ?<stopIndex>?
+#   - get <start> <end>
+#   - search " " <start>
+proc ::enginewin_test::definePvLinesWidget {path movesByLine {headerLines {}} {translatedLines {}}} {
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    set ::enginewin_test::pvMoves($path) $movesByLine
+    set ::enginewin_test::pvHeaderLines($path) $headerLines
+    set ::enginewin_test::pvTranslatedLines($path) $translatedLines
+
+    interp alias {} $path {} ::enginewin_test::pvDispatch $path
+    return $path
+}
+
+proc ::enginewin_test::pvDispatch {path subcmd args} {
+    switch -- $subcmd {
+        tag {
+            set tagSubcmd [lindex $args 0]
+            if {$tagSubcmd ne "nextrange"} {
+                error "pv widget $path tag $tagSubcmd not stubbed"
+            }
+
+            set tagName [lindex $args 1]
+            set index [lindex $args 2]
+
+            if {![regexp {^(\d+)\.} $index -> line]} {
+                # Some callers may pass `"$index linestart"`.
+                if {![regexp {^(\d+)\.(?:end|\d+)\s+linestart$} $index -> line]} {
+                    error "pv widget $path tag nextrange invalid index: $index"
+                }
+            }
+
+            switch -- $tagName {
+                moves {
+                    set movesByLine $::enginewin_test::pvMoves($path)
+                    if {![dict exists $movesByLine $line]} {
+                        return {}
+                    }
+                    return [list "$line.begin" "$line.end"]
+                }
+                header {
+                    set headerLines $::enginewin_test::pvHeaderLines($path)
+                    if {$line ni $headerLines} {
+                        return {}
+                    }
+                    return [list "$line.hbegin" "$line.hend"]
+                }
+                translated {
+                    set translatedLines $::enginewin_test::pvTranslatedLines($path)
+                    if {$line ni $translatedLines} {
+                        return {}
+                    }
+                    return [list "$line.begin" "$line.end"]
+                }
+                default {
+                    return {}
+                }
+            }
+        }
+        get {
+            lassign $args start end
+            if {![regexp {^(\d+)\.} $start -> line]} {
+                error "pv widget $path get invalid start index: $start"
+            }
+
+            set movesByLine $::enginewin_test::pvMoves($path)
+            if {![dict exists $movesByLine $line]} {
+                error "pv widget $path get no moves for line $line"
+            }
+            set moves [dict get $movesByLine $line]
+
+            if {[string match "*.begin-space" $end]} {
+                set spaceIdx [string first " " $moves]
+                if {$spaceIdx == -1} {
+                    return $moves
+                }
+                return [string range $moves 0 [expr {$spaceIdx - 1}]]
+            }
+
+            return $moves
+        }
+        search {
+            set pattern [lindex $args 0]
+            set start [lindex $args 1]
+            if {$pattern ne " "} {
+                error "pv widget $path search pattern not stubbed: $pattern"
+            }
+            if {$start eq ""} {
+                error "pv widget $path search start index is empty"
+            }
+            return "$start-space"
+        }
+        default {
+            error "pv widget $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::enginewin_test::setup {} {
+    ::enginewin_test::restoreStubs
+
+    set ::enginewin_test::updateDisplayCalls {}
+    set ::enginewin_test::engineSendCalls {}
+    set ::enginewin_test::sendPositionCalls {}
+    set ::enginewin_test::undoFeatureCalls {}
+    set ::enginewin_test::scGameCalls {}
+    set ::enginewin_test::scMoveCalls {}
+    set ::enginewin_test::notifyCalls {}
+
+    set ::enginewin_test::scGameUciCurrentPosCalls 0
+    set ::enginewin_test::untransCalls {}
+
+    catch {array unset ::enginewin::engState}
+    array set ::enginewin::engState {}
+
+    catch {unset ::enginewin_lastengine}
+
+    foreach name [info vars ::enginewin::newgame_*] { catch {unset $name} }
+    foreach name [info vars ::enginewin::limits_*] { catch {unset $name} }
+
+    # Minimal `::untrans` stub for `::enginewin::getMoves`.
+    ::enginewin_test::stubCommand ::untrans {text} {
+        lappend ::enginewin_test::untransCalls $text
+        return $text
+    }
+}
+
+proc ::enginewin_test::cleanup {} {
+    ::enginewin_test::restoreStubs
+
+    foreach name [info commands .enginewin_test_*] { catch {rename $name ""} }
+
+    foreach name [info vars ::enginewin_test::pvMoves] { catch {unset $name} }
+    catch {unset ::enginewin_test::pvMoves}
+    catch {unset ::enginewin_test::pvHeaderLines}
+    catch {unset ::enginewin_test::pvTranslatedLines}
+
+    catch {unset ::enginewin_lastengine}
+}
+
+# ---- Tests ----
+
+test enginewin-listEngines-filters-and-flags-running-1.0 {listEngines returns only idle/run and flags run engines} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    array set ::enginewin::engState {1 idle 2 run 3 closed 4 locked}
+    set ::enginewin_lastengine(1) "EngineOne"
+    set ::enginewin_lastengine(2) "EngineTwo"
+
+    # Act
+    set engines [::enginewin::listEngines]
+
+    # Assert
+    ::enginewin_test::sortById $engines
+} -cleanup {
+    ::enginewin_test::cleanup
+} -result {{1 EngineOne 0} {2 EngineTwo 1}}
+
+
+test enginewin-sendPosition-sends-newgame-and-go-1.0 {sendPosition sends NewGame once and then Go} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    set ::enginewin::newgame_1 true
+    set ::enginewin::limits_1 [list depth 20]
+
+    ::enginewin_test::stubCommand ::enginewin::updateDisplay {id msgData} {
+        lappend ::enginewin_test::updateDisplayCalls [list $id $msgData]
+        return
+    }
+
+    ::enginewin_test::stubCommand ::engine::send {id msgType msgData} {
+        lappend ::enginewin_test::engineSendCalls [list $id $msgType $msgData]
+        return
+    }
+
+    ::enginewin_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "variant"} {
+            error "sc_game $subcmd not stubbed in this test"
+        }
+        return "standard"
+    }
+
+    # Act
+    ::enginewin::sendPosition 1 "UCI_POSITION"
+
+    # Assert
+    list \
+        $::enginewin_test::updateDisplayCalls \
+        $::enginewin_test::engineSendCalls \
+        $::enginewin::newgame_1
+} -cleanup {
+    ::enginewin_test::cleanup
+} -result {{{1 {}}} {{1 NewGame {analysis post_pv post_wdl standard}} {1 Go {UCI_POSITION {depth 20}}}} false}
+
+
+test enginewin-onPosChanged-sends-to-running-engines-once-per-position-1.0 {onPosChanged computes position once and sends to all running engines} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    array set ::enginewin::engState {1 run 2 run 3 idle}
+
+    ::enginewin_test::stubCommand ::enginewin::sendPosition {id position} {
+        lappend ::enginewin_test::sendPositionCalls [list $id $position]
+        return
+    }
+
+    ::enginewin_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "UCI_currentPos"} {
+            error "sc_game $subcmd not stubbed in this test"
+        }
+        incr ::enginewin_test::scGameUciCurrentPosCalls
+        return "POS"
+    }
+
+    # Act
+    ::enginewin::onPosChanged
+
+    # Assert
+    list \
+        [::enginewin_test::sortById $::enginewin_test::sendPositionCalls] \
+        $::enginewin_test::scGameUciCurrentPosCalls
+} -cleanup {
+    ::enginewin_test::cleanup
+} -result {{{1 POS} {2 POS}} 1}
+
+
+test enginewin-onPosChanged-respects-id-filter-1.0 {onPosChanged sends only to specified ids} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    array set ::enginewin::engState {1 run 2 run}
+
+    ::enginewin_test::stubCommand ::enginewin::sendPosition {id position} {
+        lappend ::enginewin_test::sendPositionCalls [list $id $position]
+        return
+    }
+
+    ::enginewin_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "UCI_currentPos"} {
+            error "sc_game $subcmd not stubbed in this test"
+        }
+        incr ::enginewin_test::scGameUciCurrentPosCalls
+        return "POS"
+    }
+
+    # Act
+    ::enginewin::onPosChanged 2
+
+    # Assert
+    list \
+        $::enginewin_test::sendPositionCalls \
+        $::enginewin_test::scGameUciCurrentPosCalls
+} -cleanup {
+    ::enginewin_test::cleanup
+} -result {{{2 POS}} 1}
+
+
+test enginewin-getMoves-maps-figurines-1.0 {getMoves maps figurine pieces to letters} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    set w .enginewin_test_pv
+    ::enginewin_test::definePvLinesWidget $w [dict create 1 "\u2658f6 \u2657b5"] {1} {}
+
+    # Act
+    ::enginewin::getMoves $w 1.end
+} -cleanup {
+    ::enginewin_test::cleanup
+    catch {rename .enginewin_test_pv ""}
+} -result {Nf6 Bb5}
+
+
+test enginewin-getMoves-uses-untrans-when-tagged-1.0 {getMoves uses untrans when the translated tag is present} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    set w .enginewin_test_pv
+    ::enginewin_test::definePvLinesWidget $w [dict create 1 "tMoves"] {1} {1}
+
+    ::enginewin_test::stubCommand ::untrans {text} {
+        lappend ::enginewin_test::untransCalls $text
+        return "Nf6"
+    }
+
+    # Act
+    set moves [::enginewin::getMoves $w 1.end]
+
+    # Assert
+    list $moves $::enginewin_test::untransCalls
+} -cleanup {
+    ::enginewin_test::cleanup
+    catch {rename .enginewin_test_pv ""}
+} -result {Nf6 tMoves}
+
+
+test enginewin-exportMoves-imports-line-and-notifies-1.0 {exportMoves imports moves, records undo, and notifies pgn change} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    set w .enginewin_test_pv
+    ::enginewin_test::definePvLinesWidget $w [dict create 1 "Nf6 Nc6"] {1} {}
+
+    ::enginewin_test::stubCommand ::undoFeature {subcmd args} {
+        lappend ::enginewin_test::undoFeatureCalls [list $subcmd {*}$args]
+        return
+    }
+
+    ::enginewin_test::stubCommand sc_game {subcmd args} {
+        lappend ::enginewin_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd ne "import"} {
+            error "sc_game $subcmd not stubbed in this test"
+        }
+        return
+    }
+
+    ::enginewin_test::stubCommand ::notify::PosChanged {args} {
+        lappend ::enginewin_test::notifyCalls $args
+        return
+    }
+
+    # Act
+    set ok [::enginewin::exportMoves $w 1.end]
+
+    # Assert
+    list $ok $::enginewin_test::undoFeatureCalls $::enginewin_test::scGameCalls $::enginewin_test::notifyCalls
+} -cleanup {
+    ::enginewin_test::cleanup
+    catch {rename .enginewin_test_pv ""}
+} -result {true save {{import {Nf6 Nc6}}} -pgn}
+
+
+test enginewin-exportMoves-invalid-index-returns-false-1.0 {exportMoves returns false when index is invalid} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    set w .enginewin_test_pv
+    ::enginewin_test::definePvLinesWidget $w [dict create 1 "Nf6 Nc6"] {1} {}
+
+    ::enginewin_test::stubCommand ::undoFeature {subcmd args} {
+        lappend ::enginewin_test::undoFeatureCalls [list $subcmd {*}$args]
+        return
+    }
+
+    ::enginewin_test::stubCommand sc_game {subcmd args} {
+        lappend ::enginewin_test::scGameCalls [list $subcmd {*}$args]
+        return
+    }
+
+    # Act
+    set ok [::enginewin::exportMoves $w 9.end]
+
+    # Assert
+    list $ok $::enginewin_test::undoFeatureCalls $::enginewin_test::scGameCalls
+} -cleanup {
+    ::enginewin_test::cleanup
+    catch {rename .enginewin_test_pv ""}
+} -result {false {} {}}
+
+
+test enginewin-exportLines-imports-each-latest-line-1.0 {exportLines imports each latest line and restores location} -setup {
+    ::enginewin_test::setup
+} -body {
+    # Arrange
+    set w .enginewin_test_pv
+    ::enginewin_test::definePvLinesWidget $w [dict create 1 "Nf6 Nc6" 2 "d6 Nf3" 3 "a6"] {1 2} {}
+
+    ::enginewin_test::stubCommand ::undoFeature {subcmd args} {
+        lappend ::enginewin_test::undoFeatureCalls [list $subcmd {*}$args]
+        return
+    }
+
+    ::enginewin_test::stubCommand sc_game {subcmd args} {
+        lappend ::enginewin_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd ne "import"} {
+            error "sc_game $subcmd not stubbed in this test"
+        }
+        return
+    }
+
+    ::enginewin_test::stubCommand sc_move {subcmd args} {
+        lappend ::enginewin_test::scMoveCalls [list $subcmd {*}$args]
+        if {$subcmd ne "pgn"} {
+            error "sc_move $subcmd not stubbed in this test"
+        }
+        if {[llength $args] == 0} {
+            return "LOC"
+        }
+        return
+    }
+
+    ::enginewin_test::stubCommand ::notify::PosChanged {args} {
+        lappend ::enginewin_test::notifyCalls $args
+        return
+    }
+
+    # Act
+    ::enginewin::exportLines $w
+
+    # Assert
+    list \
+        $::enginewin_test::undoFeatureCalls \
+        $::enginewin_test::scGameCalls \
+        $::enginewin_test::scMoveCalls \
+        $::enginewin_test::notifyCalls
+} -cleanup {
+    ::enginewin_test::cleanup
+    catch {rename .enginewin_test_pv ""}
+} -result {save {{import {Nf6 Nc6}} {import {d6 Nf3}}} {pgn {pgn LOC} {pgn LOC}} pgnonly}
+
+
+cleanupTests

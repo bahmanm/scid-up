@@ -11,8 +11,18 @@
 namespace eval enginewin {}
 array set ::enginewin::engState {} ; # closed disconnected idle run locked
 
-# Return a list contatining the engine's ID, engine's name and true if it is running.
-# Return only the engines in idle or run state.
+################################################################################
+# ::enginewin::listEngines
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - List of `{id name isRunning}` entries for engines that are currently in
+#     `idle` or `run` state.
+# Side effects:
+#   - None.
+################################################################################
 proc ::enginewin::listEngines {} {
     set result {}
     foreach {id state} [array get ::enginewin::engState] {

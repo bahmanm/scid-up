@@ -3,7 +3,19 @@
 
 namespace eval pgn {
   ################################################################################
-  #
+  # ::pgn::ChooseColor
+  #   Prompts the user to pick a colour and applies it to the PGN window theme.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - type: Colour key within the `::pgnColor` array (e.g. "Current").
+  #   - name: Human-readable name used in the chooser title.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Shows a `tk_chooseColor` dialog.
+  #   - Updates `::pgnColor($type)` when a colour is selected.
+  #   - Calls `::pgn::ResetColors` to apply the new colour.
   ################################################################################
   proc ChooseColor {type name} {
     global pgnColor
@@ -15,7 +27,18 @@ namespace eval pgn {
     if {$x != ""} { set pgnColor($type) $x; ::pgn::ResetColors }
   }
   ################################################################################
-  #
+  # ::pgn::PgnClipboardCopy
+  #   Copies the current game's PGN (plain text) to the system clipboard.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Temporarily changes the language via `setLanguageTemp`.
+  #   - Creates/updates the `.tempFEN` Text widget to own the selection.
+  #   - Writes to the system clipboard and selection.
   ################################################################################
   proc PgnClipboardCopy {} {
       setLanguageTemp E
@@ -35,7 +58,18 @@ namespace eval pgn {
   }
 
   ################################################################################
-  #
+  # ::pgn::OpenClose
+  #   Toggles the PGN window, creating it if needed and wiring its menu/bindings.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates or closes `.pgnWin`.
+  #   - Creates and configures menus, widgets, bindings, and tags within `.pgnWin`.
+  #   - Calls `::pgn::ResetColors` and `::pgn::Refresh` to populate the window.
   ################################################################################
   proc OpenClose {} {
     global pgnWin pgnHeight pgnWidth pgnColor
@@ -165,7 +199,20 @@ namespace eval pgn {
   }
 
   ################################################################################
-  #
+  # ::pgn::contextMenu
+  #   Displays the context menu for the PGN text widget at the given screen coords.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - win: Widget path for the PGN text widget.
+  #   - x: Screen x coordinate (pixels).
+  #   - y: Screen y coordinate (pixels).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates/destroys the menu widget `$win.ctxtMenu`.
+  #   - Reads game/variation state via `sc_var level`.
+  #   - Shows the menu via `tk_popup`.
   ################################################################################
   proc contextMenu {win x y} {
 
@@ -222,28 +269,78 @@ namespace eval pgn {
     tk_popup $mctxt $x $y
   }
 
+  ################################################################################
+  # ::pgn::deleteVar
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Saves undo state via `undoFeature save`.
+  #   - Deletes the current variation via `sc_var delete`.
+  #   - Refreshes the board/PGN display via `updateBoard -pgn`.
+  ################################################################################
   proc deleteVar {} {
     undoFeature save
     sc_var delete
     updateBoard -pgn
   }
 
+  ################################################################################
+  # ::pgn::firstVar
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Saves undo state via `undoFeature save`.
+  #   - Promotes the current variation to be the first via `sc_var first`.
+  #   - Refreshes the board/PGN display via `updateBoard -pgn`.
+  ################################################################################
   proc firstVar {} {
     undoFeature save
     sc_var first
     updateBoard -pgn
   }
 
+  ################################################################################
+  # ::pgn::mainVar
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Saves undo state via `undoFeature save`.
+  #   - Promotes the current variation to the main line via `sc_var promote`.
+  #   - Refreshes the board/PGN display via `updateBoard -pgn`.
+  ################################################################################
   proc mainVar {} {
     undoFeature save
     sc_var promote
     updateBoard -pgn
   }
   ################################################################################
-  # ::pgn::ShowBoard:
-  #    Produces a popup window showing the board position in the
-  #    game at the current mouse location in the PGN window.
-  #
+  # ::pgn::ShowBoard
+  #   Shows a popup board for the move under the mouse in the PGN window.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - win: Text widget path (unused; present for binding compatibility).
+  #   - moveTag: Move tag name (e.g. "m_15") whose suffix is a PGN ply offset.
+  #   - xc: Screen x coordinate (pixels).
+  #   - yc: Screen y coordinate (pixels).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Temporarily changes the current position via `sc_move pgn ...`, then
+  #     restores the prior PGN offset.
+  #   - Creates/updates `.pgnPopup` via `::board::popup`.
   ################################################################################
   proc ShowBoard {win moveTag xc yc} {
     set offSet [sc_pos pgnOffset]
@@ -257,19 +354,33 @@ namespace eval pgn {
 
   ################################################################################
   # ::pgn::HideBoard
-  #
-  #    Hides the window produced by ::pgn::ShowBoard.
-  #
+  #   Hides the popup board created by `::pgn::ShowBoard`.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Attempts to destroy `.pgnPopup`.
   ################################################################################
   proc HideBoard {} {
     destroy .pgnPopup
   }
 
   ################################################################################
-  # # ::pgn::ResetColors
-  #
-  #    Reconfigures the pgn Colors, after a color is changed by the user
-  #
+  # ::pgn::ResetColors
+  #   Applies the configured colours to the PGN window's tag styling.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Configures `.pgnWin.text` tag colours (e.g. "Current").
+  #   - Re-initialises the highlight-text renderer via `::htext::init`.
+  #   - Forces a full refresh of the PGN window via `::pgn::Refresh 1`.
   ################################################################################
   proc ResetColors {} {
     global pgnColor
@@ -281,10 +392,18 @@ namespace eval pgn {
   }
   ################################################################################
   # ::pgn::Refresh
-  #
-  #    Updates the PGN window. If $pgnNeedsUpdate == 0, then the
-  #    window text is not regenerated; only the current and next move
-  #    tags will be updated.
+  #   Refreshes the PGN window text and/or the current-move highlight.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - pgnNeedsUpdate (optional): When true, regenerates the full PGN text.
+  #     Defaults to 0.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - When regenerating, calls `sc_game pgn`, rewrites `.pgnWin.text`, and
+  #     updates the window title.
+  #   - Calls `::pgn::update_current_move` to update the Current tag/scroll.
   ################################################################################
   proc Refresh { {pgnNeedsUpdate 0} } {
     if {![winfo exists .pgnWin]} { return }
@@ -325,6 +444,20 @@ namespace eval pgn {
     ::pgn::update_current_move
   }
 
+  ################################################################################
+  # ::pgn::update_current_move
+  #   Updates the "Current" tag in the PGN text widget and scrolls it into view.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Does nothing unless `.pgnWin` exists and `::pgn::showColor` is true.
+  #   - Reads the current PGN offset via `sc_pos pgnOffset`.
+  #   - Updates `.pgnWin.text` tags and may adjust scroll position via `see`/`yview`.
+  ################################################################################
   proc update_current_move {} {
     if {[winfo exists .pgnWin] && $::pgn::showColor} {
       set offset [sc_pos pgnOffset]

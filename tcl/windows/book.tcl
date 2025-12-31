@@ -23,8 +23,24 @@ namespace eval book {
 
 
   ################################################################################
-  # open a book, closing any previously opened one (called by annotation analysis)
-  # arg name : gm2600.bin for example
+  # ::book::scBookOpen
+  #   Opens a book in the specified slot. For the standard book slots
+  #   (`$::book::bookSlot` and `$::book::bookTuningSlot`), it closes any
+  #   previously tracked open book in that slot.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - name: Book filename (e.g. "gm2600.bin"), relative to `$::scidBooksDir`.
+  #   - slot: Book slot number (e.g. `$::book::bookSlot`).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - For `$::book::bookSlot` / `$::book::bookTuningSlot`, may call
+  #     `sc_book close` if a previous book is tracked as open.
+  #   - Calls `sc_book load` to load the book into the given slot.
+  #   - Updates `::book::currentBook` / `::book::currentTuningBook` for known
+  #     slots.
+  #   - Updates `::book::isReadonly` based on the return value of `sc_book load`.
   ################################################################################
   proc scBookOpen { name slot } {
     if {$slot == $::book::bookSlot} {
@@ -45,8 +61,24 @@ namespace eval book {
   }
 
   ################################################################################
-  # Return a move in book for position fen. If there is no move in book, returns ""
-  # Is used by engines, not book windows
+  # ::book::getMove
+  #   Selects a move from a book position using the book's cumulative
+  #   probabilities.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - book: Book filename (e.g. "gm2600.bin"), relative to `$::scidBooksDir`.
+  #   - fen: FEN string for the position (currently unused by this
+  #     implementation).
+  #   - slot: Book slot number to load and query.
+  # Returns:
+  #   - The selected move (SAN), or "" if the book has no moves for the
+  #     position.
+  # Side effects:
+  #   - Calls `::book::scBookOpen`, which loads the book into the given slot.
+  #   - Calls `sc_book moves` for the given slot.
+  #   - Calls `sc_book close` only when at least one move exists (current
+  #     behaviour).
   ################################################################################
   proc getMove { book fen slot} {
     set tprob 0
@@ -69,7 +101,16 @@ namespace eval book {
   }
 
   ################################################################################
-  #  Show moves leading to book positions
+  # ::book::togglePositionsDisplay
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Toggles `::book::oppMovesVisible`.
+  #   - Packs or unpacks `.bookWin.f.fscroll1`.
   ################################################################################
   proc togglePositionsDisplay {} {
     global ::book::oppMovesVisible
@@ -83,8 +124,22 @@ namespace eval book {
   }
 
   ################################################################################
-  #  Open a window to select book and display book moves
-  # arg name : gm2600.bin for example
+  # ::book::open
+  #   Opens the book browser window and initialises it to the selected (or last)
+  #   book.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - name: Optional book filename (e.g. "gm2600.bin"). When empty, uses
+  #     `::book::lastBook` if set.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates `.bookWin` and its child widgets.
+  #   - Loads available books from `$::scidBooksDir`.
+  #   - Updates `::book::isOpen` and other `::book::*` state.
+  #   - Binds UI events (book selection, window destroy).
+  #   - Shows a `tk_messageBox` and closes the window if no books are found.
   ################################################################################
   proc open { {name ""} } {
     global ::book::bookList ::book::bookPath ::book::currentBook ::book::isOpen ::book::lastBook
@@ -161,7 +216,18 @@ namespace eval book {
     }
   }
   ################################################################################
-  #
+  # ::book::closeMainBook
+  #   Closes the currently open main book.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `sc_book close` for `$::book::bookSlot` when a book is open.
+  #   - Updates `::book::isOpen` and `::book::currentBook`.
+  #   - Moves focus to `.`.
   ################################################################################
   proc closeMainBook {} {
     if { $::book::currentBook == "" } { return }
@@ -171,7 +237,19 @@ namespace eval book {
     set ::book::currentBook ""
   }
   ################################################################################
-  #   updates book display when board changes
+  # ::book::refresh
+  #   Refreshes the displayed book moves for the current position.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Requires `.bookWin` to exist; otherwise the proc will error.
+  #   - Reads book moves via `sc_book moves` and `sc_book positions`.
+  #   - Updates `::book::bookMoves`.
+  #   - Rewrites `.bookWin.f.text` and `.bookWin.f.text1` (tags and bindings).
   ################################################################################
   proc refresh {} {
     global ::book::bookMoves
@@ -235,13 +313,34 @@ namespace eval book {
     }
   }
   ################################################################################
-  #
+  # ::book::makeBookMove
+  #   Plays a move selected from the book.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - move: A SAN move string.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `addSanMove`, which updates the current game/position.
   ################################################################################
   proc makeBookMove { move } {
     addSanMove $move
   }
   ################################################################################
-  #
+  # ::book::bookSelect
+  #   Applies the currently selected book from the book window.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - n: Unused (event callback parameter).
+  #   - v: Unused (event callback parameter).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::book::lastBook`.
+  #   - Loads the selected book into `$::book::bookSlot` via `::book::scBookOpen`.
+  #   - Calls `::book::refresh`.
   ################################################################################
   proc bookSelect { { n "" }  { v  0} } {
     set ::book::lastBook [.bookWin.f.combo get]
@@ -249,7 +348,20 @@ namespace eval book {
     refresh
   }
   ################################################################################
-  #
+  # ::book::tuning
+  #   Opens the book tuning window for editing book move probabilities.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - name: Optional book filename to preselect.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates `.bookTuningWin` and its child widgets.
+  #   - Loads available books from `$::scidBooksDir`.
+  #   - Shows a `tk_messageBox` and closes the window if no books are found.
+  #   - Binds UI events (book selection, window destroy, help).
+  #   - Calls `::book::bookTuningSelect` to populate the UI.
   ################################################################################
   proc tuning { {name ""} } {
     global ::book::bookList ::book::bookPath ::book::currentBook ::book::isOpen
@@ -325,7 +437,19 @@ namespace eval book {
 
   }
   ################################################################################
-  #
+  # ::book::closeTuningBook
+  #   Closes the currently open tuning book.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `sc_book close` for `$::book::bookTuningSlot` when a tuning book is
+  #     open.
+  #   - Clears `::book::currentTuningBook`.
+  #   - Moves focus to `.`.
   ################################################################################
   proc closeTuningBook {} {
     if { $::book::currentTuningBook == "" } { return }
@@ -334,7 +458,20 @@ namespace eval book {
     set ::book::currentTuningBook ""
   }
   ################################################################################
-  #
+  # ::book::bookTuningSelect
+  #   Applies the selected tuning book and refreshes the tuning UI.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - n: Unused (event callback parameter).
+  #   - v: Unused (event callback parameter).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Loads the selected book into `$::book::bookTuningSlot` via
+  #     `::book::scBookOpen`.
+  #   - Enables/disables the Save button depending on `::book::isReadonly`.
+  #   - Calls `::book::refreshTuning`.
   ################################################################################
   proc bookTuningSelect { { n "" }  { v  0} } {
     set w .bookTuningWin
@@ -347,7 +484,19 @@ namespace eval book {
     refreshTuning
   }
   ################################################################################
-  #   add a move to displayed bookmoves
+  # ::book::addBookMove
+  #   Adds a move entry to the tuning UI for the currently selected tuning book.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - move: A SAN move string.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - No-ops when `::book::isReadonly > 0`.
+  #   - Creates widgets under `.bookTuningWin.f` and binds a click handler.
+  #   - Removes the move from `.bookTuningWin.fbutton.mbAdd.otherMoves`.
+  #   - Appends the move to `::book::bookTuningMoves`.
   ################################################################################
   proc addBookMove { move } {
     global ::book::bookTuningMoves
@@ -368,7 +517,20 @@ namespace eval book {
     lappend ::book::bookTuningMoves $move
   }
   ################################################################################
-  #   updates book display when board changes
+  # ::book::refreshTuning
+  #   Rebuilds the tuning UI to reflect the current tuning book moves.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Requires `.bookTuningWin` to exist; otherwise the proc will error.
+  #   - No-ops when `::book::isReadonly > 0`.
+  #   - Resets and repopulates `::book::bookTuningMoves`.
+  #   - Destroys and recreates child widgets under `.bookTuningWin.f`.
+  #   - Repopulates `.bookTuningWin.fbutton.mbAdd.otherMoves` using `sc_pos moves`.
   ################################################################################
   proc refreshTuning {} {
 
@@ -411,7 +573,20 @@ namespace eval book {
     }
   }
   ################################################################################
-  # sends to book the list of moves and probabilities.
+  # ::book::save
+  #   Saves the current tuning move probabilities back to the book.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - No-ops when `::book::isReadonly > 0`.
+  #   - Writes a temporary file under `$::scidUserDir`.
+  #   - Calls `sc_book movesupdate` for `$::book::bookTuningSlot`.
+  #   - Deletes the temporary file.
+  #   - Refreshes the main book window (if `.bookWin` exists).
   ################################################################################
   proc save {} {
     global ::book::bookTuningMoves
@@ -433,7 +608,24 @@ namespace eval book {
     }
   }
   ################################################################################
-  #
+  # ::book::export
+  #   Exports book lines into the current game tree as mainline moves and
+  #   variations.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Opens/closes a progress window during export.
+  #   - Resets `::book::cancelBookExport` and `::book::exportCount` before
+  #     traversal.
+  #   - Calls `::book::book2pgn`, which mutates the current game tree and uses
+  #     `::book::hashList` to avoid revisiting positions.
+  #   - Clears `::book::hashList` after `::book::book2pgn` returns.
+  #   - Shows a `tk_messageBox` with the export result.
+  #   - Calls `updateBoard -pgn` after export.
   ################################################################################
   proc export {} {
     ::windows::gamelist::Refresh
@@ -454,7 +646,22 @@ namespace eval book {
   }
 
   ################################################################################
-  #
+  # ::book::book2pgn
+  #   Recursively traverses book positions and adds moves to the current game as
+  #   a main line plus variations.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Respects `::book::cancelBookExport` and `::book::exportMax`.
+  #   - Uses and updates `::book::hashList` to avoid revisiting positions.
+  #   - Increments `::book::exportCount`.
+  #   - Calls `updateBoard -pgn` repeatedly during traversal.
+  #   - Mutates the current game tree via `sc_move` and `sc_var`.
+  #   - Updates the progress window periodically (every 50 positions).
   ################################################################################
   proc book2pgn { } {
     global ::book::hashList
@@ -497,7 +704,16 @@ namespace eval book {
 
   }
   ################################################################################
-  # cancel book export
+  # ::book::sc_progressBar
+  #   Cancels an in-progress book export.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sets `::book::cancelBookExport` to 1.
   ################################################################################
   proc sc_progressBar {} {
     set ::book::cancelBookExport 1

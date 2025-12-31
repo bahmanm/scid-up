@@ -1,0 +1,527 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::windows {}
+namespace eval ::windows::switcher {}
+namespace eval ::windows::gamelist {}
+namespace eval ::win {}
+namespace eval ::file {}
+namespace eval ::maint {}
+namespace eval ::ttk {}
+
+# Minimal `image` stub for sourcing `switcher.tcl` under plain `tclsh`.
+if {![llength [info commands image]]} {
+    proc image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        return
+    }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows switcher.tcl]
+
+namespace eval ::switcher_test {
+    variable stubbedCommands {}
+
+    variable scBaseCalls {}
+    variable scInfoCalls {}
+
+    variable winCalls {}
+    variable fileCalls {}
+    variable gamelistCalls {}
+    variable updateCalls {}
+    variable bindCalls {}
+    variable afterCalls {}
+    variable gridCalls {}
+}
+
+proc ::switcher_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::switcher_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::switcher_test::setup {} {
+    ::switcher_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::switcher_test::scBaseCalls {}
+    set ::switcher_test::scInfoCalls {}
+    set ::switcher_test::winCalls {}
+    set ::switcher_test::fileCalls {}
+    set ::switcher_test::gamelistCalls {}
+    set ::switcher_test::updateCalls {}
+    set ::switcher_test::bindCalls {}
+    set ::switcher_test::afterCalls {}
+    set ::switcher_test::gridCalls {}
+
+    if {![info exists ::tr]} { array set ::tr {} }
+    array set ::tr {
+        ChangeIcon "Change icon"
+        Cancel "Cancel"
+    }
+
+    if {![info exists ::MB3]} { set ::MB3 3 }
+    if {![info exists ::curr_db]} { set ::curr_db 1 }
+}
+
+proc ::switcher_test::cleanup {} {
+    ::switcher_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::temp_dbtype}
+    catch {unset ::baseWin}
+    catch {unset ::windows::switcher::wins}
+    catch {unset ::sw_nBases_}
+    catch {unset ::clipbase_db}
+}
+
+# ---- Tests ----
+
+test switcher-getBaseType-returns-tag-value-1.0 {getBaseType returns the base type tag when present} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    ::switcher_test::stubCommand sc_base {subcmd baseId args} {
+        lappend ::switcher_test::scBaseCalls [list $subcmd $baseId {*}$args]
+        if {$subcmd ne "extra"} { error "sc_base $subcmd not stubbed in this test" }
+        return {foo 1 type 3 bar 9}
+    }
+
+    # Act
+    set type [getBaseType 7]
+
+    # Assert
+    list $type $::switcher_test::scBaseCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {3 {{extra 7}}}
+
+
+test switcher-getBaseType-defaults-to-zero-1.0 {getBaseType returns 0 when no type tag exists} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    ::switcher_test::stubCommand sc_base {subcmd baseId args} {
+        if {$subcmd ne "extra"} { error "sc_base $subcmd not stubbed in this test" }
+        return {foo 1 bar 2}
+    }
+
+    # Act
+    getBaseType 1
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {0}
+
+
+test switcher-getBaseType-propagates-sc_base-error-1.0 {getBaseType surfaces sc_base extra errors} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    ::switcher_test::stubCommand sc_base {subcmd baseId args} {
+        error "boom(sc_base extra)"
+    }
+
+    # Act
+    set rc [catch {getBaseType 1} msg]
+
+    # Assert
+    list $rc [string match "*boom(sc_base extra)*" $msg]
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {1 1}
+
+
+test switcher-selectBaseType-noop-when-window-missing-1.0 {selectBaseType does nothing when .btypeWin does not exist} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set ::temp_dbtype 5
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+
+    # Act
+    selectBaseType 7
+
+    # Assert
+    set ::temp_dbtype
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {5}
+
+
+test switcher-selectBaseType-updates-temp_dbtype-1.0 {selectBaseType updates temp_dbtype when .btypeWin exists} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set ::temp_dbtype 0
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 1
+    }
+
+    # Act
+    selectBaseType 8
+
+    # Assert
+    set ::temp_dbtype
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {8}
+
+
+test switcher-changeBaseType-returns-when-out-of-range-1.0 {changeBaseType returns immediately when baseNum is beyond the bases limit} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set ::temp_dbtype 9
+
+    ::switcher_test::stubCommand sc_info {subcmd args} {
+        lappend ::switcher_test::scInfoCalls [list $subcmd {*}$args]
+        if {$subcmd ne "limit"} { error "sc_info $subcmd not stubbed in this test" }
+        if {[lindex $args 0] ne "bases"} { error "sc_info limit [lindex $args 0] not stubbed in this test" }
+        return 1
+    }
+
+    ::switcher_test::stubCommand win::createDialog {w} {
+        error "win::createDialog should not be called when baseNum is out of range"
+    }
+
+    # Act
+    changeBaseType 2
+
+    # Assert
+    list $::temp_dbtype $::switcher_test::scInfoCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {9 {{limit bases}}}
+
+
+test switcher-changeBaseType-propagates-sc_info-error-1.0 {changeBaseType surfaces sc_info limit bases errors} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    ::switcher_test::stubCommand sc_info {subcmd args} {
+        error "boom(sc_info limit bases)"
+    }
+    ::switcher_test::stubCommand win::createDialog {w} {
+        error "win::createDialog should not be called when sc_info limit bases errors"
+    }
+
+    # Act
+    set rc [catch {changeBaseType 1} msg]
+
+    # Assert
+    list $rc [string match "*boom(sc_info limit bases)*" $msg]
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {1 1}
+
+
+test switcher-pressMouseEvent-sets-cursor-1.0 {pressMouseEvent sets the cursor to exchange for a base tile} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set w .baseWin
+    foreach p [list $w.c.f1 $w.c.f1.img $w.c.f1.name $w.c.f1.ngames] {
+        ::scid_test::widgets::defineWidget $p
+    }
+
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".baseWin"} { return 1 }
+        return 0
+    }
+
+    # Act
+    ::windows::switcher::pressMouseEvent 1 $w
+
+    # Assert
+    list \
+        [::scid_test::widgets::getState $w.c.f1 -cursor] \
+        [::scid_test::widgets::getState $w.c.f1.img -cursor] \
+        [::scid_test::widgets::getState $w.c.f1.name -cursor] \
+        [::scid_test::widgets::getState $w.c.f1.ngames -cursor]
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {exchange exchange exchange exchange}
+
+
+test switcher-releaseMouseEvent-drop-outside-noop-1.0 {releaseMouseEvent clears the cursor and does nothing when the drop is outside the switcher} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set w .baseWin
+    foreach p [list $w.c.f1 $w.c.f1.img $w.c.f1.name $w.c.f1.ngames] {
+        ::scid_test::widgets::defineWidget $p
+        $p configure -cursor exchange
+    }
+
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists { return 1 }
+            containing { return ".other" }
+            default { error "winfo $subcmd not stubbed in this test" }
+        }
+    }
+    ::switcher_test::stubCommand ::file::SwitchToBase {base} {
+        error "::file::SwitchToBase should not be called for an outside drop"
+    }
+    ::switcher_test::stubCommand ::windows::gamelist::CopyGames {args} {
+        error "::windows::gamelist::CopyGames should not be called for an outside drop"
+    }
+
+    # Act
+    ::windows::switcher::releaseMouseEvent 1 10 20 $w
+
+    # Assert
+    list \
+        [::scid_test::widgets::getState $w.c.f1 -cursor] \
+        [::scid_test::widgets::getState $w.c.f1.img -cursor] \
+        [::scid_test::widgets::getState $w.c.f1.name -cursor] \
+        [::scid_test::widgets::getState $w.c.f1.ngames -cursor]
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {{} {} {} {}}
+
+
+test switcher-releaseMouseEvent-switches-when-same-base-1.0 {releaseMouseEvent switches to the base when dropped on the same base} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set w .baseWin
+    foreach p [list $w.c.f1 $w.c.f1.img $w.c.f1.name $w.c.f1.ngames] {
+        ::scid_test::widgets::defineWidget $p
+    }
+
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists { return 1 }
+            containing { return ".baseWin.c.f1.name" }
+            default { error "winfo $subcmd not stubbed in this test" }
+        }
+    }
+    ::switcher_test::stubCommand ::file::SwitchToBase {base} {
+        lappend ::switcher_test::fileCalls $base
+        return
+    }
+    ::switcher_test::stubCommand ::windows::gamelist::CopyGames {args} {
+        error "::windows::gamelist::CopyGames should not be called when toBase == fromBase"
+    }
+
+    # Act
+    ::windows::switcher::releaseMouseEvent 1 10 20 $w
+
+    # Assert
+    set ::switcher_test::fileCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {1}
+
+
+test switcher-releaseMouseEvent-copies-when-different-base-1.0 {releaseMouseEvent copies games when dropped on a different base} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set w .baseWin
+    foreach p [list $w.c.f1 $w.c.f1.img $w.c.f1.name $w.c.f1.ngames $w.c.f2 $w.c.f2.img $w.c.f2.name $w.c.f2.ngames] {
+        ::scid_test::widgets::defineWidget $p
+    }
+
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists { return 1 }
+            containing { return ".baseWin.c.f2.name" }
+            default { error "winfo $subcmd not stubbed in this test" }
+        }
+    }
+    ::switcher_test::stubCommand ::windows::gamelist::CopyGames {args} {
+        lappend ::switcher_test::gamelistCalls $args
+        return
+    }
+    ::switcher_test::stubCommand ::file::SwitchToBase {base} {
+        error "::file::SwitchToBase should not be called when toBase != fromBase"
+    }
+
+    # Act
+    ::windows::switcher::releaseMouseEvent 1 10 20 $w
+
+    # Assert
+    set ::switcher_test::gamelistCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {{{} 1 2}}
+
+
+test switcher-Open-closes-when-createWindow-fails-1.0 {Open closes the switcher when createWindow returns false} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    ::switcher_test::stubCommand tr {key} { return $key }
+    ::switcher_test::stubCommand ::win::createWindow {w title} { return 0 }
+    ::switcher_test::stubCommand ::win::closeWindow {w} { return "CLOSED" }
+    ::switcher_test::stubCommand ::windows::switcher::Create {w} {
+        error "::windows::switcher::Create should not be called when createWindow fails"
+    }
+
+    # Act
+    ::windows::switcher::Open .baseWin
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {CLOSED}
+
+
+test switcher-Open-invokes-Create-when-createWindow-succeeds-1.0 {Open invokes Create when createWindow returns true} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    ::switcher_test::stubCommand tr {key} { return $key }
+    ::switcher_test::stubCommand ::win::createWindow {w title} { return 1 }
+    ::switcher_test::stubCommand bind {w sequence script} {
+        lappend ::switcher_test::bindCalls [list $w $sequence $script]
+        return
+    }
+    ::switcher_test::stubCommand ::windows::switcher::Create {w} {
+        lappend ::switcher_test::winCalls $w
+        return
+    }
+
+    # Act
+    ::windows::switcher::Open .baseWin
+
+    # Assert
+    set ::switcher_test::winCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {.baseWin}
+
+
+test switcher-Create-registers-window-and-schedules-update-1.0 {Create registers the window and schedules Update_ via after idle} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set ::sw_nBases_ 0
+    set ::windows::switcher::wins {}
+
+    ::switcher_test::stubCommand ttk::frame {w args} {
+        ::scid_test::widgets::defineWidget $w
+        return $w
+    }
+    ::switcher_test::stubCommand grid {args} {
+        lappend ::switcher_test::gridCalls $args
+        return
+    }
+    ::switcher_test::stubCommand canvas {w args} {
+        ::scid_test::widgets::defineWidget $w
+        return $w
+    }
+    ::switcher_test::stubCommand autoscrollBars {args} { return }
+    ::switcher_test::stubCommand applyThemeStyle {args} { return }
+    ::switcher_test::stubCommand bind {w sequence script} {
+        lappend ::switcher_test::bindCalls [list $w $sequence $script]
+        return
+    }
+    ::switcher_test::stubCommand after {args} {
+        lappend ::switcher_test::afterCalls $args
+        return
+    }
+
+    # Act
+    ::windows::switcher::Create .baseWin
+
+    # Assert
+    list $::windows::switcher::wins $::switcher_test::afterCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {.baseWin {{idle {::windows::switcher::Update_ .baseWin}}}}
+
+
+test switcher-Refresh-invokes-Update_-for-each-window-1.0 {Refresh invokes Update_ for each registered switcher window} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set ::windows::switcher::wins [list .w1 .w2]
+
+    ::switcher_test::stubCommand ::windows::switcher::Update_ {w} {
+        lappend ::switcher_test::updateCalls $w
+        return
+    }
+
+    # Act
+    ::windows::switcher::Refresh
+
+    # Assert
+    set ::switcher_test::updateCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {.w1 .w2}
+
+
+test switcher-Update_-computes-columns-and-calls-Draw-1.0 {Update_ computes the column count and calls Draw} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 1
+    set w .baseWin
+    ::switcher_test::stubCommand ::windows::switcher::calcSpace {w selected} {
+        return {2 20 10}
+    }
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "width"} { error "winfo $subcmd not stubbed in this test" }
+        return 45
+    }
+    ::switcher_test::stubCommand ::windows::switcher::Draw {w numColumns iconWidth iconHeight} {
+        lappend ::switcher_test::winCalls [list $w $numColumns $iconWidth $iconHeight]
+        return
+    }
+
+    # Act
+    ::windows::switcher::Update_ $w
+
+    # Assert
+    set ::switcher_test::winCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {{.baseWin 2 20 10}}
+
+
+test switcher-Update_-clamps-columns-to-one-1.0 {Update_ clamps the column count to 1 when the canvas is too narrow} -setup {
+    ::switcher_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 1
+    set w .baseWin
+    ::switcher_test::stubCommand ::windows::switcher::calcSpace {w selected} {
+        return {2 20 10}
+    }
+    ::switcher_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "width"} { error "winfo $subcmd not stubbed in this test" }
+        return 10
+    }
+    ::switcher_test::stubCommand ::windows::switcher::Draw {w numColumns iconWidth iconHeight} {
+        lappend ::switcher_test::winCalls [list $w $numColumns $iconWidth $iconHeight]
+        return
+    }
+
+    # Act
+    ::windows::switcher::Update_ $w
+
+    # Assert
+    set ::switcher_test::winCalls
+} -cleanup {
+    ::switcher_test::cleanup
+} -result {{.baseWin 1 20 10}}
+
+
+cleanupTests

@@ -1,0 +1,283 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+source [file join [file dirname [file dirname [info script]]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::windows {}
+namespace eval ::windows::stats {}
+namespace eval ::win {}
+namespace eval ::ttk {}
+namespace eval ::utils {}
+namespace eval ::utils::string {}
+namespace eval ::notify {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows stats.tcl]
+
+namespace eval ::stats_test {
+    variable stubbedCommands {}
+
+    variable destroyCalls {}
+    variable focusCalls {}
+    variable winCreateDialogCalls {}
+    variable wmCalls {}
+    variable bindCalls {}
+    variable packCalls {}
+    variable autoscrollTextCalls {}
+    variable scFilterCalls {}
+    variable notifyCalls {}
+    variable refreshCalls 0
+}
+
+proc ::stats_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::stats_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::stats_test::setup {} {
+    ::stats_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::stats_test::destroyCalls {}
+    set ::stats_test::focusCalls {}
+    set ::stats_test::winCreateDialogCalls {}
+    set ::stats_test::wmCalls {}
+    set ::stats_test::bindCalls {}
+    set ::stats_test::packCalls {}
+    set ::stats_test::autoscrollTextCalls {}
+    set ::stats_test::scFilterCalls {}
+    set ::stats_test::notifyCalls {}
+    set ::stats_test::refreshCalls 0
+
+    if {![info exists ::tr]} { array set ::tr {} }
+    array set ::tr {
+        FilterStatistic "Filter statistics"
+        Year "Year"
+        Rating "Rating"
+        allGames "all games"
+        OprepStatBoth "both"
+        OprepStatSince "since"
+        games "games"
+        score "score"
+    }
+}
+
+proc ::stats_test::cleanup {} {
+    ::stats_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::curr_db}
+    catch {unset ::windows::stats::display}
+
+    catch {unset ::FilterMaxElo}
+    catch {unset ::FilterMinElo}
+    catch {unset ::FilterStepElo}
+    catch {unset ::FilterMaxYear}
+    catch {unset ::FilterMinYear}
+    catch {unset ::FilterStepYear}
+    catch {unset ::FilterMaxMoves}
+    catch {unset ::FilterMinMoves}
+    catch {unset ::FilterStepMoves}
+    catch {unset ::FilterGuessELO}
+}
+
+# ---- Tests ----
+
+test stats-Refresh-delegates-to-notify-filter-1.0 {Refresh delegates to ::notify::filter} -setup {
+    ::stats_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 3
+    ::stats_test::stubCommand ::notify::filter {db which} {
+        lappend ::stats_test::notifyCalls [list $db $which]
+        return
+    }
+
+    # Act
+    ::windows::stats::Refresh
+
+    # Assert
+    set ::stats_test::notifyCalls
+} -cleanup {
+    ::stats_test::cleanup
+} -result {{3 dbfilter}}
+
+
+test stats-Open-closes-when-already-open-1.0 {Open closes the window when it already exists and clears isOpen} -setup {
+    ::stats_test::setup
+} -body {
+    # Arrange
+    set ::windows::stats::isOpen 1
+
+    ::stats_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 1
+    }
+    ::stats_test::stubCommand focus {w} {
+        lappend ::stats_test::focusCalls $w
+        return
+    }
+    ::stats_test::stubCommand destroy {w} {
+        lappend ::stats_test::destroyCalls $w
+        return
+    }
+
+    # Act
+    ::windows::stats::Open
+
+    # Assert
+    list $::stats_test::focusCalls $::stats_test::destroyCalls $::windows::stats::isOpen
+} -cleanup {
+    ::stats_test::cleanup
+} -result {. .statsWin 0}
+
+
+test stats-Open-creates-and-refreshes-1.0 {Open creates the window, marks isOpen, and refreshes} -setup {
+    ::stats_test::setup
+} -body {
+    # Arrange
+    ::stats_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::stats_test::stubCommand win::createDialog {w} {
+        lappend ::stats_test::winCreateDialogCalls $w
+        return
+    }
+    ::stats_test::stubCommand wm {subcmd args} {
+        lappend ::stats_test::wmCalls [list $subcmd {*}$args]
+        return
+    }
+    ::stats_test::stubCommand setWinLocation {w} { return }
+    ::stats_test::stubCommand recordWinSize {w} { return }
+    ::stats_test::stubCommand bind {w sequence script} {
+        lappend ::stats_test::bindCalls [list $w $sequence $script]
+        return
+    }
+    ::stats_test::stubCommand autoscrollText {axis asb textWidget mode} {
+        lappend ::stats_test::autoscrollTextCalls [list $axis $asb $textWidget $mode]
+        ::scid_test::widgets::defineWidget $asb
+        ::scid_test::widgets::defineTextWidget $textWidget
+        return
+    }
+    ::stats_test::stubCommand ttk::frame {w args} {
+        ::scid_test::widgets::defineWidget $w
+        return $w
+    }
+    ::stats_test::stubCommand ttk::button {w args} {
+        ::scid_test::widgets::defineWidget $w
+        return $w
+    }
+    ::stats_test::stubCommand ttk::checkbutton {w args} {
+        ::scid_test::widgets::defineWidget $w
+        return $w
+    }
+    ::stats_test::stubCommand pack {args} {
+        lappend ::stats_test::packCalls $args
+        return
+    }
+
+    ::stats_test::stubCommand ::windows::stats::refresh_wnd {} {
+        incr ::stats_test::refreshCalls
+        return
+    }
+
+    # Act
+    ::windows::stats::Open
+
+    # Assert
+    list \
+        $::stats_test::winCreateDialogCalls \
+        $::stats_test::autoscrollTextCalls \
+        $::windows::stats::isOpen \
+        $::stats_test::refreshCalls
+} -cleanup {
+    ::stats_test::cleanup
+} -result {.statsWin {{y .statsWin.statsasb .statsWin.stats Treeview}} 1 1}
+
+
+test stats-refresh_wnd-noop-when-window-missing-1.0 {refresh_wnd returns immediately when .statsWin does not exist} -setup {
+    ::stats_test::setup
+} -body {
+    # Arrange
+    ::stats_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::stats_test::stubCommand sc_filter {args} {
+        error "sc_filter should not be called when .statsWin does not exist"
+    }
+
+    # Act
+    ::windows::stats::refresh_wnd
+
+    # Assert
+    return ok
+} -cleanup {
+    ::stats_test::cleanup
+} -result {ok}
+
+
+test stats-refresh_wnd-writes-stats-and-tags-1.0 {refresh_wnd writes stats output and configures tags} -setup {
+    ::stats_test::setup
+} -body {
+    # Arrange
+    set ::FilterMinElo 100
+    set ::FilterMaxElo 100
+    set ::FilterStepElo 100
+    set ::FilterMinYear 2000
+    set ::FilterMaxYear 2000
+    set ::FilterStepYear 10
+    set ::FilterMinMoves 0
+    set ::FilterMaxMoves 0
+    set ::FilterStepMoves 1
+    set ::FilterGuessELO 0
+
+    set ::windows::stats::like_graphelo 1
+    set ::windows::stats::like_graphyear 1
+    set ::windows::stats::statelo 0
+    set ::windows::stats::stat_year 0
+    set ::windows::stats::old_elo 0
+    set ::windows::stats::old_year 0
+
+    ::scid_test::widgets::defineTextWidget .statsWin.stats
+
+    ::stats_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".statsWin"} { return 1 }
+        return 0
+    }
+
+    ::stats_test::stubCommand ::utils::string::Capital {s} { return $s }
+    ::stats_test::stubCommand ::utils::string::Pad {s n} { return $s }
+    ::stats_test::stubCommand ::utils::string::PadRight {s n} { return $s }
+
+    ::stats_test::stubCommand sc_filter {subcmd which args} {
+        lappend ::stats_test::scFilterCalls [list $subcmd $which {*}$args]
+        return " STATS($which $args)"
+    }
+
+    # Act
+    ::windows::stats::refresh_wnd
+
+    # Assert
+    set text [::scid_test::widgets::getText .statsWin.stats]
+    list \
+        $::stats_test::scFilterCalls \
+        [string match "*STATS*" $text] \
+        [::scid_test::widgets::getTagConfigureCalls .statsWin.stats] \
+        [::scid_test::widgets::getTagAddCalls .statsWin.stats] \
+        [::scid_test::widgets::getState .statsWin.stats -height] \
+        [::scid_test::widgets::getState .statsWin.stats -state]
+} -cleanup {
+    ::stats_test::cleanup
+} -result {{{stats all} {stats elo 100 200} {stats elo 100 10200} {stats year 2000 2010}} 1 {{bgGray -background gray95} {blue -foreground dodgerblue3} {red -foreground red}} {{blue 1.0 2.0} {red 2.0 3.0}} 7 disabled}
+
+
+cleanupTests
