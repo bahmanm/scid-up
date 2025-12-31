@@ -44,19 +44,21 @@ jobs:
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       run: |
+        top_dir=$(pwd)
+        
         curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
-        pushd tcl9.0.3/unix
-        ./configure --prefix=/usr
-        sudo make install
+        pushd ${top_dir}/tcl9.0.3/unix
+        ./configure --prefix=/usr --enable-64bit
+        make && sudo make install
         popd
 
         sudo apt-get update
         sudo apt-get install -y libx11-dev
         
         curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
-        pushd tk9.0.3/unix
-        ./configure --with-tcl=/usr/lib --prefix=/usr
-        sudo make install
+        pushd ${top_dir}/tk9.0.3/unix
+        ./configure --prefix=/usr --enable-64bit --with-tcl=${top_dir}/tcl9.0.3/unix
+        make && sudo make install
         popd
 
     - name: Configure CMake
@@ -73,9 +75,11 @@ jobs:
         cmake 
         --build ${{ steps.strings.outputs.build-output-dir }} 
         --config ${{ matrix.build_type }}
+        --verbose
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: >
         ctest 
         --build-config ${{ matrix.build_type }}
+        --verbose
