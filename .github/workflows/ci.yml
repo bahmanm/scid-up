@@ -49,7 +49,7 @@ jobs:
         curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
         pushd ${top_dir}/tcl9.0.3/unix
         ./configure --prefix=${{ github.workspace }}/opt/tcl-tk9 --enable-64bit
-        make && sudo make install
+        make install
         popd
 
         sudo apt-get update
@@ -58,7 +58,7 @@ jobs:
         curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
         pushd ${top_dir}/tk9.0.3/unix
         ./configure --prefix=${{ github.workspace }}/opt/tcl-tk9 --enable-64bit --with-tcl=${top_dir}/tcl9.0.3/unix
-        make && sudo make install
+        make install
         popd
         
         ln -sf ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh9.0 ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh
