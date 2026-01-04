@@ -52,7 +52,7 @@ else()
 endif()
 set_property(TARGET scid PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE True)
 target_include_directories(scid PRIVATE ${TCL_INCLUDE_PATH})
-target_link_libraries(scid PRIVATE polyglot ${CMAKE_THREAD_LIBS_INIT} ${TCL_LIBRARY})
+target_link_libraries(scid PRIVATE polyglot Threads::Threads ${TCL_LIBRARY})
 
 option(SPELLCHKVALIDATE "Verify the integrity of spelling files" OFF)
 if(SPELLCHKVALIDATE)

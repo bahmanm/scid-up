@@ -34,7 +34,7 @@ set(SCID_BASE
 add_library(scid_base ${SCID_BASE})
 target_include_directories(scid_base PUBLIC ../src)
 find_package(Threads REQUIRED)
-target_link_libraries(scid_base PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(scid_base PUBLIC Threads::Threads)
 
 # scid_tests
 file(GLOB GTEST_SRC *.cpp)
