@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD 20 CACHE STRING "")
 # googletest
 if(NOT IS_DIRECTORY "${CMAKE_BINARY_DIR}/googletest")
   find_package(Git)
-  execute_process(COMMAND ${GIT_EXECUTABLE} clone https://github.com/google/googletest.git)
+  execute_process(COMMAND ${GIT_EXECUTABLE} clone https://github.com/google/googletest.git "${CMAKE_BINARY_DIR}/googletest")
 endif()
 set(gtest_force_shared_crt ON CACHE BOOL "Always use msvcrt.dll")
 add_subdirectory(${CMAKE_BINARY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest/Build EXCLUDE_FROM_ALL)
