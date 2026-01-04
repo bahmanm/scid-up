@@ -7,7 +7,7 @@ endif()
 add_subdirectory(gtest)
 
 add_custom_target(scid_test
-        COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -R "^gtest$"
+        COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -R "^scid_test$"
         DEPENDS scid_test_bin
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         COMMENT "Building and running GoogleTest"
