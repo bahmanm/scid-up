@@ -35,8 +35,8 @@ if(MSVC)
   # Environment:       PATH=C:\tcl\bin
 endif()
 
-find_package(Threads)
-find_package(TCL)
+find_package(Threads REQUIRED)
+find_package(TCL REQUIRED)
 
 # polyglot
 file(GLOB POLYGLOT_SRC src/polyglot/*.cpp)
