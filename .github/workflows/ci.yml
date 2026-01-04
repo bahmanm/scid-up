@@ -94,7 +94,7 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: >
         PATH=${{ github.workspace }}/opt/tcl-tk9/bin:${PATH}
-        LD_LIBRARY_PATH=${{ github.workspace }}/opt/tcl-tk9/lib:${LD_LIBRARY_PATH:-''}
+        LD_LIBRARY_PATH=${{ github.workspace }}/opt/tcl-tk9/lib:${LD_LIBRARY_PATH:-}
         ctest 
         --build-config ${{ matrix.build_type }}
         --verbose
