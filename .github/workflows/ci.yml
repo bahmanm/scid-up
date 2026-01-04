@@ -61,7 +61,7 @@ jobs:
         make && sudo make install
         popd
 
-    - name: Configure CMake
+    - name: Configure
       run: >
         cmake 
         -B ${{ steps.strings.outputs.build-output-dir }}
@@ -82,6 +82,13 @@ jobs:
         --build ${{ steps.strings.outputs.build-output-dir }} 
         --config ${{ matrix.build_type }}
         --verbose
+
+    - name: Lint
+      run: >
+        cmake
+        --build ${{ steps.strings.outputs.build-output-dir }} 
+        --target tcl_lint
+        || echo "Ignored linter violations. For now."
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
