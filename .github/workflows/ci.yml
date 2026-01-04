@@ -93,6 +93,11 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: >
+        ls -l ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh;
+        file ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh;
+        ldd ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh || true;
+        ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh -c 'puts [info patchlevel]' || true;
+        
         PATH=${{ github.workspace }}/opt/tcl-tk9/bin:${PATH}
         LD_LIBRARY_PATH=${{ github.workspace }}/opt/tcl-tk9/lib:${LD_LIBRARY_PATH:-}
         ctest 
