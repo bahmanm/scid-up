@@ -1,4 +1,7 @@
-enable_testing()
+include(CTest)
+if(NOT BUILD_TESTING)
+  return()
+endif()
 
 ### gtest
 add_subdirectory(gtest)
