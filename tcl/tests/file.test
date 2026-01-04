@@ -1,0 +1,803 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# `tcl/file.tcl` defines procs in the `::file` namespace but does not create the
+# namespace itself.
+namespace eval ::file {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] file.tcl]
+
+namespace eval ::file_test {
+    variable stubbedCommands {}
+
+    variable tkMessageBoxCalls {}
+    variable notifyCalls {}
+    variable recentFilesCalls {}
+    variable gamelistCalls {}
+    variable gameCalls {}
+    variable treeCalls {}
+    variable progressCalls {}
+    variable baseCalls {}
+    variable fileCalls {}
+}
+
+proc ::file_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::file_test::stubScBase {handlers} {
+    set handlersLiteral [list $handlers]
+
+    set body [string map [list @HANDLERS@ $handlersLiteral] {
+        lappend ::file_test::baseCalls [list sc_base $subcmd {*}$args]
+        set handlers @HANDLERS@
+        if {![dict exists $handlers $subcmd]} {
+            error "sc_base $subcmd not stubbed"
+        }
+        set handler [dict get $handlers $subcmd]
+        return [apply $handler $subcmd $args]
+    }]
+
+    ::file_test::stubCommand sc_base {subcmd args} $body
+}
+
+proc ::file_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::file_test::setup {} {
+    ::file_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::file_test::tkMessageBoxCalls {}
+    set ::file_test::notifyCalls {}
+    set ::file_test::recentFilesCalls {}
+    set ::file_test::gamelistCalls {}
+    set ::file_test::gameCalls {}
+    set ::file_test::treeCalls {}
+    set ::file_test::progressCalls {}
+    set ::file_test::baseCalls {}
+    set ::file_test::fileCalls {}
+
+    if {![info exists ::tr]} { array set ::tr {} }
+    if {![info exists ::tr(OpeningTheDatabase)]} { set ::tr(OpeningTheDatabase) "Opening the database" }
+    if {![info exists ::tr(Cancel)]} { set ::tr(Cancel) "Cancel" }
+
+    # Minimal globals used by file.tcl.
+    set ::clipbase_db 9
+    set ::curr_db 1
+
+    if {![info exists ::initialDir]} { array set ::initialDir {} }
+    set ::initialDir(base) [::scid_test::tempDir]
+
+    # Default: no explicit answer required for message boxes.
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+
+    # Minimal translation helper.
+    ::file_test::stubCommand tr {key} { return $key }
+
+    # Common UI no-ops.
+    ::file_test::stubCommand progressWindow {args} {
+        lappend ::file_test::progressCalls [list progressWindow {*}$args]
+        return
+    }
+    ::file_test::stubCommand closeProgressWindow {args} {
+        lappend ::file_test::progressCalls [list closeProgressWindow {*}$args]
+        return
+    }
+
+    # Notifications.
+    namespace eval ::notify {}
+    ::file_test::stubCommand ::notify::DatabaseChanged {args} {
+        lappend ::file_test::notifyCalls [list DatabaseChanged $args]
+        return
+    }
+    ::file_test::stubCommand ::notify::DatabaseModified {args} {
+        lappend ::file_test::notifyCalls [list DatabaseModified $args]
+        return
+    }
+    ::file_test::stubCommand ::notify::GameChanged {args} {
+        lappend ::file_test::notifyCalls [list GameChanged $args]
+        return
+    }
+
+    # Recent files.
+    namespace eval ::recentFiles {}
+    ::file_test::stubCommand ::recentFiles::add {fname} {
+        lappend ::file_test::recentFilesCalls [list add $fname]
+        return
+    }
+
+    # Game list window.
+    namespace eval ::windows {}
+    namespace eval ::windows::gamelist {}
+    ::file_test::stubCommand ::windows::gamelist::Open {base} {
+        lappend ::file_test::gamelistCalls [list Open $base]
+        return
+    }
+
+    # Game loading.
+    namespace eval ::game {}
+    ::file_test::stubCommand ::game::Load {gamenum {refresh 0}} {
+        lappend ::file_test::gameCalls [list Load $gamenum $refresh]
+        return
+    }
+    ::file_test::stubCommand ::game::ConfirmDiscard {} {
+        return 1
+    }
+
+    # Search.
+    namespace eval ::search {}
+    ::file_test::stubCommand ::search::CloseAll {} {
+        lappend ::file_test::baseCalls [list CloseAll]
+        return
+    }
+
+    # Tree.
+    namespace eval ::tree {}
+    namespace eval ::tree::mask {}
+    ::file_test::stubCommand ::tree::make {base {readonly 0}} {
+        lappend ::file_test::treeCalls [list make $base $readonly]
+        return
+    }
+
+    # Strict message box recording.
+    ::file_test::stubCommand tk_messageBox {args} {
+        lappend ::file_test::tkMessageBoxCalls $args
+        if {[info exists ::scid_test::tk_messageBox_answer]} {
+            return $::scid_test::tk_messageBox_answer
+        }
+        set typeIdx [lsearch -exact $args "-type"]
+        if {$typeIdx != -1 && ($typeIdx + 1) < [llength $args] && [lindex $args [expr {$typeIdx + 1}]] eq "yesno"} {
+            error "tk_messageBox -type yesno called without ::scid_test::tk_messageBox_answer"
+        }
+        return ok
+    }
+
+    # Core bridge stubs.
+    ::file_test::stubScBase [dict create \
+        current {{subcmd args} { return 1 }} \
+        list {{subcmd args} { return {1} }} \
+        switch {{subcmd args} { return [lindex $args 0] }} \
+        inUse {{subcmd args} { return 1 }} \
+        slot {{subcmd args} { return 0 }} \
+        filename {{subcmd args} { return [lindex $args 0] }} \
+        numGames {{subcmd args} { return 1 }} \
+        extra {{subcmd args} { return {} }} \
+        open {{subcmd args} { return 2 }} \
+        create {{subcmd args} { return 2 }} \
+        close {{subcmd args} { return }} \
+        compact {{subcmd args} { return }} \
+        isReadOnly {{subcmd args} { return 0 }} \
+    ]
+
+    ::file_test::stubCommand sc_filter {subcmd args} {
+        switch -- $subcmd {
+            count { return 0 }
+            default { error "sc_filter $subcmd not stubbed" }
+        }
+    }
+
+    # importPgnFile is called by ::file::Open_ for EPD.
+    ::file_test::stubCommand importPgnFile {base fnames} {
+        lappend ::file_test::baseCalls [list importPgnFile $base $fnames]
+        return
+    }
+
+    # Error box.
+    namespace eval ::ERROR {}
+    ::file_test::stubCommand ERROR::MessageBox {args} {
+        lappend ::file_test::baseCalls [list ERROR::MessageBox {*}$args]
+        return
+    }
+}
+
+proc ::file_test::cleanup {} {
+    ::file_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::clipbase_db
+    unset -nocomplain ::curr_db
+    catch {unset ::initialDir}
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+}
+
+# ---- Tests ----
+
+test file-BaseName-si5-roots-name-1.0 {::file::BaseName strips .si5 extension} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            filename { return "/tmp/MyBase.si5" }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    # Act / Assert
+    ::file::BaseName 1
+} -cleanup {
+    ::file_test::cleanup
+} -result {MyBase}
+
+
+test file-BaseName-non-si5-keeps-name-1.0 {::file::BaseName keeps non-.si5 filenames} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            filename { return "/tmp/Other.pgn" }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    # Act / Assert
+    ::file::BaseName 1
+} -cleanup {
+    ::file_test::cleanup
+} -result {Other.pgn}
+
+
+test file-SwitchToBase-success-updates-currdb-1.0 {::file::SwitchToBase sets ::curr_db and emits notifications on success} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 99
+
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "switch"} { error "sc_base $subcmd not stubbed" }
+        return 3
+    }
+
+    # Act
+    set err [::file::SwitchToBase 3]
+
+    # Assert
+    list $err $::curr_db $::file_test::notifyCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {0 3 {{GameChanged {}} {DatabaseChanged {}}}}
+
+
+test file-SwitchToBase-failure-still-notifies-1.0 {::file::SwitchToBase returns 1 and still notifies on switch error} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 99
+
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "switch"} { error "sc_base $subcmd not stubbed" }
+        error "boom"
+    }
+
+    # Act
+    set err [::file::SwitchToBase 3]
+
+    # Assert
+    list $err $::curr_db $::file_test::notifyCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {1 99 {{GameChanged {}} {DatabaseChanged {}}}}
+
+
+test file-OpenOrSwitch-switches-when-open-1.0 {::file::OpenOrSwitch switches when the database is already open} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "slot"} { error "sc_base $subcmd not stubbed" }
+        return 5
+    }
+
+    ::file_test::stubCommand ::file::SwitchToBase {slot {saveHistory 1}} {
+        lappend ::file_test::fileCalls [list SwitchToBase $slot $saveHistory]
+        return 0
+    }
+    ::file_test::stubCommand ::file::Open {fname} {
+        error "Open should not be called"
+    }
+
+    # Act
+    set res [::file::OpenOrSwitch /tmp/base.si5]
+
+    # Assert
+    list $res $::file_test::fileCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {0 {{SwitchToBase 5 1}}}
+
+
+test file-OpenOrSwitch-opens-when-not-open-1.0 {::file::OpenOrSwitch calls Open when not already open} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "slot"} { error "sc_base $subcmd not stubbed" }
+        return 0
+    }
+
+    ::file_test::stubCommand ::file::Open {fname} {
+        lappend ::file_test::fileCalls [list Open $fname]
+        return 7
+    }
+
+    # Act
+    set res [::file::OpenOrSwitch /tmp/base.si5]
+
+    # Assert
+    list $res $::file_test::fileCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {7 {{Open /tmp/base.si5}}}
+
+
+test file-Open_-unsupported-extension-1.0 {::file::Open_ rejects unsupported file formats} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            slot { return 0 }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    set rc [::file::Open_ "/tmp/db.unknown"]
+
+    # Assert
+    list \
+        $rc \
+        [llength $::file_test::tkMessageBoxCalls]
+} -cleanup {
+    ::file_test::cleanup
+} -result {1 1}
+
+
+test file-Open_-already-opened-1.0 {::file::Open_ rejects a database that is already open} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            slot { return 2 }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    set rc [::file::Open_ "/tmp/db.si5"]
+
+    # Assert
+    list $rc [llength $::file_test::tkMessageBoxCalls]
+} -cleanup {
+    ::file_test::cleanup
+} -result {1 1}
+
+
+test file-Open_-si3-delegates-to-upgrade-1.0 {::file::Open_ delegates .si3 to Upgrade} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "slot"} { error "sc_base $subcmd not stubbed" }
+        return 0
+    }
+
+    ::file_test::stubCommand ::file::Upgrade {name} {
+        lappend ::file_test::fileCalls [list Upgrade $name]
+        return 42
+    }
+
+    # Act
+    set rc [::file::Open_ "/tmp/old.si3"]
+
+    # Assert
+    list $rc $::file_test::fileCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {42 {{Upgrade /tmp/old}}}
+
+
+test file-Open_-si5-opens-scid5-1.0 {::file::Open_ opens .si5 using SCID5} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubScBase [dict create \
+        slot {{subcmd args} { return 0 }} \
+        open {{subcmd args} { return 7 }} \
+    ]
+
+    # Act
+    set rc [::file::Open_ "/tmp/new.si5"]
+
+    # Assert
+    list $rc $::file::lastOpened
+} -cleanup {
+    unset -nocomplain ::file::lastOpened
+    ::file_test::cleanup
+} -result {0 7}
+
+test file-Open_-empty-name-returns-2-1.0 {::file::Open_ returns 2 when fName is empty} -setup {
+    ::file_test::setup
+} -body {
+    # Act
+    ::file::Open_ ""
+} -cleanup {
+    ::file_test::cleanup
+} -result {2}
+
+test file-Open_-pgn-opens-pgn-and-tags-type-3-1.0 {::file::Open_ opens .pgn as PGN and marks it as type 3} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubScBase [dict create \
+        slot {{subcmd args} { return 0 }} \
+        open {{subcmd args} { return 7 }} \
+        extra {{subcmd args} { return {} }} \
+    ]
+
+    # Act
+    set rc [::file::Open_ "/tmp/games.pgn"]
+
+    # Assert
+    list \
+        $rc \
+        $::file::lastOpened \
+        [llength $::file_test::progressCalls] \
+        $::file_test::baseCalls
+} -cleanup {
+    unset -nocomplain ::file::lastOpened
+    ::file_test::cleanup
+} -result {0 7 2 {{sc_base slot /tmp/games.pgn} {sc_base open PGN /tmp/games.pgn} {sc_base extra 7 type 3}}}
+
+test file-Open_-epd-creates-memory-imports-and-tags-type-3-1.0 {::file::Open_ opens .epd as MEMORY then imports it and marks it as type 3} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubScBase [dict create \
+        slot {{subcmd args} { return 0 }} \
+        create {{subcmd args} { return 8 }} \
+        extra {{subcmd args} { return {} }} \
+    ]
+
+    # Act
+    set rc [::file::Open_ "/tmp/positions.epd"]
+
+    # Assert
+    list \
+        $rc \
+        $::file::lastOpened \
+        $::file_test::baseCalls
+} -cleanup {
+    unset -nocomplain ::file::lastOpened
+    ::file_test::cleanup
+} -result {0 8 {{sc_base slot /tmp/positions.epd} {sc_base create MEMORY /tmp/positions.epd} {importPgnFile 8 /tmp/positions.epd} {sc_base extra 8 type 3}}}
+
+
+test file-Open-success-loads-autoload-game-1.0 {::file::Open loads autoload game when present and in range} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::initialDir(base) /tmp
+
+    ::file_test::stubCommand ::file::Open_ {fname} {
+        set ::file::lastOpened 2
+        return 0
+    }
+
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            extra { return {autoload 7} }
+            numGames { return 10 }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    set rc [::file::Open "/tmp/base.si5"]
+
+    # Assert
+    list \
+        $rc \
+        $::curr_db \
+        $::file_test::recentFilesCalls \
+        $::file_test::gamelistCalls \
+        $::file_test::notifyCalls \
+        $::file_test::gameCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {0 2 {{add /tmp/base.si5}} {{Open 2}} {{DatabaseChanged {}}} {{Load 7 0}}}
+
+
+test file-Open-success-autoload-out-of-range-notifies-gamechanged-1.0 {::file::Open emits GameChanged when autoload index is out of range} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand ::file::Open_ {fname} {
+        set ::file::lastOpened 2
+        return 0
+    }
+
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            extra { return {autoload 99} }
+            numGames { return 10 }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    ::file::Open "/tmp/base.si5"
+
+    # Assert
+    set ::file_test::notifyCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {{DatabaseChanged {}} {GameChanged {}}}
+
+
+test file-autoLoadBases-load-prunes-failures-1.0 {::file::autoLoadBases.load removes bases that fail to open} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::autoLoadBases {/a.si5 /b.si5 /c.si5}
+
+    ::file_test::stubCommand ::file::Open {fname} {
+        switch -- $fname {
+            /a.si5 { return 0 }
+            /b.si5 { return 1 }
+            /c.si5 { return 0 }
+            default { return 1 }
+        }
+    }
+
+    # Act
+    ::file::autoLoadBases.load
+
+    # Assert
+    set ::autoLoadBases
+} -cleanup {
+    unset -nocomplain ::autoLoadBases
+    ::file_test::cleanup
+} -result {/a.si5 /c.si5}
+
+
+test file-autoLoadBases-find-errors-1.0 {::file::autoLoadBases.find returns -1 when sc_base filename errors} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::autoLoadBases {/a.si5}
+
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "filename"} { error "sc_base $subcmd not stubbed" }
+        error "boom"
+    }
+
+    # Act / Assert
+    ::file::autoLoadBases.find 1
+} -cleanup {
+    unset -nocomplain ::autoLoadBases
+    ::file_test::cleanup
+} -result {-1}
+
+
+test file-autoLoadBases-remove-1.0 {::file::autoLoadBases.remove removes entry and returns its index} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::autoLoadBases {/a.si5 /b.si5}
+
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "filename"} { error "sc_base $subcmd not stubbed" }
+        return /b.si5
+    }
+
+    # Act
+    set idx [::file::autoLoadBases.remove 1]
+
+    # Assert
+    list $idx $::autoLoadBases
+} -cleanup {
+    unset -nocomplain ::autoLoadBases
+    ::file_test::cleanup
+} -result {1 /a.si5}
+
+test file-autoLoadBases-add-1.0 {::file::autoLoadBases.add appends the base filename for the slot} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    unset -nocomplain ::autoLoadBases
+    ::file_test::stubScBase [dict create \
+        filename {{subcmd args} { return /tmp/base.si5 }} \
+    ]
+
+    # Act
+    ::file::autoLoadBases.add 3
+
+    # Assert
+    set ::autoLoadBases
+} -cleanup {
+    unset -nocomplain ::autoLoadBases
+    ::file_test::cleanup
+} -result {/tmp/base.si5}
+
+
+test file-autoLoadBases-save-writes-command-1.0 {::file::autoLoadBases.save writes a set command to the provided channel} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::autoLoadBases {/a.si5 /b.si5}
+    set out [file join [::scid_test::tempDir] autoLoadBases.tcl]
+    set ch [open $out w]
+
+    # Act
+    ::file::autoLoadBases.save $ch
+    close $ch
+
+    # Assert
+    set in [open $out r]
+    set content [read $in]
+    close $in
+
+    expr {[string match "set ::autoLoadBases*" $content] && [string match "*/a.si5*" $content] && [string match "*/b.si5*" $content]}
+} -cleanup {
+    unset -nocomplain ::autoLoadBases
+    ::file_test::cleanup
+} -result {1}
+
+
+test file-openBaseAsTree-success-1.0 {::file::openBaseAsTree reopens the previous base and creates a tree window} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "current"} { error "sc_base $subcmd not stubbed" }
+        return 3
+    }
+
+    ::file_test::stubCommand ::file::Open {fname} {
+        set ::file::lastOpened 7
+        return 0
+    }
+    ::file_test::stubCommand ::file::SwitchToBase {slot {saveHistory 1}} {
+        lappend ::file_test::fileCalls [list SwitchToBase $slot $saveHistory]
+        return 0
+    }
+    ::file_test::stubCommand ::tree::make {base {readonly 0}} {
+        lappend ::file_test::fileCalls [list tree.make $base $readonly]
+        return
+    }
+
+    # Act
+    set rc [::file::openBaseAsTree /tmp/base.si5]
+
+    # Assert
+    list $rc $::file_test::fileCalls
+} -cleanup {
+    unset -nocomplain ::file::lastOpened
+    ::file_test::cleanup
+} -result {0 {{SwitchToBase 3 1} {tree.make 7 1}}}
+
+
+test file-Close-noop-when-not-in-use-1.0 {::file::Close returns immediately when the base is not in use} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return 1 }
+            inUse { return 0 }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    ::file::Close 2
+
+    # Assert
+    set ::file_test::baseCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {}
+
+
+test file-Close-confirm-discard-no-1.0 {::file::Close restores original base when discard is cancelled} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return 2 }
+            inUse { return 1 }
+            switch {
+                lappend ::file_test::baseCalls [list switch [lindex $args 0]]
+                return [lindex $args 0]
+            }
+            close { error "close should not be called" }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+    ::file_test::stubCommand ::game::ConfirmDiscard {} { return 0 }
+
+    # Act
+    ::file::Close 2
+
+    # Assert
+    set ::file_test::baseCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {{switch 2} {switch 2}}
+
+
+test file-Close-confirm-discard-clipbase-modified-1.0 {::file::Close notifies clipbase modification and switches to clipbase when closing current base} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    set ::clipbase_db 9
+
+    ::file_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return 2 }
+            inUse { return 1 }
+            switch {
+                lappend ::file_test::baseCalls [list switch [lindex $args 0]]
+                return [lindex $args 0]
+            }
+            close {
+                lappend ::file_test::baseCalls [list close [lindex $args 0]]
+                return
+            }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    ::file_test::stubCommand ::game::ConfirmDiscard {} { return 2 }
+
+    # Act
+    ::file::Close 2
+
+    # Assert
+    list $::file_test::baseCalls $::file_test::notifyCalls $::curr_db
+} -cleanup {
+    ::file_test::cleanup
+} -result {{{switch 2} CloseAll {close 2} {switch 9}} {{DatabaseModified 9} {GameChanged {}} {DatabaseChanged {}}} 9}
+
+test file-Close-destroys-tree-window-for-closed-base-1.0 {::file::Close destroys .treeWin$base if it exists} -setup {
+    ::file_test::setup
+} -body {
+    # Arrange
+    ::file_test::stubScBase [dict create \
+        current {{subcmd args} { return 3 }} \
+        inUse {{subcmd args} { return 1 }} \
+        switch {{subcmd args} { return [lindex $args 0] }} \
+        close {{subcmd args} { return }} \
+    ]
+    ::file_test::stubCommand ::game::ConfirmDiscard {} { return 1 }
+
+    ::file_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in tests" }
+        expr {[lindex $args 0] eq ".treeWin2"}
+    }
+    ::file_test::stubCommand destroy {w} {
+        lappend ::file_test::baseCalls [list destroy $w]
+        return
+    }
+
+    # Act
+    ::file::Close 2
+
+    # Assert
+    list $::curr_db $::file_test::baseCalls
+} -cleanup {
+    ::file_test::cleanup
+} -result {3 {{sc_base current} {sc_base inUse 2} {sc_base switch 2} {destroy .treeWin2} CloseAll {sc_base close 2} {sc_base switch 3}}}
+
+
+cleanupTests
