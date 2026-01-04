@@ -2,12 +2,24 @@
 # Copyright (C) 2000-2003 Shane Hudson.
 
 
-# findNovelty:
-#   Searches the for first position in the current game not
-#   found in the selected database.
-
 set noveltyOlder 0
 
+################################################################################
+# ::findNovelty
+#   Opens the “Find Novelty” dialog and searches for the first position in the
+#   current game that is not present in the selected database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or updates `.noveltyWin`.
+#   - Updates `noveltyBase` and reads/writes `noveltyOlder`.
+#   - Calls `sc_game novelty` (optionally with `-older`) and shows progress UI.
+#   - Calls `updateBoard -pgn`.
+################################################################################
 proc findNovelty {} {
   global noveltyBase noveltyOlder
   set noveltyBase [sc_base current]
@@ -67,6 +79,20 @@ proc findNovelty {} {
   updateNoveltyWin
 }
 
+################################################################################
+# ::updateNoveltyWin
+#   Refreshes the database-selection controls in the “Find Novelty” dialog.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates widgets under `.noveltyWin` (if it exists).
+#   - Reads base metadata via `sc_base list`, `sc_base filename`, `sc_base numGames`.
+#   - Reads the current game date via `sc_game info date`.
+################################################################################
 proc updateNoveltyWin {} {
   set w .noveltyWin
   if {! [winfo exists $w]} { return }
@@ -85,10 +111,22 @@ proc updateNoveltyWin {} {
 
 set merge(ply) 40
 
-# mergeGame:
-#   Produces a dialog for the user to merge a selected game into
-#   the current game.
-#
+################################################################################
+# ::mergeGame
+#   Opens a preview dialog to merge a selected game into the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - base (int): Database slot containing the game to preview.
+#   - gnum (int): Game number within the database.
+# Returns:
+#   - None.
+# Side effects:
+#   - Runs `sc_game merge` in a temporary copy context to validate the merge.
+#   - Creates `.mergeDialog` and initialises `merge(base)` and `merge(gnum)`.
+#   - Uses the existing `merge(ply)` value (initialised at file scope).
+#   - On confirmation, merges into the current game and calls `updateBoard -pgn`.
+################################################################################
 proc mergeGame {base gnum} {
   global merge
 
@@ -145,6 +183,22 @@ proc mergeGame {base gnum} {
   updateMergeGame $w [expr {$merge(ply) / 2}]
 }
 
+################################################################################
+# ::updateMergeGame
+#   Updates the merge preview after selecting a move limit.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w (string, optional): Merge dialog path; defaults to the empty string.
+#   - n_moves (int, optional): Move limit in full moves (e.g. 20); defaults to
+#     the empty string.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `merge(ply)` and merge dialog button states.
+#   - Runs `sc_game merge` in a temporary copy context and rewrites the preview
+#     text widget.
+################################################################################
 proc updateMergeGame {{w} {n_moves}} {
   global merge
   if {! [winfo exists $w]} { return }
@@ -176,10 +230,21 @@ proc updateMergeGame {{w} {n_moves}} {
   $w.f.text configure -state disabled
 }
 
-# setExportText:
-#   Allows the user to modify the text printed at the start and end of a
-#   file for a particular export format
-#
+################################################################################
+# ::setExportText
+#   Opens a dialog to edit the text written at the start and end of exported
+#   files for a given format.
+# Visibility:
+#   Public.
+# Inputs:
+#   - exportType (string): Export format; supported values are "PGN", "HTML",
+#     and "LaTeX".
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.setExportText$exportType`.
+#   - Updates `exportStartFile($exportType)` and `exportEndFile($exportType)`.
+################################################################################
 proc setExportText {exportType} {
   global exportStartFile exportEndFile
 
@@ -304,9 +369,19 @@ image create photo htmldiag1 -data {
   LDbXxfnVsYQD+Dn2PMK8M1GvihXcYyP/2MUIHjJF40veGy8hyjKecCYyKSUYhAAAOw==
 }
 
-# exportOptions:
-#   Prompts the user to select exporting options.
-#
+################################################################################
+# ::exportOptions
+#   Prompts for export options for the given export format.
+# Visibility:
+#   Private.
+# Inputs:
+#   - exportType (string): Export format (e.g. "PGN", "HTML", "LaTeX").
+# Returns:
+#   - (int): 1 if the user confirms; 0 if the user cancels.
+# Side effects:
+#   - Creates `.exportFlagsWin` and updates `exportFlags(...)`.
+#   - Uses `grab` and blocks on `tkwait variable exportFlags(ok)`.
+################################################################################
 proc exportOptions {exportType} {
   global exportFlags
 
@@ -376,9 +451,27 @@ proc exportOptions {exportType} {
   return $exportFlags(ok)
 }
 
-# exportGames:
-#   exports current game or all filtered games to a new PGN, LaTeX or Html file.
-#
+################################################################################
+# ::exportGames
+#   Exports games to PGN, HTML, or LaTeX.
+# Visibility:
+#   Public.
+# Inputs:
+#   - selection (string): Selection passed to `sc_base export` (e.g. "game" or
+#     "filter").
+#   - exportType (string): Export format ("PGN", "HTML", or "LaTeX").
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a warning if the filter is empty.
+#   - Prompts for options.
+#   - Prompts for a destination file path:
+#       - When `exportFlags(append)` is true, uses `tk_getOpenFile` and appends.
+#       - Otherwise uses `tk_getSaveFile` to create a new file.
+#   - Calls `sc_info html` to configure HTML diagram settings.
+#   - Calls `sc_base export` with `-append $exportFlags(append)` and shows a
+#     progress window while exporting.
+################################################################################
 proc exportGames {selection exportType} {
   global ::pgn::moveNumberSpaces exportStartFile exportEndFile exportFlags
   if {$selection == "filter" && [sc_filter count] == 0} {
@@ -470,10 +563,25 @@ set temp 0
 array set nameMatches {}
 set nameMatchCount 0
 
-# updateMatchList:
-#    Called from gameSave to update the matching name list as the user
-#    types a player/site/event/round name.
-#
+################################################################################
+# ::updateMatchList
+#   Updates the “matching names” list widget as the user edits a name field.
+# Visibility:
+#   Private.
+# Inputs:
+#   - tw (string): Text widget path to populate.
+#   - nametype (string): Name type for `sc_name match` (e.g. player/site/event/
+#     round). If empty, falls back to `editNameType`.
+#   - maxMatches (int): Maximum number of matches to request.
+#   - name (string): Name of the variable holding the current query string.
+#   - el (string): Trace callback argument (unused).
+#   - op (string): Trace callback argument (unused).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `nameMatches(*)` and `nameMatchCount`.
+#   - Calls `sc_name match` and repopulates the text widget.
+################################################################################
 proc updateMatchList { tw nametype maxMatches name el op } {
   global nameMatches nameMatchCount
   global $name editNameType
@@ -497,6 +605,18 @@ proc updateMatchList { tw nametype maxMatches name el op } {
   $tw configure -state disabled
 }
 
+################################################################################
+# ::clearMatchList
+#   Clears the “matching names” list widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - tw (string): Text widget path to clear.
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets `nameMatchCount` and clears the widget content.
+################################################################################
 proc clearMatchList { tw } {
   global nameMatches nameMatchCount
   set nameMatchCount 0
@@ -527,6 +647,26 @@ trace add variable editName write { updateMatchList .nedit.g.list "" 9 }
 trace add variable editDate write ::utils::validate::Date
 trace add variable editDateNew write ::utils::validate::Date
 
+################################################################################
+# ::editNameNewProc
+#   Enables/disables the “Replace” button in the Name Editor and refreshes the
+#   match list for the replacement value.
+# Visibility:
+#   Private.
+# Inputs:
+#   - tw (string): Text widget path to populate.
+#   - nametype (string): Name type passed through to `updateMatchList` (which
+#     calls `sc_name match`); may be empty.
+#   - maxMatches (int): Maximum number of matches to request.
+#   - name (string): Name of the variable holding the current query string.
+#   - el (string): Trace callback argument.
+#   - op (string): Trace callback argument.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reconfigures `.nedit.buttons.replace` (if `.nedit` exists).
+#   - Delegates to `updateMatchList` (errors are suppressed).
+################################################################################
 proc editNameNewProc { tw nametype maxMatches name el op } {
   global editNameNew
   if {! [winfo exists .nedit]} { return }
@@ -543,15 +683,58 @@ trace add variable editNameNew write { editNameNewProc .nedit.g.list "" 9 }
 
 set nameEditorWin 0
 
+################################################################################
+# ::makeNameEditor
+#   Ensures the Name Editor window is open.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.nedit` by calling `nameEditor` if it does not already exist.
+################################################################################
 proc makeNameEditor {} {
   if {! [winfo exists .nedit]} { nameEditor }
 }
 
+################################################################################
+# ::setNameEditorType
+#   Selects the active type in the Name Editor UI.
+# Visibility:
+#   Public.
+# Inputs:
+#   - type (string): Type button name (e.g. "player", "event", "site", "round",
+#     "rating", "date", "edate").
+# Returns:
+#   - None.
+# Side effects:
+#   - Invokes the relevant `.nedit.typeButtons.$type` radiobutton (if `.nedit`
+#     exists).
+################################################################################
 proc setNameEditorType {type} {
   if {! [winfo exists .nedit]} { return }
   catch {.nedit.typeButtons.$type invoke}
 }
 
+################################################################################
+# ::nameEditor
+#   Opens or closes the Name Editor window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates or destroys `.nedit`.
+#   - Builds the Name Editor UI, including match list wiring and key bindings.
+#   - Calls `sc_info ratings` and `sc_name edit` (when the Replace button is
+#     activated).
+#   - On replace, reloads tags and refreshes the UI via `updateBoard -pgn` and
+#     `::windows::gamelist::Refresh`.
+################################################################################
 proc nameEditor {} {
   global editName editNameType editNameNew nameEditorWin editNameSelect
   global editNameRating editDate editDateNew
@@ -710,9 +893,20 @@ proc nameEditor {} {
 }
 
 
-# addGameSaveEntry:
-#   used in gameSave for setting up the simpler labels and entry boxes.
-#
+################################################################################
+# ::addGameSaveEntry
+#   Adds a label and entry widget row to the Game Save dialog.
+# Visibility:
+#   Private.
+# Inputs:
+#   - name (string): Variable name for the entry's `-textvariable`.
+#   - row (int): Row index in the `.save.g` grid.
+#   - textname (string): Variable name holding the label text.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and grids widgets under `.save.g`.
+################################################################################
 proc addGameSaveEntry { name row textname } {
   ttk::label .save.g.label$name -textvar $textname
   ttk::entry .save.g.entry$name -width 30 -textvariable $name
@@ -720,11 +914,23 @@ proc addGameSaveEntry { name row textname } {
   grid .save.g.entry$name -row $row -column 1 -columnspan 7 -sticky w
 }
 
-# gameSave:
-#   The game save dialog. Used for adding and replacing games. If the
-#   value gnum is zero, it is to add a new game; otherwise it is to
-#   replace game number gnum.
-#
+################################################################################
+# ::gameSave
+#   Opens the Game Save dialog to add a new game or replace an existing one.
+# Visibility:
+#   Public.
+# Inputs:
+#   - gnum (int): 0 to add a new game; otherwise the game number to replace.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.save` and binds widgets to global tag variables.
+#   - Reads game tags via `sc_game tag get`.
+#   - Clears the match list via `clearMatchList`.
+#   - The live “match list” behaviour is driven by file-scope variable traces
+#     that invoke `updateMatchList` as the user types.
+#   - On save, delegates to `gsave` and may close the dialog.
+################################################################################
 proc gameSave { gnum } {
   global date year month day white black resultVal event site round
   global whiteElo blackElo whiteRType blackRType eco extraTags gsaveNum
@@ -960,10 +1166,22 @@ proc gameSave { gnum } {
   if {$gnum > 0} { focus .save.buttons.save }
 }
 
-# gsave:
-#    Called by gameSave when the user presses the "Save" button
-#    to save the game. Attempts to save and reports the result.
-#
+################################################################################
+# ::gsave
+#   Persists tags from the Game Save dialog into the current database.
+# Visibility:
+#   Private.
+# Inputs:
+#   - gnum (int): 0 to add a new game; otherwise the game number to replace.
+# Returns:
+#   - (int): 1 on success; 0 on failure.
+# Side effects:
+#   - Writes game tags via `sc_game tags set`.
+#   - Saves the game via `sc_game save`.
+#   - Emits notifications via `::notify::DatabaseModified` and
+#     `::notify::GameChanged`.
+#   - When adding a new game, may switch database and reload the game.
+################################################################################
 proc gsave { gnum } {
   global date year month day white black resultVal event site round
   global whiteElo blackElo whiteRType blackRType eco extraTags
@@ -992,11 +1210,33 @@ proc gsave { gnum } {
   return 1
 }
 
-# gameAdd:
-#   Calls gameSave with a game number of zero.
-#
+################################################################################
+# ::gameAdd
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `gameSave 0`.
+################################################################################
 proc gameAdd {} { gameSave 0 }
 
+################################################################################
+# ::gameAddToClipbase
+#   Saves the current game to the clipbase database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_game save 0 $::clipbase_db`.
+#   - On failure, shows `ERROR::MessageBox`.
+#   - Notifies `::notify::DatabaseModified` for the clipbase.
+################################################################################
 proc gameAddToClipbase {} {
   if {[catch {sc_game save 0 $::clipbase_db}]} {
     ERROR::MessageBox
@@ -1004,15 +1244,33 @@ proc gameAddToClipbase {} {
   ::notify::DatabaseModified $::clipbase_db
 }
 
-# gameReplace:
-#   Calls gameSave with the current game number, which should be nonzero.
-#
+################################################################################
+# ::gameReplace
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `gameSave [sc_game number]`.
+################################################################################
 proc gameReplace {} { gameSave [sc_game number] }
 
 
-# helpAbout:
-#    Displays information about Scid.
-#
+################################################################################
+# ::helpAbout
+#   Displays information about Scid.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Plays a move sound via `::utils::sound::PlaySound`.
+#   - Shows a `tk_messageBox` listing version and loaded packages.
+################################################################################
 proc helpAbout {} {
   ::utils::sound::PlaySound sound_move
   set str {}
@@ -1038,6 +1296,22 @@ proc helpAbout {} {
 }
 
 
+################################################################################
+# ::MouseWheelRedirector
+#   Redirects mouse wheel events to the widget currently under the pointer.
+# Visibility:
+#   Private.
+# Inputs:
+#   - W (string): Origin widget path (from `%W`).
+#   - X (int): Root X coordinate (from `%X`).
+#   - Y (int): Root Y coordinate (from `%Y`).
+#   - D (int): Wheel delta (from `%D`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Generates a `<<MWheel>>` virtual event targeted at the widget under the
+#     pointer (or the current grab window).
+################################################################################
 proc MouseWheelRedirector {W X Y D} {
     # Generate an MWheel virtual event to the window that has the mouse pointer
     set w [winfo containing -displayof $W $X $Y]
@@ -1049,6 +1323,22 @@ proc MouseWheelRedirector {W X Y D} {
     event generate $w <<MWheel>> -data $D -rootx $X -rooty $Y
 }
 
+################################################################################
+# ::ShiftMouseWheelRedirector
+#   Redirects Shift+mouse wheel events to the widget currently under the pointer.
+# Visibility:
+#   Private.
+# Inputs:
+#   - W (string): Origin widget path (from `%W`).
+#   - X (int): Root X coordinate (from `%X`).
+#   - Y (int): Root Y coordinate (from `%Y`).
+#   - D (int): Wheel delta (from `%D`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Generates a `<<Shift-MWheel>>` virtual event targeted at the widget under
+#     the pointer (or the current grab window).
+################################################################################
 proc ShiftMouseWheelRedirector {W X Y D} {
     set w [winfo containing -displayof $W $X $Y]
     set grabW [grab current $w]
@@ -1104,6 +1394,20 @@ foreach class {TCombobox TSpinbox TEntry TLabel TButton TCheckbutton TRadiobutto
 set loadAtStart(spell) 1
 set loadAtStart(eco) 1
 
+################################################################################
+# ::getCommandLineOptions
+#   Parses recognised command-line options and updates start-up flags.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Consumes arguments from `argv` / `argc`.
+#   - Updates `loadAtStart(spell)` and `loadAtStart(eco)`.
+#   - Emits status lines via `::splash::add`.
+################################################################################
 proc getCommandLineOptions {} {
   global argc argv windowsOS loadAtStart
 
@@ -1208,9 +1512,18 @@ if {$loadAtStart(spell)} {
 after 1 {
   ::file::autoLoadBases.load
 
-  # fullname:
-  # Given a file name, returns its absolute name.
-  #
+    ################################################################################
+  # ::fullname
+  #   Returns an absolute (normalised) path for a file name.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - fname (string): A relative or absolute path.
+  # Returns:
+  #   - (string): An absolute path when resolvable; otherwise the input string.
+  # Side effects:
+  #   - Temporarily changes the process working directory.
+  ################################################################################
   proc fullname {fname} {
     if {[file pathtype $fname] == "absolute"} { return $fname }
     set old [pwd]
