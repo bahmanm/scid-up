@@ -13,15 +13,36 @@ namespace eval enginecfg {
     variable PROTOCOL_UCI_NET 2
 }
 
-# Return a list containing the engine's names sorted by last use.
+################################################################################
+# ::enginecfg::names
+#   Returns engine names sorted by last-use timestamp.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - (list<string>): Engine names, ordered by the `time` field descending.
+# Side effects:
+#   - Reads `::engines(list)`.
+################################################################################
 proc ::enginecfg::names {} {
     return [lmap elem [lsort -integer -decreasing -index 5 $::engines(list)] {
         lindex $elem 0
     }]
 }
 
-# Return the engine's config.
-# If there is no config for the requested engine's name, returns "".
+################################################################################
+# ::enginecfg::get
+#   Returns the stored configuration for an engine.
+# Visibility:
+#   Public.
+# Inputs:
+#   - name (string): Engine name (as stored in `::engines(list)`).
+# Returns:
+#   - (list|""): The engine configuration list, or "" if not found.
+# Side effects:
+#   - Normalises legacy metadata stored in element 6 when present.
+################################################################################
 proc ::enginecfg::get {name} {
     set res [lsearch -exact -inline -index 0 $::engines(list) $name]
     if {$res ne ""} {
@@ -34,8 +55,20 @@ proc ::enginecfg::get {name} {
     return $res
 }
 
-# Change the name of an engine and write the "Engine list" file.
-# Returns the new name on success or the old name on error.
+################################################################################
+# ::enginecfg::rename
+#   Renames an engine entry and persists the updated engine list.
+# Visibility:
+#   Public.
+# Inputs:
+#   - oldname (string): Existing engine name.
+#   - newname (string): Desired new name.
+# Returns:
+#   - (string): The new unique name on success; otherwise `oldname`.
+# Side effects:
+#   - Updates `::engines(list)`.
+#   - Writes `[scidConfigFile engines]` via `::enginecfg::write`.
+################################################################################
 proc ::enginecfg::rename {oldname newname} {
     set idx [lsearch -exact -index 0 $::engines(list) $oldname]
     if {$idx < 0 || $newname eq $oldname || $newname eq ""} {
@@ -47,8 +80,18 @@ proc ::enginecfg::rename {oldname newname} {
     return $newname
 }
 
-# Append a number, or increments it, to the name of an engine to make it unique.
-# Return the unique name.
+################################################################################
+# ::enginecfg::uniquename
+#   Returns a unique engine name by appending/incrementing a numeric suffix.
+# Visibility:
+#   Private.
+# Inputs:
+#   - name (string): Desired engine name.
+# Returns:
+#   - (string): A name not currently present in `::engines(list)`.
+# Side effects:
+#   - Reads `::engines(list)`.
+################################################################################
 proc ::enginecfg::uniquename {name} {
     set copyn 0
     while {[lsearch -exact -index 0 $::engines(list) $name] >= 0} {
@@ -58,17 +101,39 @@ proc ::enginecfg::uniquename {name} {
     return $name
 }
 
-# Add an engine, possibly changing the name to make it unique,
-# and save the "Engine list" file.
-# Return the name of the new engine or "".
+################################################################################
+# ::enginecfg::add
+#   Adds a new engine entry (ensuring a unique name) and persists it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - enginecfg (list): Engine configuration list.
+# Returns:
+#   - (string|""): The stored engine name on success; otherwise "".
+# Side effects:
+#   - Appends to `::engines(list)`.
+#   - Writes `[scidConfigFile engines]` via `::enginecfg::save`.
+################################################################################
 proc ::enginecfg::add {enginecfg} {
     lset enginecfg 0 [::enginecfg::uniquename [lindex $enginecfg 0]]
     lappend ::engines(list) $enginecfg
     return [::enginecfg::save $enginecfg true]
 }
 
-# Remove an engine from the "Engine list" file.
-# Returns true if the engine was removed
+################################################################################
+# ::enginecfg::remove
+#   Removes an engine entry after user confirmation and persists the update.
+# Visibility:
+#   Public.
+# Inputs:
+#   - name (string): Engine name to remove.
+# Returns:
+#   - (bool): true if removed; otherwise false.
+# Side effects:
+#   - Shows a confirmation `tk_messageBox`.
+#   - Updates `::engines(list)`.
+#   - Writes `[scidConfigFile engines]` via `::enginecfg::write`.
+################################################################################
 proc ::enginecfg::remove {name} {
     set idx [lsearch -exact -index 0 $::engines(list) $name]
     if {$idx < 0} { return false }
@@ -85,9 +150,22 @@ proc ::enginecfg::remove {name} {
     return true
 }
 
-# Search a previous configuration with the same name and replace it.
-# Write the "Engine list" file if it is necessary or force_write is true.
-# Return the engine's name or "" (and does nothing) if the engine do not exists.
+################################################################################
+# ::enginecfg::save
+#   Replaces an existing engine entry and persists changes when necessary.
+# Visibility:
+#   Public.
+# Inputs:
+#   - enginecfg (list): Engine configuration list (must already exist by name).
+#   - force_write (bool, optional): When true, always write the engines file.
+# Returns:
+#   - (string|""): The engine name on success; otherwise "" if not found.
+# Side effects:
+#   - Normalises UCI option storage by persisting only non-default, non-internal
+#     option values.
+#   - Updates `::engines(list)`.
+#   - Writes `[scidConfigFile engines]` via `::enginecfg::write`.
+################################################################################
 proc ::enginecfg::save {enginecfg {force_write false}} {
     lassign $enginecfg enginename
     set idx [lsearch -exact -index 0 $::engines(list) $enginename]
@@ -106,8 +184,20 @@ proc ::enginecfg::save {enginecfg {force_write false}} {
     return $enginename
 }
 
-# Writes the "Engine list" file.
-# Throw an exception on error.
+################################################################################
+# ::enginecfg::write
+#   Writes the analysis engines list file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes `[scidConfigFile engines]`.
+# Notes:
+#   - Throws on I/O errors.
+################################################################################
 proc ::enginecfg::write {} {
     set enginesFile [scidConfigFile engines]
     set f [open $enginesFile w]
@@ -131,9 +221,20 @@ proc ::enginecfg::write {} {
     close $f
 }
 
-# Pop up a dialog box for the user to select the cmd file referring to a local engine
-# and adds the engine to the list of the available ones.
-# Return the name of the new engine or "".
+################################################################################
+# ::enginecfg::dlgNewLocal
+#   Prompts the user to select a local engine executable and adds it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - (string|""): New engine name on success; otherwise "".
+# Side effects:
+#   - Opens `tk_getOpenFile`.
+#   - Updates `::scidEnginesDir`.
+#   - Appends to `::engines(list)` via `::enginecfg::add`.
+################################################################################
 proc ::enginecfg::dlgNewLocal {} {
     if {$::windowsOS} {
         lappend ftype [list "Executable" [list ".exe" ".bat"]]
@@ -145,9 +246,19 @@ proc ::enginecfg::dlgNewLocal {} {
     return [::enginecfg::add [list $fName $fName {} {} {} 0 {} $::enginecfg::PROTOCOL_UCI_LOCAL {}]]
 }
 
-# Pop up a dialog box for the user to enter the url of a remote engine
-# and adds the engine to the list of the available ones.
-# Return the name of the new engine or "".
+################################################################################
+# ::enginecfg::dlgNewRemote
+#   Prompts for a remote engine address (hostname:port) and adds it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - (string|""): New engine name on success; otherwise "".
+# Side effects:
+#   - Creates `.engineDlgNewRemote`.
+#   - Appends to `::engines(list)` via `::enginecfg::add`.
+################################################################################
 proc ::enginecfg::dlgNewRemote {} {
     set ::enginecfg_dlgresult ""
     set w .engineDlgNewRemote
@@ -168,11 +279,21 @@ proc ::enginecfg::dlgNewRemote {} {
 
 # TODO: no references to ::enginewin should exists in this file
 
-# Creates buttons used for selecting an engine and managing configured engines:
-# Adds a new local or remote engine; reloads, clones, or deletes an existing engine.
-# fn_connect: Callback function invoked upon engine selection.
-# In response to the virtual event <<UpdateEngineName>>, it updates the name of the
-# selected engine and the state of the reload, clone, and delete buttons.
+################################################################################
+# ::enginecfg::createConfigButtons
+#   Creates engine-selection and engine-management buttons.
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - w (string): Parent widget path.
+#   - fn_connect (command): Callback invoked on engine selection.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates widgets under `$w`.
+#   - Binds `<<ComboboxSelected>>` and a custom `<<UpdateEngineName>>` event.
+################################################################################
 proc ::enginecfg::createConfigButtons {id w fn_connect} {
     ttk::combobox $w.engine -width 30 -state readonly -postcommand [list apply {{w} {
         $w.engine configure -values [::enginecfg::names ]
@@ -229,7 +350,20 @@ proc ::enginecfg::createConfigButtons {id w fn_connect} {
     }} $w]
 }
 
-# Creates the frame with the widgets necessary to change an engine's configuration.
+################################################################################
+# ::enginecfg::createConfigFrame
+#   Creates the frame content used to display engine configuration messages.
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - configFrame (string): Parent frame path.
+#   - msg (string): Initial message text.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a disabled text widget under `$configFrame`.
+################################################################################
 proc ::enginecfg::createConfigFrame {id configFrame msg} {
     ttk_text $configFrame.text -wrap none -padx 4
     autoscrollBars both $configFrame $configFrame.text
@@ -237,9 +371,21 @@ proc ::enginecfg::createConfigFrame {id configFrame msg} {
     $configFrame.text configure -state disabled
 }
 
-# Update or recreate the config and option widgets
-# If it is a new engine added with auto-config, return the new name
-# otherwise return an empty "" string
+################################################################################
+# ::enginecfg::updateConfigFrame
+#   Updates (and if necessary recreates) the engine configuration and option UI.
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - configFrame (string): Frame containing the configuration widgets.
+#   - msgInfoConfig (list|""): InfoConfig payload `{protocol netclients options}`.
+# Returns:
+#   - (string): A new engine name if auto-config triggers a rename; otherwise "".
+# Side effects:
+#   - Updates `::enginecfg::engConfig_$id` and widgets under `$configFrame`.
+#   - May rename the engine and persist the engine list.
+################################################################################
 proc ::enginecfg::updateConfigFrame {id configFrame msgInfoConfig} {
     upvar ::enginecfg::engConfig_$id engConfig_
     set w $configFrame.text
@@ -285,8 +431,20 @@ proc ::enginecfg::updateConfigFrame {id configFrame msgInfoConfig} {
     return $renamed
 }
 
-# If enabled will automatically write the "Engine list" file when
-# the configFrame is destroyed.
+################################################################################
+# ::enginecfg::autoSaveConfig
+#   Enables or disables automatic persistence on configuration UI destruction.
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - configFrame (string): Frame containing the configuration widgets.
+#   - autosave (bool, optional): When true, saves on widget destroy.
+# Returns:
+#   - None.
+# Side effects:
+#   - Binds/unbinds a `<Destroy>` handler on `$configFrame.text`.
+################################################################################
 proc ::enginecfg::autoSaveConfig {id configFrame {autosave false}} {
     if {$autosave} {
         bind $configFrame.text <Destroy> [list apply {{id} {
@@ -297,8 +455,21 @@ proc ::enginecfg::autoSaveConfig {id configFrame {autosave false}} {
     }
 }
 
-# Find an option by name (case insensitive).
-# Return the index of options or throw an exception if the option do not exists.
+################################################################################
+# ::enginecfg::findOption
+#   Finds an engine option by name (case-insensitive).
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - name (string): Option name to find.
+# Returns:
+#   - (int): Index within the options list.
+# Side effects:
+#   - Reads `::enginecfg::engConfig_$id`.
+# Notes:
+#   - Throws if the option does not exist.
+################################################################################
 proc ::enginecfg::findOption {id name} {
     set options [lindex [set ::enginecfg::engConfig_$id] 8]
     for {set idx 0} {$idx < [llength $options]} {incr idx} {
@@ -310,9 +481,22 @@ proc ::enginecfg::findOption {id name} {
     error "wrong option"
 }
 
-# Sends a SetOptions message to the engine if an option's value is different.
-# Return true if a message was sent to the engine.
-# Throw an exception in case of error.
+################################################################################
+# ::enginecfg::setOption
+#   Validates and submits a single option value to the engine (if changed).
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - idx (int): Option index within `engConfig_$id`.
+#   - value (string): New value to submit.
+# Returns:
+#   - (bool): true if a SetOptions message was sent; otherwise false.
+# Side effects:
+#   - Calls `::engine::send $id SetOptions ...`.
+# Notes:
+#   - Throws on validation errors.
+################################################################################
 proc ::enginecfg::setOption {id idx value} {
     lassign [lindex [set ::enginecfg::engConfig_$id] 8 $idx] \
         name oldValue type default min max
@@ -336,10 +520,21 @@ proc ::enginecfg::setOption {id idx value} {
     return true
 }
 
-# Read an option's value from a widget and if it has changed sends a SetOptions
-# message to the engine.
-# Return true if a message was sent to the engine.
-# On error the widget style is set to Error.WidgetType
+################################################################################
+# ::enginecfg::setOptionFromWidget
+#   Reads an option value from a widget and submits it to the engine (if changed).
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - idx (int): Option index.
+#   - widget (string): Widget path supporting `get` and `configure`.
+# Returns:
+#   - (bool): true if a SetOptions message was sent; otherwise false.
+# Side effects:
+#   - Calls `::enginecfg::setOption`.
+#   - On validation error, sets widget style to `Error.<WidgetClass>`.
+################################################################################
 proc ::enginecfg::setOptionFromWidget {id idx widget} {
     set value [$widget get]
     if {[catch {::enginecfg::setOption $id $idx $value} res]} {
@@ -350,8 +545,22 @@ proc ::enginecfg::setOptionFromWidget {id idx widget} {
     return $res
 }
 
-# Creates the widgets for engine configuration, like the engine path, command
-# line parameters, UCI protocol, etc...
+################################################################################
+# ::enginecfg::createConfigWidgets
+#   Creates widgets to edit an engine's core configuration (command, args, dir,
+#   notation, layout, priority, and network settings).
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - configFrame (string): Frame containing the configuration widgets.
+#   - engCfg (list): Engine configuration list.
+# Returns:
+#   - (bool): true if widgets were created; false if the engine is not open.
+# Side effects:
+#   - Creates widgets under `$configFrame.text`.
+#   - Wires UI callbacks that can reconnect engines and change display layout.
+################################################################################
 proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     lassign $engCfg name cmd args wdir elo time url protocolFlag
     lassign $url scoreside notation pvwrap debugframe priority netport
@@ -494,7 +703,20 @@ proc ::enginecfg::createConfigWidgets {id configFrame engCfg} {
     return true
 }
 
-# Creates the widgets used to show/change the engine's specific options
+################################################################################
+# ::enginecfg::createOptionWidgets
+#   Creates widgets to show and edit engine-specific options.
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - configFrame (string): Frame containing the configuration widgets.
+#   - options (list): Option descriptors received from the engine.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates option widgets under `$configFrame.text`.
+################################################################################
 proc ::enginecfg::createOptionWidgets {id configFrame options} {
     set w $configFrame.text
 
@@ -560,7 +782,21 @@ proc ::enginecfg::createOptionWidgets {id configFrame options} {
     }
 }
 
-# Update the widgets with the engine's specific options
+################################################################################
+# ::enginecfg::updateOptionWidgets
+#   Updates option widgets to reflect the latest option values.
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - configFrame (string): Frame containing the option widgets.
+#   - options (list): Current option descriptors.
+#   - oldOptions (list): Previous option descriptors (may be "").
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates widget values and visual highlighting under `$configFrame.text`.
+################################################################################
 proc ::enginecfg::updateOptionWidgets {id configFrame options oldOptions} {
     set w $configFrame.text
 
@@ -608,6 +844,19 @@ proc ::enginecfg::updateOptionWidgets {id configFrame options oldOptions} {
     }
 }
 
+################################################################################
+# ::enginecfg::updateNetClients
+#   Updates the “network connections” text block in the configuration view.
+# Visibility:
+#   Private.
+# Inputs:
+#   - configFrame (string): Frame containing the configuration widgets.
+#   - netclients (list): List of remote client descriptors.
+# Returns:
+#   - None.
+# Side effects:
+#   - Replaces content tagged `netclients_tag` in `$configFrame.text`.
+################################################################################
 proc ::enginecfg::updateNetClients {configFrame netclients} {
     set w $configFrame.text
 
@@ -621,8 +870,23 @@ proc ::enginecfg::updateNetClients {configFrame netclients} {
     $w replace netclients_tag.first netclients_tag.last $strclients netclients_tag
 }
 
-# Checks whether the specified connection parameter has been changed, and
-# if necessary reconnects the current engine using the new parameters.
+################################################################################
+# ::enginecfg::onSubmitParam
+#   Applies a core connection parameter change and reconnects the engine.
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - connectParam (string): One of "cmd", "args", or "wdir".
+#   - newValue (string): New value (or "" to prompt via dialog when opendlg != 0).
+#   - opendlg (int, optional): 0 for no dialog; 1 to open a file chooser; 2 to
+#     open a directory chooser.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::enginecfg::engConfig_$id` and reconnects via
+#     `::enginewin::connectEngine`.
+################################################################################
 proc ::enginecfg::onSubmitParam {id connectParam newValue {opendlg 0}} {
     switch $connectParam {
         "cmd"      { set configIdx 1 }
@@ -645,7 +909,19 @@ proc ::enginecfg::onSubmitParam {id connectParam newValue {opendlg 0}} {
     }
 }
 
-# Reset all the engine's options to their default values.
+################################################################################
+# ::enginecfg::onSubmitReset
+#   Resets all non-internal options to their default values.
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - w (string): Unused widget argument (kept for callback signature).
+# Returns:
+#   - None.
+# Side effects:
+#   - Sends a SetOptions message via `::engine::send`.
+################################################################################
 proc ::enginecfg::onSubmitReset {id w} {
     upvar ::enginecfg::engConfig_$id engConfig_
     set options {}
@@ -660,11 +936,23 @@ proc ::enginecfg::onSubmitReset {id w} {
     }
 }
 
-# Invoked to send to the engine a button option that have no value.
-# It also used for option of type "file" and type "path": a dialog is showed
-# to select the path (a directory path is appended to the previous value).
-# Also, for the options of type "file" or "path", the related widget that
-# display the value is updated when the engine replies with InfoConfig.
+################################################################################
+# ::enginecfg::onSubmitButton
+#   Submits a button/file/path option to the engine.
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - idx (int): Option index.
+# Returns:
+#   - None.
+# Side effects:
+#   - For type "file"/"path", prompts via `tk_getOpenFile`/`tk_chooseDirectory`.
+#   - Sends a SetOptions message via `::engine::send`.
+# Notes:
+#   - For file/path options, the displayed value is updated on the next
+#     InfoConfig refresh.
+################################################################################
 proc ::enginecfg::onSubmitButton {id idx} {
     lassign [lindex [set ::enginecfg::engConfig_$id] 8 $idx] \
         name oldValue type default min max
@@ -685,9 +973,21 @@ proc ::enginecfg::onSubmitButton {id idx} {
     ::engine::send $id SetOptions [list [list $name $value]]
 }
 
-# Invoke ::engine::netserver to start/stop listening to remote connection.
-# If successful it also updates engConfig_$id
-# Return the listening port ("" is the engine is not accepting remote connection).
+################################################################################
+# ::enginecfg::setupNetd
+#   Starts/stops the engine network server and persists the configured port.
+# Visibility:
+#   Public.
+# Inputs:
+#   - id (int): Engine slot.
+#   - netport (string): "" to disable; a port number; or "auto_<seed>" to enable
+#     auto-port selection.
+# Returns:
+#   - (string|int): The listening port; "" when remote connections are disabled.
+# Side effects:
+#   - Calls `::engine::netserver`.
+#   - Updates `::enginecfg::engConfig_$id` (netport metadata).
+################################################################################
 proc ::enginecfg::setupNetd {id netport} {
     set new_value ""
     if {[string match "auto_*" $netport]} {
@@ -700,8 +1000,20 @@ proc ::enginecfg::setupNetd {id netport} {
     return $port
 }
 
-# Invoked when the value of one of the netd widgets has changed.
-# Invoke ::enginecfg::setupNetd and update the netd widgets accordingly.
+################################################################################
+# ::enginecfg::onSubmitNetd
+#   Applies changes to the networkd controls (enable/disable/auto-port).
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - w (string): Widget container holding `.netd` and `.netport`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::enginecfg::setupNetd`.
+#   - Updates widget state and displays errors via `ERROR::MessageBox`.
+################################################################################
 proc ::enginecfg::onSubmitNetd {id w} {
     set old_value [lindex [set ::enginecfg::engConfig_$id] 6 5]
 
@@ -733,6 +1045,21 @@ proc ::enginecfg::onSubmitNetd {id w} {
     $w.netport configure -state $state
 }
 
+################################################################################
+# ::enginecfg::onChangeLayout
+#   Persists display/layout-related settings and notifies the engine window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - id (int): Engine slot.
+#   - param (string): One of "scoreside", "notation", or "wrap".
+#   - value (string|int): New value for the setting.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::enginecfg::engConfig_$id`.
+#   - Calls `::enginewin::changeDisplayLayout`.
+################################################################################
 proc ::enginecfg::onChangeLayout {id param value} {
     upvar ::enginecfg::engConfig_$id engConfig_
     switch $param {
