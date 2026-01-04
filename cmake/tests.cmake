@@ -7,7 +7,7 @@ add_custom_target(scid_test
         COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -R "^gtest$"
         DEPENDS scid_test_bin
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-        COMMENT "Building and running GoogleTest (ctest -R gtest)"
+        COMMENT "Building and running GoogleTest"
 )
 
 add_test(
