@@ -13,7 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with Scid. If not, see <http://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 3.2)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "")
 
 # googletest
@@ -39,6 +38,6 @@ target_link_libraries(scid_base PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 # scid_tests
 file(GLOB GTEST_SRC *.cpp)
-add_executable(scid_tests ${GTEST_SRC})
-target_compile_definitions(scid_tests PRIVATE -DSCID_TESTDIR=\"${CMAKE_CURRENT_LIST_DIR}/\")
-target_link_libraries(scid_tests PRIVATE scid_base gtest_main)
+add_executable(scid_test_bin ${GTEST_SRC})
+target_compile_definitions(scid_test_bin PRIVATE -DSCID_TESTDIR=\"${CMAKE_CURRENT_LIST_DIR}/\")
+target_link_libraries(scid_test_bin PRIVATE scid_base gtest_main)
