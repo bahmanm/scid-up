@@ -462,7 +462,12 @@ proc CreateSelectDBWidget {{w} {varname} {ref_base ""} {readOnly 1}} {
 
   bind $w.lb <<ComboboxSelected>> [list apply {{w varName prefixLen} {
     upvar #0 $varName var
-    set var [string index [$w get] $prefixLen]
+    # The combobox value is of the form "<Database> <n>: <name>".
+    # Use `scan` to extract the full (possibly multi-digit) base number.
+    #
+    # NOTE: This still relies on parsing the displayed string. A more robust
+    # approach is to map the selected index to the base ID directly.
+    scan [string range [$w get] $prefixLen end] %d var
   } ::} $w.lb $varname $tr_prefix_len]
   $w.lb current $selected
   event generate $w.lb <<ComboboxSelected>>
