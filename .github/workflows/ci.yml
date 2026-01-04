@@ -38,8 +38,9 @@ jobs:
     - name: Set reusable strings
       id: strings
       shell: bash
-      run: >-
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      run: >
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT";
+        echo "local-dir=${HOME}/.local" >> "$GITHUB_OUTPUT"
 
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
@@ -48,7 +49,7 @@ jobs:
         
         curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
         pushd ${top_dir}/tcl9.0.3/unix
-        ./configure --prefix=${{ github.workspace }}/opt/tcl-tk9 --enable-64bit
+        ./configure --prefix=${{ local-dir }} --enable-64bit
         make install
         popd
 
@@ -57,12 +58,12 @@ jobs:
         
         curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
         pushd ${top_dir}/tk9.0.3/unix
-        ./configure --prefix=${{ github.workspace }}/opt/tcl-tk9 --enable-64bit --with-tcl=${top_dir}/tcl9.0.3/unix
+        ./configure --prefix=${{ local-dir }} --enable-64bit --with-tcl=${top_dir}/tcl9.0.3/unix
         make install
         popd
         
-        ln -sf ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh9.0 ${{ github.workspace }}/opt/tcl-tk9/bin/tclsh
-        ln -sf ${{ github.workspace }}/opt/tcl-tk9/bin/wish9.0  ${{ github.workspace }}/opt/tcl-tk9/bin/wish
+        ln -sf ${{ local-dir }}/bin/tclsh9.0 ${HOME}/.local/bin/tclsh
+        ln -sf ${{ local-dir }}/bin/wish9.0 ${HOME}/.local/bin/wish
 
     - name: Configure
       run: >
@@ -71,12 +72,12 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DTCL_INCLUDE_PATH=${{ github.workspace }}/opt/tcl-tk9/include/
-        -DTCL_LIBRARY=${{ github.workspace }}/opt/tcl-tk9/lib/libtcl9.0.so
-        -DTCL_TCLSH=${{ github.workspace }}/opt/tcl-tk9/bin/tclsh
-        -DTK_INCLUDE_PATH=${{ github.workspace }}/opt/tcl-tk9/include/
-        -DTK_LIBRARY=${{ github.workspace }}/opt/tcl-tk9/lib/libtcl9tk9.0.so
-        -DTK_WISH=${{ github.workspace }}/opt/tcl-tk9/bin/wish
+        -DTCL_INCLUDE_PATH=${{ local-dir }}/include/
+        -DTCL_LIBRARY=${{ local-dir }}/lib/libtcl9.0.so
+        -DTCL_TCLSH=${{ local-dir }}/bin/tclsh
+        -DTK_INCLUDE_PATH=${{ local-dir }}/include/
+        -DTK_LIBRARY=${{ local-dir }}/lib/libtcl9tk9.0.so
+        -DTK_WISH=${{ local-dir }}/bin/wish
         -S ${{ github.workspace }}
 
     - name: Build
