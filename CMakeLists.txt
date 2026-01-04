@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Scid. If not, see <http://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.30)
 project(scid)
 set(CPACK_PACKAGE_VERSION 5.1.0)
 set(
