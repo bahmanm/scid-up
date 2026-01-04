@@ -60,7 +60,7 @@ target_link_libraries(scid PRIVATE polyglot ${CMAKE_THREAD_LIBS_INIT} ${TCL_LIBR
 
 option(SPELLCHKVALIDATE "Verify the integrity of spelling files" OFF)
 if(SPELLCHKVALIDATE)
-  target_compile_definitionsa(scid PRIVATE -DSPELLCHKVALIDATE)
+  target_compile_definitions(scid PRIVATE SPELLCHKVALIDATE)
 endif()
 
 install(TARGETS scid DESTINATION scid)
