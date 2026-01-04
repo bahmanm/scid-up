@@ -1,0 +1,610 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+namespace eval ::menus_test {
+    variable stubbedCommands {}
+    variable menuCreated {}
+
+    variable menuEntries
+    variable menuOptions
+    array set menuEntries {}
+    array set menuOptions {}
+}
+
+proc ::menus_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::menus_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::menus_test::resetMenus {} {
+    variable menuCreated
+    variable menuEntries
+    variable menuOptions
+
+    foreach m $menuCreated {
+        catch {rename $m ""}
+    }
+
+    set menuCreated {}
+    array unset menuEntries
+    array unset menuOptions
+}
+
+proc ::menus_test::menuIndex {menu index} {
+    variable menuEntries
+
+    set entries $menuEntries($menu)
+    if {$index eq "end" || $index eq "last"} {
+        set n [llength $entries]
+        if {$n == 0} { return "none" }
+        return [expr {$n - 1}]
+    }
+
+    if {[string is integer -strict $index]} {
+        return $index
+    }
+
+    error "Unsupported menu index: $index"
+}
+
+proc ::menus_test::resolveEntryIndex {menu indexOrLabel} {
+    variable menuEntries
+
+    if {[string is integer -strict $indexOrLabel]} {
+        return $indexOrLabel
+    }
+
+    if {$indexOrLabel eq "end" || $indexOrLabel eq "last"} {
+        return [::menus_test::menuIndex $menu $indexOrLabel]
+    }
+
+    # Allow resolving by label for callers that pass `[tr Tag]`.
+    set idx 0
+    foreach entry $menuEntries($menu) {
+        if {[dict get $entry -label] eq $indexOrLabel} {
+            return $idx
+        }
+        incr idx
+    }
+
+    error "Menu $menu has no entry labelled: $indexOrLabel"
+}
+
+proc ::menus_test::dispatchMenu {menu subcmd args} {
+    variable menuEntries
+    variable menuOptions
+
+    switch -- $subcmd {
+        configure {
+            if {[llength $args] % 2 != 0} {
+                error "menu $menu configure expects option/value pairs, got: $args"
+            }
+            foreach {opt val} $args {
+                set menuOptions($menu,$opt) $val
+            }
+            return
+        }
+        cget {
+            set opt [lindex $args 0]
+            if {![info exists menuOptions($menu,$opt)]} {
+                error "menu $menu missing option $opt"
+            }
+            return $menuOptions($menu,$opt)
+        }
+        add {
+            set type [lindex $args 0]
+            set opts [lrange $args 1 end]
+            set entry [dict create type $type -label "" -underline 0 -state normal -menu "" -command ""]
+
+            if {[llength $opts] % 2 != 0} {
+                error "menu $menu add expects option/value pairs, got: $opts"
+            }
+            foreach {opt val} $opts {
+                dict set entry $opt $val
+            }
+
+            lappend menuEntries($menu) $entry
+            return
+        }
+        insert {
+            set index [lindex $args 0]
+            set type [lindex $args 1]
+            set opts [lrange $args 2 end]
+
+            set entry [dict create type $type -label "" -underline 0 -state normal -menu "" -command ""]
+            if {[llength $opts] % 2 != 0} {
+                error "menu $menu insert expects option/value pairs, got: $opts"
+            }
+            foreach {opt val} $opts {
+                dict set entry $opt $val
+            }
+
+            if {$index eq "end"} {
+                lappend menuEntries($menu) $entry
+            } else {
+                set idx [::menus_test::resolveEntryIndex $menu $index]
+                set menuEntries($menu) [linsert $menuEntries($menu) $idx $entry]
+            }
+            return
+        }
+        delete {
+            set first [lindex $args 0]
+            set last [lindex $args 1]
+            if {$last eq ""} {
+                set last $first
+            }
+
+            set firstIdx [::menus_test::resolveEntryIndex $menu $first]
+            if {$last eq "end"} {
+                set lastIdx [expr {[llength $menuEntries($menu)] - 1}]
+            } else {
+                set lastIdx [::menus_test::resolveEntryIndex $menu $last]
+            }
+
+            set menuEntries($menu) [lreplace $menuEntries($menu) $firstIdx $lastIdx]
+            return
+        }
+        index {
+            set what [lindex $args 0]
+            return [::menus_test::menuIndex $menu $what]
+        }
+        type {
+            set idx [::menus_test::resolveEntryIndex $menu [lindex $args 0]]
+            return [dict get [lindex $menuEntries($menu) $idx] type]
+        }
+        entrycget {
+            set idx [::menus_test::resolveEntryIndex $menu [lindex $args 0]]
+            set opt [lindex $args 1]
+            return [dict get [lindex $menuEntries($menu) $idx] $opt]
+        }
+        entryconfig -
+        entryconfigure {
+            set idx [::menus_test::resolveEntryIndex $menu [lindex $args 0]]
+            set opts [lrange $args 1 end]
+            if {[llength $opts] % 2 != 0} {
+                error "menu $menu entryconfig expects option/value pairs, got: $opts"
+            }
+
+            set entry [lindex $menuEntries($menu) $idx]
+            foreach {opt val} $opts {
+                dict set entry $opt $val
+            }
+            set menuEntries($menu) [lreplace $menuEntries($menu) $idx $idx $entry]
+            return
+        }
+        default {
+            error "menu $menu subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::menus_test::getEntryIndexByOriginalLabel {menu label} {
+    foreach {key lbl} [array get ::MenuLabels "$menu,*"] {
+        if {$lbl eq $label} {
+            return [lindex [split $key ","] 1]
+        }
+    }
+    error "MenuLabels has no original label '$label' for menu $menu"
+}
+
+# Minimal Tk `menu` stub for sourcing `tcl/menus.tcl` under `tclsh`.
+if {![llength [info commands menu]]} {
+    proc menu {path args} {
+        if {[llength [info commands $path]]} {
+            return $path
+        }
+
+        set tearoff 1
+        set idx [lsearch -exact $args -tearoff]
+        if {$idx != -1 && ($idx + 1) < [llength $args]} {
+            set tearoff [lindex $args [expr {$idx + 1}]]
+        }
+
+        interp alias {} $path {} ::menus_test::dispatchMenu $path
+        lappend ::menus_test::menuCreated $path
+
+        set ::menus_test::menuOptions($path,-tearoff) $tearoff
+        if {$tearoff} {
+            # Mimic Tk's implicit tearoff entry at index 0.
+            lappend ::menus_test::menuEntries($path) [dict create type tearoff -label "" -underline 0 -state normal -menu "" -command ""]
+        }
+
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+
+        return $path
+    }
+}
+
+# Minimal Tk `bind` stub so `translateMenuLabels` can register callbacks.
+if {![llength [info commands bind]]} {
+    proc bind {args} { return }
+}
+
+# Minimal `tr` stub for menu label translation during file-scope initialisation.
+if {![llength [info commands tr]]} {
+    proc tr {s} { return $s }
+}
+
+# Minimal globals expected during file-scope menu initialisation.
+if {![info exists ::macOS]} { set ::macOS 0 }
+if {![info exists ::languages]} { set ::languages {E} }
+if {![info exists ::language]} { set ::language E }
+if {![info exists ::langName(E)]} { set ::langName(E) "English" }
+if {![info exists ::langUnderline(E)]} { set ::langUnderline(E) 0 }
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] menus.tcl]
+
+proc ::menus_test::setup {} {
+    ::menus_test::restoreStubs
+
+    unset -nocomplain ::interactionHandler
+    unset -nocomplain ::highlightLastMoveColor
+
+    # Ensure namespaces exist before stubbing commands into them.
+    namespace eval ::file::autoLoadBases {}
+    namespace eval ::optable {}
+    namespace eval ::preport {}
+    namespace eval ::tools::graphs::score {}
+    namespace eval ::tools::graphs::rating {}
+    namespace eval ::windows::gamelist {}
+
+    # Restore default translation for non-test initialisation.
+    ::menus_test::stubCommand tr {s} { return $s }
+
+    # Provide a useful winfo exists for functions that guard on it.
+    ::menus_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set w [lindex $args 0]
+                expr {[llength [info commands $w]] > 0}
+            }
+            toplevel {
+                return [lindex $args 0]
+            }
+            name {
+                return [string map {. ""} [lindex $args 0]]
+            }
+            default {
+                error "winfo $subcmd not stubbed in tests"
+            }
+        }
+    }
+}
+
+proc ::menus_test::cleanup {} {
+    ::menus_test::restoreStubs
+
+    unset -nocomplain ::interactionHandler
+    unset -nocomplain ::highlightLastMoveColor
+    unset -nocomplain ::menuLabel
+    unset -nocomplain ::menuUnder
+}
+
+# ---- Tests ----
+
+test menus-translateMenuLabels-translates-and-recurses-1.0 {translateMenuLabels stores original labels and translates menus recursively} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    set ::language E
+    set ::menuUnder(E,Foo) 1
+    set ::menuUnder(E,Sub) 0
+
+    ::menus_test::stubCommand tr {s} { return "TR:$s" }
+
+    menu .t
+    .t add command -label Foo
+    menu .t.sub
+    .t add cascade -label Sub -menu .t.sub
+    .t.sub add command -label Bar
+
+    # This submenu should be excluded from recursion.
+    menu .menu.options.language
+    .menu.options.language add command -label Ignored
+    .t add cascade -label Lang -menu .menu.options.language
+
+    # Act
+    translateMenuLabels .t
+
+    # Assert
+    set fooIdx [::menus_test::resolveEntryIndex .t "TR:Foo"]
+    set subIdx [::menus_test::resolveEntryIndex .t "TR:Sub"]
+
+    list \
+        [info exists ::MenuLabels(.t,$fooIdx)] \
+        $::MenuLabels(.t,$fooIdx) \
+        [.t entrycget $fooIdx -label] \
+        [.t entrycget $fooIdx -underline] \
+        [info exists ::MenuLabels(.t.sub,1)] \
+        [info exists ::MenuLabels(.menu.options.language,1)]
+} -cleanup {
+    ::menus_test::cleanup
+} -result {1 Foo TR:Foo 1 1 0}
+
+test menus-menuConfig-configures-by-stored-label-1.0 {menuConfig locates entries by original label and issues the requested command} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    menu .t2
+    .t2 add command -label Foo
+    translateMenuLabels .t2
+    set idx [::menus_test::getEntryIndexByOriginalLabel .t2 Foo]
+
+    # Act
+    menuConfig .t2 Foo entryconfig -state disabled
+
+    # Assert
+    .t2 entrycget $idx -state
+} -cleanup {
+    ::menus_test::cleanup
+} -result {disabled}
+
+test menus-configMenuText-prefers-language-specific-labels-1.0 {configMenuText uses language-specific label/underline when present} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    menu .t3
+    .t3 add command -label Placeholder -underline 0
+
+    set ::menuLabel(fr,Tag1) "Bonjour"
+    set ::menuUnder(fr,Tag1) 2
+    set ::menuLabel(E,Tag1) "Hello"
+    set ::menuUnder(E,Tag1) 1
+
+    # Act
+    configMenuText .t3 1 Tag1 fr
+
+    # Assert
+    list [.t3 entrycget 1 -label] [.t3 entrycget 1 -underline]
+} -cleanup {
+    ::menus_test::cleanup
+} -result {Bonjour 2}
+
+test menus-configMenuText-falls-back-to-english-1.0 {configMenuText falls back to English when lang-specific entries are missing} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    menu .t4
+    .t4 add command -label Placeholder -underline 0
+
+    set ::menuLabel(E,Tag1) "Hello"
+    set ::menuUnder(E,Tag1) 1
+
+    # Act
+    configMenuText .t4 1 Tag1 fr
+
+    # Assert
+    list [.t4 entrycget 1 -label] [.t4 entrycget 1 -underline]
+} -cleanup {
+    ::menus_test::cleanup
+} -result {Hello 1}
+
+test menus-checkMenuUnderline-detects-duplicates-1.0 {checkMenuUnderline returns duplicate underline letters} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    menu .t5
+    .t5 add command -label Open -underline 0
+    .t5 add command -label Options -underline 0
+    .t5 add separator
+    .t5 add command -label Help -underline 0
+
+    # Act
+    set res [checkMenuUnderline .t5]
+
+    # Assert
+    lsort -unique $res
+} -cleanup {
+    ::menus_test::cleanup
+} -result {o}
+
+test menus-updateMenuStates-tools-disables-reviewgame-under-interactionhandler-1.0 {updateMenuStates disables review game entry when interaction handler is installed} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    set ::interactionHandler {noop}
+    set idx [::menus_test::getEntryIndexByOriginalLabel .menu.tools ToolsTrainReviewGame]
+
+    # Act
+    updateMenuStates .menu.tools
+
+    # Assert
+    .menu.tools entrycget $idx -state
+} -cleanup {
+    ::menus_test::cleanup
+} -result {disabled}
+
+test menus-updateMenuStates-tools-enables-reviewgame-without-interactionhandler-1.0 {updateMenuStates enables review game entry when no interaction handler is installed} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    unset -nocomplain ::interactionHandler
+    set idx [::menus_test::getEntryIndexByOriginalLabel .menu.tools ToolsTrainReviewGame]
+
+    # Act
+    updateMenuStates .menu.tools
+
+    # Assert
+    .menu.tools entrycget $idx -state
+} -cleanup {
+    ::menus_test::cleanup
+} -result {normal}
+
+test menus-updateMenuStates-db-updates-autoload-flag-1.0 {updateMenuStates updates ::autoLoadBases_currdb based on auto-load list membership} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 1
+
+    ::menus_test::stubCommand ::file::autoLoadBases.find {base} {
+        if {$base == 1} { return 0 }
+        return -1
+    }
+
+    # Act
+    updateMenuStates .menu.db
+
+    # Assert
+    set ::autoLoadBases_currdb
+} -cleanup {
+    ::menus_test::cleanup
+} -result {1}
+
+test menus-menuUpdateThemes-replaces-theme-list-1.0 {menuUpdateThemes rebuilds the theme list from ttk::style theme names} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    if {![llength [info commands ::ttk::style]]} {
+        namespace eval ::ttk {}
+        proc ::ttk::style {subcmd args} {
+            if {$subcmd ne "theme"} { error "ttk::style $subcmd not stubbed" }
+            set op [lindex $args 0]
+            switch -- $op {
+                names { return {BTheme ATheme} }
+                use { return }
+                default { error "ttk::style theme $op not stubbed" }
+            }
+        }
+    }
+
+    # Act
+    menuUpdateThemes
+
+    # Assert
+    set labels {}
+    set menuPath .menu.options.theme
+    set start $::menuThemeListIdx
+    set end [$menuPath index end]
+    for {set i $start} {$i != "none" && $i <= $end} {incr i} {
+        if {[$menuPath type $i] eq "radiobutton"} {
+            lappend labels [$menuPath entrycget $i -label]
+        }
+    }
+    set labels
+} -cleanup {
+    ::menus_test::cleanup
+} -result {ATheme BTheme}
+
+test menus-setLanguageMenus-updates-registered-menus-and-calls-configurers-1.0 {setLanguageMenus updates menu entries from ::MenuLabels and invokes dependent configurers} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    set ::language X
+    set ::menuUnder(X,Foo) 0
+
+    ::menus_test::stubCommand tr {s} { return "$::language:$s" }
+
+    menu .lang
+    .lang add command -label Foo -underline 0
+    translateMenuLabels .lang
+
+    set calls {}
+    foreach cmd {
+        ::optable::ConfigMenus
+        ::preport::ConfigMenus
+        ::tools::graphs::score::ConfigMenus
+        ::tools::graphs::rating::ConfigMenus
+    } {
+        ::menus_test::stubCommand $cmd {} { lappend ::calls [lindex [info level 0] 0]; return }
+    }
+
+    # Restrict setLanguageMenus to only `.lang` to keep assertions focused.
+    ::menus_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed" }
+        set w [lindex $args 0]
+        expr {[string match ".lang*" $w]}
+    }
+
+    # Act
+    setLanguageMenus
+
+    # Assert
+    list \
+        [.lang entrycget 1 -label] \
+        [lsort -unique $::calls]
+} -cleanup {
+    ::menus_test::cleanup
+    unset -nocomplain ::calls
+} -result {X:Foo {::optable::ConfigMenus ::preport::ConfigMenus ::tools::graphs::rating::ConfigMenus ::tools::graphs::score::ConfigMenus}}
+
+test menus-updateLocale-calls-sc_info-and-refreshes-ui-1.0 {updateLocale updates numeric locale and refreshes dependent UI} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    set ::locale(numeric) ","
+
+    set ::menus_test::calls {}
+    ::menus_test::stubCommand sc_info {subcmd args} {
+        if {$subcmd ne "decimal"} { error "sc_info $subcmd not stubbed" }
+        lappend ::menus_test::calls [list sc_info decimal [lindex $args 0]]
+        return
+    }
+    ::menus_test::stubCommand ::windows::gamelist::Refresh {} {
+        lappend ::menus_test::calls {gamelist Refresh}
+        return
+    }
+    ::menus_test::stubCommand updateTitle {} {
+        lappend ::menus_test::calls updateTitle
+        return
+    }
+
+    # Act
+    updateLocale
+
+    # Assert
+    set ::menus_test::calls
+} -cleanup {
+    ::menus_test::cleanup
+    unset -nocomplain ::menus_test::calls
+} -result {{sc_info decimal ,} {gamelist Refresh} updateTitle}
+
+test menus-chooseHighlightColor-updates-and-refreshes-1.0 {chooseHighlightColor updates highlight colour and refreshes board when a colour is chosen} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    set ::highlightLastMoveColor "#000000"
+
+    ::menus_test::stubCommand tk_chooseColor {args} { return "#123456" }
+    set ::menus_test::calls {}
+    ::menus_test::stubCommand updateBoard {args} { lappend ::menus_test::calls [list updateBoard {*}$args]; return }
+
+    # Act
+    chooseHighlightColor
+
+    # Assert
+    list $::highlightLastMoveColor $::menus_test::calls
+} -cleanup {
+    ::menus_test::cleanup
+    unset -nocomplain ::menus_test::calls
+} -result {{#123456} updateBoard}
+
+test menus-chooseHighlightColor-cancel-is-noop-1.0 {chooseHighlightColor does not refresh when the chooser is cancelled} -setup {
+    ::menus_test::setup
+} -body {
+    # Arrange
+    set ::highlightLastMoveColor "#000000"
+
+    ::menus_test::stubCommand tk_chooseColor {args} { return "" }
+    set ::menus_test::calls {}
+    ::menus_test::stubCommand updateBoard {args} { lappend ::menus_test::calls updateBoard; return }
+
+    # Act
+    chooseHighlightColor
+
+    # Assert
+    list $::highlightLastMoveColor $::menus_test::calls
+} -cleanup {
+    ::menus_test::cleanup
+    unset -nocomplain ::menus_test::calls
+} -result {{#000000} {}}
+
+cleanupTests

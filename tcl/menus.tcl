@@ -370,7 +370,7 @@ proc translateMenuLabels {m} {
 # Issue a command to a menu entry
 proc menuConfig {{m} {label} {cmd} args} {
     foreach {key lbl} [array get ::MenuLabels "$m*"] {
-        if {$lbl == $label} {
+        if {$lbl eq $label} {
             set idx [lindex [split $key ","] 1]
             $m $cmd $idx {*}$args
             break
