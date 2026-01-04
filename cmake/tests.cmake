@@ -8,7 +8,7 @@ add_subdirectory(gtest)
 
 add_test(
   NAME cpp_test
-  COMMAND $<TARGET_FILE:scid_test_bin>
+  COMMAND $<TARGET_FILE:ScidUp::Tests::Bins::CppTest>
 )
 set_tests_properties(
   cpp_test

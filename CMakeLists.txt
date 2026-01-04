@@ -14,7 +14,7 @@
 # along with Scid. If not, see <http://www.gnu.org/licenses/>.
 
 cmake_minimum_required(VERSION 3.30)
-project(scid)
+project(scidup)
 set(CPACK_PACKAGE_VERSION 5.1.0)
 set(
   CPACK_PACKAGE_DESCRIPTION_SUMMARY
@@ -30,7 +30,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(MSVC)
   add_definitions(/D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS)
-  # To run/debug using Visual Studio set "scid" as startup project and add:
+  # To run/debug using Visual Studio set "scidup_main" as startup project and add:
   # Command Arguments: ../tcl/start.tcl
   # Environment:       PATH=C:\tcl\bin
 endif()
@@ -38,38 +38,49 @@ endif()
 find_package(Threads REQUIRED)
 find_package(TCL REQUIRED)
 
+add_library(scidup_tcl INTERFACE)
+add_library(ScidUp::Libs::Tcl ALIAS scidup_tcl)
+if(TARGET TCL::TCL)
+  target_link_libraries(scidup_tcl INTERFACE TCL::TCL)
+else()
+  target_include_directories(scidup_tcl INTERFACE ${TCL_INCLUDE_PATH})
+  target_link_libraries(scidup_tcl INTERFACE ${TCL_LIBRARY})
+endif()
+
 # polyglot
 file(GLOB POLYGLOT_SRC src/polyglot/*.cpp)
 add_library(polyglot ${POLYGLOT_SRC})
+add_library(ScidUp::Libs::Polyglot ALIAS polyglot)
 
 # scid
 file(GLOB SCID_SRC src/*.h src/*.cpp)
 if(MSVC)
-  add_executable(scid WIN32 ${SCID_SRC} resources/win/scid.rc resources/win/scid.manifest)
-  target_link_options(scid PRIVATE /ENTRY:mainCRTStartup)
+  add_executable(scidup_main WIN32 ${SCID_SRC} resources/win/scid.rc resources/win/scid.manifest)
+  target_link_options(scidup_main PRIVATE /ENTRY:mainCRTStartup)
 else()
-  add_executable(scid ${SCID_SRC})
+  add_executable(scidup_main ${SCID_SRC})
 endif()
-set_property(TARGET scid PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE True)
-target_include_directories(scid PRIVATE ${TCL_INCLUDE_PATH})
-target_link_libraries(scid PRIVATE polyglot Threads::Threads ${TCL_LIBRARY})
+add_executable(ScidUp::Bins::Main ALIAS scidup_main)
+set_target_properties(scidup_main PROPERTIES OUTPUT_NAME "scid-up")
+set_property(TARGET scidup_main PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE True)
+target_link_libraries(scidup_main PRIVATE ScidUp::Libs::Polyglot Threads::Threads ScidUp::Libs::Tcl)
 
 option(SPELLCHKVALIDATE "Verify the integrity of spelling files" OFF)
 if(SPELLCHKVALIDATE)
-  target_compile_definitions(scid PRIVATE SPELLCHKVALIDATE)
+  target_compile_definitions(scidup_main PRIVATE SPELLCHKVALIDATE)
 endif()
 
-install(TARGETS scid DESTINATION scid)
+install(TARGETS scidup_main DESTINATION scid-up)
 file(GLOB ECO_FILES *.eco)
-install(FILES ${ECO_FILES} DESTINATION scid)
-install(DIRECTORY bitmaps DESTINATION scid)
-install(DIRECTORY bitmaps2 DESTINATION scid)
-install(DIRECTORY books DESTINATION scid)
-install(DIRECTORY html DESTINATION scid)
-install(DIRECTORY img DESTINATION scid)
-install(DIRECTORY scripts DESTINATION scid)
-install(DIRECTORY sounds DESTINATION scid)
-install(DIRECTORY tcl DESTINATION scid)
+install(FILES ${ECO_FILES} DESTINATION scid-up)
+install(DIRECTORY bitmaps DESTINATION scid-up)
+install(DIRECTORY bitmaps2 DESTINATION scid-up)
+install(DIRECTORY books DESTINATION scid-up)
+install(DIRECTORY html DESTINATION scid-up)
+install(DIRECTORY img DESTINATION scid-up)
+install(DIRECTORY scripts DESTINATION scid-up)
+install(DIRECTORY sounds DESTINATION scid-up)
+install(DIRECTORY tcl DESTINATION scid-up)
 
 include(cmake/tests.cmake)
 include(cmake/lint.cmake)

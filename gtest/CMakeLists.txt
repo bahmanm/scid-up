@@ -31,13 +31,15 @@ set(SCID_BASE
   ../src/stored.cpp
   ../src/game.cpp ../src/position.cpp ../src/textbuf.cpp ../src/misc.cpp
 )
-add_library(scid_base ${SCID_BASE})
-target_include_directories(scid_base PUBLIC ../src)
+add_library(scidup_cpp_base ${SCID_BASE})
+target_include_directories(scidup_cpp_base PUBLIC ../src)
+add_library(ScidUp::Tests::Libs::CppBase ALIAS scidup_cpp_base)
 find_package(Threads REQUIRED)
-target_link_libraries(scid_base PUBLIC Threads::Threads)
+target_link_libraries(scidup_cpp_base PUBLIC Threads::Threads)
 
 # scid_tests
 file(GLOB GTEST_SRC *.cpp)
-add_executable(scid_test_bin ${GTEST_SRC})
-target_compile_definitions(scid_test_bin PRIVATE -DSCID_TESTDIR=\"${CMAKE_CURRENT_LIST_DIR}/\")
-target_link_libraries(scid_test_bin PRIVATE scid_base gtest_main)
+add_executable(scidup_cpp_test_bin ${GTEST_SRC})
+add_executable(ScidUp::Tests::Bins::CppTest ALIAS scidup_cpp_test_bin)
+target_compile_definitions(scidup_cpp_test_bin PRIVATE -DSCID_TESTDIR=\"${CMAKE_CURRENT_LIST_DIR}/\")
+target_link_libraries(scidup_cpp_test_bin PRIVATE ScidUp::Tests::Libs::CppBase gtest_main)
