@@ -10,11 +10,7 @@ endif()
 
 ###############################################################################
 
-find_program(UVX_EXECUTABLE uvx)
-if(NOT UVX_EXECUTABLE)
-  message(WARNING "No 'uvx' found. Skipping Tcl linting (tcl_lint).")
-  return()
-endif()
+find_program(UVX_EXECUTABLE uvx REQUIRED)
 
 get_filename_component(_tcl_dir "${CMAKE_CURRENT_LIST_DIR}/../tcl" ABSOLUTE)
 file(GLOB_RECURSE _tcl_files
