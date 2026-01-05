@@ -43,12 +43,13 @@ jobs:
 
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
+      working-directory: ${{ runner.temp }}
       run: |
         top_dir=$(pwd)
         
         curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
-        pushd ${top_dir}/tcl9.0.3/unix
-        ./configure --prefix=${HOME}/.local --enable-64bit
+        pushd tcl9.0.3/unix
+        ./configure --prefix=-/.local --enable-64bit
         make install
         popd
 
@@ -56,13 +57,13 @@ jobs:
         sudo apt-get install -y libx11-dev
         
         curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
-        pushd ${top_dir}/tk9.0.3/unix
-        ./configure --prefix=${HOME}/.local --enable-64bit --with-tcl=${top_dir}/tcl9.0.3/unix
+        pushd tk9.0.3/unix
+        ./configure --prefix=-/.local --enable-64bit --with-tcl=${{ runner.temp }}/tcl9.0.3/unix
         make install
         popd
         
-        ln -sf ${HOME}/.local/bin/tclsh9.0 ${HOME}/.local/bin/tclsh
-        ln -sf ${HOME}/.local/bin/wish9.0 ${HOME}/.local/bin/wish
+        ln -sf -/.local/bin/tclsh9.0 -/.local/bin/tclsh
+        ln -sf -/.local/bin/wish9.0 -/.local/bin/wish
 
     - name: Configure
       run: >
@@ -76,13 +77,13 @@ jobs:
         -DBUILD_TESTING=ON
         -DSCIDUP_BUILD_LINTING=ON
         
-        -DTCL_INCLUDE_PATH=${HOME}/.local/include/
-        -DTCL_LIBRARY=${HOME}/.local/lib/libtcl9.0.so
-        -DTCL_TCLSH=${HOME}/.local/bin/tclsh
+        -DTCL_INCLUDE_PATH=-/.local/include/
+        -DTCL_LIBRARY=-/.local/lib/libtcl9.0.so
+        -DTCL_TCLSH=-/.local/bin/tclsh
         
-        -DTK_INCLUDE_PATH=${HOME}/.local/include/
-        -DTK_LIBRARY=${HOME}/.local/lib/libtcl9tk9.0.so
-        -DTK_WISH=${HOME}/.local/bin/wish
+        -DTK_INCLUDE_PATH=-/.local/include/
+        -DTK_LIBRARY=-/.local/lib/libtcl9tk9.0.so
+        -DTK_WISH=-/.local/bin/wish
         
         -S ${{ github.workspace }}
 
