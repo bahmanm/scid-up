@@ -8,7 +8,7 @@ if(NOT BUILD_TESTING)
 endif()
 
 ### cpp_test
-add_subdirectory(gtest)
+include(cmake/tests/cpptest.cmake)
 
 add_test(
   NAME cpp_test
