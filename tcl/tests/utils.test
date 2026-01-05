@@ -1,0 +1,94 @@
+package require tcltest 2.5
+
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::utils {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] utils.tcl]
+
+namespace eval ::utils_test {}
+
+proc ::utils_test::setup {} {
+    set ::locale(numeric) ".,"
+}
+
+proc ::utils_test::cleanup {} {
+    unset -nocomplain ::locale(numeric)
+}
+
+
+test utils-thousands-inserts-separators-1.0 {::utils::thousands inserts the thousands separator based on locale(numeric)} -setup {
+    ::utils_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [::utils::thousands 0] \
+        [::utils::thousands 12] \
+        [::utils::thousands 999] \
+        [::utils::thousands 1000] \
+        [::utils::thousands 1234567] \
+        [::utils::thousands -123456]
+} -cleanup {
+    ::utils_test::cleanup
+} -result {0 12 999 1,000 1,234,567 -123,456}
+
+test utils-thousands-kilo-uses-K-1.0 {::utils::thousands(kilo=1) abbreviates values >= 100,000 with "K"} -setup {
+    ::utils_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [::utils::thousands 99999 1] \
+        [::utils::thousands 100000 1] \
+        [::utils::thousands 123456 1] \
+        [::utils::thousands 999999 1]
+} -cleanup {
+    ::utils_test::cleanup
+} -result {99,999 100K 123K 999K}
+
+
+test utils-thousands-kilo-uses-M-1.0 {::utils::thousands(kilo=1) abbreviates values >= 1,000,000 with "M" and two decimals} -setup {
+    ::utils_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [::utils::thousands 1000000 1] \
+        [::utils::thousands 1250000 1] \
+        [::utils::thousands 9999999 1]
+} -cleanup {
+    ::utils_test::cleanup
+} -result {1.00M 1.25M 9.99M}
+
+
+test utils-thousands-no-separator-returns-unmodified-1.0 {::utils::thousands returns the number unchanged when no thousands separator is configured} -setup {
+    ::utils_test::setup
+} -body {
+    # Arrange
+    set ::locale(numeric) "."
+
+    # Act / Assert
+    list \
+        [::utils::thousands 123456] \
+        [::utils::thousands 100000 1] \
+        [::utils::thousands 1250000 1]
+} -cleanup {
+    ::utils_test::cleanup
+} -result {123456 100K 1.25M}
+
+
+test utils-percentFormat-formats-and-guards-denom-zero-1.0 {::utils::percentFormat formats numbers and guards against denom==0} -setup {
+    ::utils_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [::utils::percentFormat 1000 10000] \
+        [::utils::percentFormat 5 0]
+} -cleanup {
+    ::utils_test::cleanup
+} -result {{1,000 (10%)} {5 (500%)}}
+
+
+cleanupTests

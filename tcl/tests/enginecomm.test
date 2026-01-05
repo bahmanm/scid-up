@@ -1,0 +1,362 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] enginecomm.tcl]
+
+namespace eval ::enginecomm_test {
+    variable stubbedCommands {}
+
+    variable callbackCalls {}
+    variable rawsendCalls {}
+    variable setOptionsCalls {}
+    variable goCalls {}
+    variable stopGoCalls 0
+}
+
+proc ::enginecomm_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::enginecomm_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::enginecomm_test::onReply {msg} {
+    lappend ::enginecomm_test::callbackCalls $msg
+}
+
+proc ::enginecomm_test::setup {} {
+    ::enginecomm_test::restoreStubs
+
+    set ::enginecomm_test::callbackCalls {}
+    set ::enginecomm_test::rawsendCalls {}
+    set ::enginecomm_test::setOptionsCalls {}
+    set ::enginecomm_test::goCalls {}
+    set ::enginecomm_test::stopGoCalls 0
+
+    catch {unset ::engconn}
+
+    # Minimal connection state for id=1.
+    set id 1
+    set ::engconn(channel_$id) "dummy"
+    set ::engconn(protocol_$id) "uci"
+    set ::engconn(callback_$id) ::enginecomm_test::onReply
+    set ::engconn(netclients_$id) {}
+    set ::engconn(waitReply_$id) ""
+    set ::engconn(sendQueue_$id) {}
+    set ::engconn(options_$id) {}
+    set ::engconn(logRecv_$id) ""
+    set ::engconn(logSend_$id) ""
+
+    # Provide no-op message converters for `::engine::done_` tests.
+    set ::engconn(SetOptions$id) [list ::enginecomm_test::recordSetOptions]
+    set ::engconn(NewGame$id) [list ::enginecomm_test::noop]
+    set ::engconn(Go$id) [list ::enginecomm_test::recordGo]
+    set ::engconn(StopGo$id) [list ::enginecomm_test::noop]
+
+    unset -nocomplain ::engconn(InfoPV_$id)
+    unset -nocomplain ::engconn(InfoBestMove_$id)
+}
+
+proc ::enginecomm_test::cleanup {} {
+    ::enginecomm_test::restoreStubs
+    catch {unset ::engconn}
+}
+
+proc ::enginecomm_test::noop {args} {
+    return
+}
+
+proc ::enginecomm_test::recordSetOptions {msgData} {
+    lappend ::enginecomm_test::setOptionsCalls $msgData
+    return
+}
+
+proc ::enginecomm_test::recordGo {msgData} {
+    lappend ::enginecomm_test::goCalls $msgData
+    return
+}
+
+proc ::enginecomm_test::recordStopGo {} {
+    incr ::enginecomm_test::stopGoCalls
+    return
+}
+
+# ---- Tests ----
+
+test enginecomm-updateOption-updates-existing-1.0 {::engine::updateOption updates an existing option and returns its type} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set ::engconn(options_$id) [list \
+        [list Threads 1 spin 1 1 16 {} 0] \
+        [list Skill 10 spin 10 0 20 {} 0]]
+
+    # Act
+    set type [::engine::updateOption $id Skill 15]
+
+    # Assert
+    list $type [lindex $::engconn(options_$id) 1]
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {spin {Skill 15 spin 10 0 20 {} 0}}
+
+
+test enginecomm-updateOption-missing-1.0 {::engine::updateOption returns empty string when option is not present} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set ::engconn(options_$id) [list [list Threads 1 spin 1 1 16 {} 0]]
+
+    # Act / Assert
+    ::engine::updateOption $id Missing 9
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {}
+
+
+test enginecomm-uci-parseline-option-file-path-and-internal-1.0 {::uci::parseline parses option lines and marks internal options} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+
+    # Act
+    ::uci::parseline $id "option name SyzygyPath type string default" ;# should become type=path
+    ::uci::parseline $id "option name BookFile type string default" ;# should become type=file
+    ::uci::parseline $id "option name Ponder type check default true" ;# internal
+
+    # Assert
+    list \
+        [lindex $::engconn(options_$id) 0] \
+        [lindex $::engconn(options_$id) 1] \
+        [lindex $::engconn(options_$id) 2]
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {{SyzygyPath {} path {} {} {} {} 0} {BookFile {} file {} {} {} {} 0} {Ponder true check true {} {} {} 1}}
+
+
+test enginecomm-uci-parseline-id-name-1.0 {::uci::parseline stores engine name as an internal option} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+
+    # Act
+    ::uci::parseline $id "id name My Engine"
+
+    # Assert
+    lindex $::engconn(options_$id) 0
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {myname {My Engine} string {My Engine} {} {} {} 1}
+
+
+test enginecomm-uci-parseline-bestmove-1.0 {::uci::parseline parses bestmove and returns 1} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+
+    # Act
+    set done [::uci::parseline $id "bestmove e2e4"]
+
+    # Assert
+    list $done $::engconn(InfoBestMove_$id)
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {1 e2e4}
+
+
+test enginecomm-uci-parseline-info-score-wdl-1.0 {::uci::parseline parses info lines into InfoPV} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set pv "e2e4 e7e5 g1f3"
+
+    # Act
+    ::uci::parseline $id "info multipv 2 depth 12 seldepth 20 score cp 34 wdl 123 456 789 pv $pv"
+
+    # Assert
+    set info $::engconn(InfoPV_$id)
+    list \
+        [lindex $info 0] \
+        [lindex $info 1] \
+        [lindex $info 2] \
+        [lindex $info 8] \
+        [lindex $info 9] \
+        [lindex $info 10] \
+        [lindex $info 11]
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {2 12 20 34 cp {123 456 789} {e2e4 e7e5 g1f3}}
+
+
+test enginecomm-send-network-sends-immediately-1.0 {::engine::send sends immediately for network protocol} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set ::engconn(protocol_$id) network
+
+    ::enginecomm_test::stubCommand ::engine::rawsend {id msg} {
+        lappend ::enginecomm_test::rawsendCalls [list $id $msg]
+        return
+    }
+
+    # Act
+    ::engine::send $id Go [list "position" {}]
+
+    # Assert
+    set ::enginecomm_test::rawsendCalls
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {{1 {Go {position {}}}}}
+
+
+test enginecomm-send-local-cancels-pending-go-1.0 {::engine::send cancels queued Go and sends StopGo when already thinking} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set ::engconn(protocol_$id) uci
+    set ::engconn(waitReply_$id) Go
+    set ::engconn(sendQueue_$id) [list [list Go {position {depth 10}}]]
+
+    set ::enginecomm_test::stopGoCalls 0
+    set ::engconn(StopGo$id) ::enginecomm_test::recordStopGo
+
+    # Act
+    ::engine::send $id SetOptions [list [list Hash 16]]
+
+    # Assert
+    list $::enginecomm_test::stopGoCalls $::engconn(waitReply_$id) $::engconn(sendQueue_$id)
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {1 StopGo {{SetOptions {{Hash 16}}}}}
+
+
+test enginecomm-done-squashes-setoptions-1.0 {::engine::done_ squashes sequential SetOptions messages} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set ::engconn(waitReply_$id) ""
+    set ::engconn(sendQueue_$id) [list \
+        [list SetOptions [list [list Hash 16]]] \
+        [list SetOptions [list [list Threads 2]]]]
+
+    # Act
+    ::engine::done_ $id
+
+    # Assert
+    list \
+        $::enginecomm_test::setOptionsCalls \
+        $::engconn(waitReply_$id) \
+        $::engconn(sendQueue_$id)
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {{{{Hash 16} {Threads 2}}} SetOptions {}}
+
+
+test enginecomm-done-go-sends-infogo-1.0 {::engine::done_ sends InfoGo reply immediately for Go} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set msgData [list "position" {depth 10}]
+    set ::engconn(sendQueue_$id) [list [list Go $msgData]]
+
+    # Act
+    ::engine::done_ $id
+
+    # Assert
+    list \
+        $::enginecomm_test::goCalls \
+        $::enginecomm_test::callbackCalls
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {{{position {depth 10}}} {{InfoGo {position {depth 10}}}}}
+
+
+test enginecomm-uci-parseline-readyok-uciok-1.0 {::uci::parseline returns 1 for readyok/uciok} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+
+    # Act
+    set r1 [::uci::parseline $id "readyok"]
+    set r2 [::uci::parseline $id "uciok"]
+
+    # Assert
+    list $r1 $r2
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {1 1}
+
+
+test enginecomm-send-local-stopgo-enqueued-first-1.0 {::engine::send enqueues StopGo at the head of the queue} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+    set ::engconn(protocol_$id) uci
+
+    # Prevent ::engine::send from auto-draining the queue via ::engine::done_.
+    set ::engconn(waitReply_$id) NewGame
+    set ::engconn(sendQueue_$id) [list [list SetOptions [list [list Hash 16]]]]
+
+    # Act
+    ::engine::send $id StopGo ""
+
+    # Assert
+    lmap elem $::engconn(sendQueue_$id) { lindex $elem 0 }
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {StopGo SetOptions}
+
+
+
+test enginecomm-uci-parseline-info-score-mate-1.0 {::uci::parseline captures mate score type and value} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+
+    # Act
+    ::uci::parseline $id "info depth 9 score mate 3 pv e2e4"
+
+    # Assert
+    set info $::engconn(InfoPV_$id)
+    list [lindex $info 8] [lindex $info 9]
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {3 mate}
+
+
+test enginecomm-uci-parseline-info-score-lowerbound-1.0 {::uci::parseline captures lowerbound score type} -setup {
+    ::enginecomm_test::setup
+} -body {
+    # Arrange
+    set id 1
+
+    # Act
+    ::uci::parseline $id "info depth 9 score lowerbound 12 pv e2e4"
+
+    # Assert
+    set info $::engconn(InfoPV_$id)
+    list [lindex $info 8] [lindex $info 9]
+} -cleanup {
+    ::enginecomm_test::cleanup
+} -result {12 lowerbound}
+
+
+cleanupTests

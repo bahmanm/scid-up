@@ -1,0 +1,282 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# `tcl/end.tcl` installs variable traces that reference `::utils::validate::*`.
+# Source the implementation so the module can be loaded safely under `tclsh`.
+namespace eval ::utils {}
+namespace eval ::utils::validate {}
+source [file join [::scid_test::tclDir] utils validate.tcl]
+
+# `tcl/end.tcl` creates Tk images at load time. Provide a minimal stub under
+# plain `tclsh`.
+if {![llength [info commands image]]} {
+    proc image {subcmd args} {
+        switch -- $subcmd {
+            create {
+                # `image create photo name ?options...?`
+                set type [lindex $args 0]
+                if {$type ne "photo"} {
+                    error "image create $type not stubbed in tests"
+                }
+
+                set name [lindex $args 1]
+                if {$name eq "" || [string match "-*" $name]} {
+                    error "image create photo requires an explicit name in tests"
+                }
+
+                return $name
+            }
+            default {
+                error "image $subcmd not stubbed in tests"
+            }
+        }
+    }
+}
+
+# `tcl/end.tcl` also contains application start-up code executed at load time
+# (Tk bindings, database loading, etc.). The headless `tclsh` test harness
+# cannot execute that portion, so we evaluate only the library-style part up to
+# the first `tk windowingsystem` block.
+set _endTclPath [file join [::scid_test::tclDir] end.tcl]
+set _endTclCh [open $_endTclPath r]
+set _endTclScript [read $_endTclCh]
+close $_endTclCh
+unset _endTclCh
+
+set _cutIdx [string first {if { [tk windowingsystem] == "win32" }} $_endTclScript]
+if {$_cutIdx < 0} {
+    error "Unable to locate tk windowingsystem marker in $_endTclPath"
+}
+
+uplevel #0 [string range $_endTclScript 0 [expr {$_cutIdx - 1}]]
+
+unset _endTclPath _endTclScript _cutIdx
+
+namespace eval ::end_test {
+    variable stubbedCommands {}
+
+    variable scNameCalls {}
+    variable tkMessageBoxCalls {}
+    variable exportOptionsCalls {}
+    variable scInfoCalls {}
+}
+
+proc ::end_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::end_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::end_test::setup {} {
+    ::end_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::end_test::scNameCalls {}
+    set ::end_test::tkMessageBoxCalls {}
+    set ::end_test::exportOptionsCalls {}
+    set ::end_test::scInfoCalls {}
+
+    catch {array unset ::nameMatches}
+    array set ::nameMatches {}
+    set ::nameMatchCount 0
+
+    set ::editNameType "player"
+
+    # ::exportGames uses a namespaced variable `::pgn::moveNumberSpaces`.
+    namespace eval ::pgn {}
+    set ::pgn::moveNumberSpaces 0
+
+    unset -nocomplain ::testName
+}
+
+proc ::end_test::cleanup {} {
+    ::end_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::testName
+    unset -nocomplain ::editNameType
+    unset -nocomplain ::pgn::moveNumberSpaces
+
+    catch {array unset ::nameMatches}
+    unset -nocomplain ::nameMatchCount
+}
+
+# ---- Tests ----
+
+test end-updateMatchList-populates-matches-1.0 {updateMatchList renders name matches and stores IDs} -setup {
+    ::end_test::setup
+} -body {
+    # Arrange
+    set tw .save.g.list
+    ::scid_test::widgets::defineTextWidget $tw
+
+    ::end_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] != 0}
+    }
+
+    set ::testName "Car"
+
+    ::end_test::stubCommand sc_name {subcmd args} {
+        if {$subcmd ne "match"} { error "sc_name $subcmd not stubbed in this test" }
+        lappend ::end_test::scNameCalls [list $subcmd {*}$args]
+        return {Carlsen 123 Caruana 456}
+    }
+
+    # Act
+    updateMatchList $tw player 9 testName "" ""
+
+    # Assert
+    list \
+        [::scid_test::widgets::getText $tw] \
+        $::nameMatchCount \
+        $::nameMatches(1) \
+        $::nameMatches(2) \
+        [lindex $::end_test::scNameCalls 0] \
+        [::scid_test::widgets::getState $tw -state]
+} -cleanup {
+    ::end_test::cleanup
+} -result [list "1:\tCarlsen\t123\n2:\tCaruana\t456\n" 2 123 456 {match player Car 9} disabled]
+
+
+test end-updateMatchList-falls-back-to-editNameType-1.0 {updateMatchList uses editNameType when nametype is empty} -setup {
+    ::end_test::setup
+} -body {
+    # Arrange
+    set tw .save.g.list
+    ::scid_test::widgets::defineTextWidget $tw
+
+    ::end_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] != 0}
+    }
+
+    set ::editNameType rating
+    set ::testName "Mag"
+
+    ::end_test::stubCommand sc_name {subcmd args} {
+        if {$subcmd ne "match"} { error "sc_name $subcmd not stubbed in this test" }
+        lappend ::end_test::scNameCalls [list $subcmd {*}$args]
+        return {}
+    }
+
+    # Act
+    updateMatchList $tw "" 9 testName "" ""
+
+    # Assert
+    list \
+        [lindex $::end_test::scNameCalls 0] \
+        [::scid_test::widgets::getText $tw] \
+        [::scid_test::widgets::getState $tw -state]
+} -cleanup {
+    ::end_test::cleanup
+} -result {{match player Mag 9} {} disabled}
+
+
+test end-clearMatchList-clears-widget-and-count-1.0 {clearMatchList clears the list widget and resets count} -setup {
+    ::end_test::setup
+} -body {
+    # Arrange
+    set tw .save.g.list
+    ::scid_test::widgets::defineTextWidget $tw
+
+    set ::nameMatchCount 2
+    set ::nameMatches(1) 123
+    set ::nameMatches(2) 456
+
+    $tw configure -state normal
+    $tw insert end "hello\n"
+    $tw configure -state disabled
+
+    # Act
+    clearMatchList $tw
+
+    # Assert
+    list \
+        [::scid_test::widgets::getText $tw] \
+        $::nameMatchCount \
+        [::scid_test::widgets::getState $tw -state]
+} -cleanup {
+    ::end_test::cleanup
+} -result {{} 0 disabled}
+
+
+test end-exportGames-filter-empty-returns-1.0 {exportGames warns and returns when the filter is empty} -setup {
+    ::end_test::setup
+} -body {
+    # Arrange
+    ::end_test::stubCommand sc_filter {subcmd args} {
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in this test" }
+        return 0
+    }
+
+    ::end_test::stubCommand tk_messageBox {args} {
+        lappend ::end_test::tkMessageBoxCalls $args
+        return ok
+    }
+
+    ::end_test::stubCommand exportOptions {exportType} {
+        error "exportOptions should not be called when the filter is empty"
+    }
+
+    # Act
+    exportGames filter PGN
+
+    # Assert
+    set call [lindex $::end_test::tkMessageBoxCalls 0]
+    set title ""
+    set message ""
+
+    set titleIdx [lsearch -exact $call "-title"]
+    if {$titleIdx != -1 && ($titleIdx + 1) < [llength $call]} {
+        set title [lindex $call [expr {$titleIdx + 1}]]
+    }
+
+    set messageIdx [lsearch -exact $call "-message"]
+    if {$messageIdx != -1 && ($messageIdx + 1) < [llength $call]} {
+        set message [lindex $call [expr {$messageIdx + 1}]]
+    }
+
+    list $title $message
+} -cleanup {
+    ::end_test::cleanup
+} -result {{Scid: Filter empty} {The filter contains no games.}}
+
+
+test end-exportGames-exportOptions-cancel-returns-1.0 {exportGames returns immediately when exportOptions is cancelled} -setup {
+    ::end_test::setup
+} -body {
+    # Arrange
+    ::end_test::stubCommand sc_filter {subcmd args} {
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in this test" }
+        return 1
+    }
+
+    ::end_test::stubCommand exportOptions {exportType} {
+        lappend ::end_test::exportOptionsCalls $exportType
+        return 0
+    }
+
+    ::end_test::stubCommand sc_info {subcmd args} {
+        lappend ::end_test::scInfoCalls [list $subcmd {*}$args]
+        error "sc_info should not be called when exportOptions returns 0"
+    }
+
+    # Act
+    exportGames filter PGN
+
+    # Assert
+    list $::end_test::exportOptionsCalls $::end_test::scInfoCalls
+} -cleanup {
+    ::end_test::cleanup
+} -result {PGN {}}
+
+
+cleanupTests

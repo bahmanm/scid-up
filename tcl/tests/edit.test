@@ -1,0 +1,424 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# `tcl/edit.tcl` installs variable traces that reference `::utils::validate::*`.
+# Provide harmless implementations so tests can freely set those globals.
+namespace eval ::utils {}
+namespace eval ::utils::validate {}
+
+if {![llength [info procs ::utils::validate::Integer]]} {
+    proc ::utils::validate::Integer {max allowEmpty args} {
+        return 1
+    }
+}
+
+if {![llength [info procs ::utils::validate::Regexp]]} {
+    proc ::utils::validate::Regexp {pattern args} {
+        return 1
+    }
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] edit.tcl]
+
+namespace eval ::edit_test {
+    variable stubbedCommands {}
+
+    variable tkMessageBoxCalls {}
+    variable clipboardCalls {}
+    variable selectionCalls {}
+    variable updateBoardCalls {}
+}
+
+proc ::edit_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::edit_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::edit_test::setup {} {
+    ::edit_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::edit_test::tkMessageBoxCalls {}
+    set ::edit_test::clipboardCalls {}
+    set ::edit_test::selectionCalls {}
+    set ::edit_test::updateBoardCalls {}
+
+    if {![info exists ::tr]} { array set ::tr {} }
+
+    # Ensure the board state is deterministic for tests.
+    set ::setupBd "................................................................"
+    set ::setupFen ""
+    set ::toMove White
+    set ::castling KQkq
+    set ::epFile -
+    set ::moveNum 1
+
+    unset -nocomplain ::scid_test::sc_pos_fen
+}
+
+proc ::edit_test::cleanup {} {
+    ::edit_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::setupBd
+    unset -nocomplain ::setupFen
+    unset -nocomplain ::toMove
+    unset -nocomplain ::castling
+    unset -nocomplain ::epFile
+    unset -nocomplain ::moveNum
+    unset -nocomplain ::scid_test::sc_pos_fen
+}
+
+proc ::edit_test::initialBoardString {} {
+    # 64-char board string with indices 0..7 = a1..h1.
+    return "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr"
+}
+
+# ---- Tests ----
+
+test edit-validateSetup-accepts-initial-position-1.0 {validateSetup accepts a normal chess starting position} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+
+    # Act
+    validateSetup
+} -cleanup {
+    ::edit_test::cleanup
+} -result {}
+
+
+test edit-validateSetup-rejects-invalid-piece-1.0 {validateSetup rejects unrecognised piece letters} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set ::setupBd [string replace $::setupBd 10 10 X]
+
+    # Act
+    validateSetup
+} -cleanup {
+    ::edit_test::cleanup
+} -result {Invalid piece: X}
+
+
+test edit-validateSetup-rejects-pawn-on-first-rank-1.0 {validateSetup rejects pawns on the 1st rank} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set ::setupBd [string replace $::setupBd 0 0 P]
+
+    # Act
+    validateSetup
+} -cleanup {
+    ::edit_test::cleanup
+} -result {There must be no pawn in the 1st row}
+
+
+test edit-validateSetup-rejects-pawn-on-eighth-rank-1.0 {validateSetup rejects pawns on the 8th rank} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set ::setupBd [string replace $::setupBd 63 63 p]
+
+    # Act
+    validateSetup
+} -cleanup {
+    ::edit_test::cleanup
+} -result {There must be no pawn in the 8th row}
+
+
+test edit-validateSetup-rejects-missing-white-king-1.0 {validateSetup requires exactly one white king} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set idx [string first K $::setupBd]
+    set ::setupBd [string replace $::setupBd $idx $idx .]
+
+    # Act
+    validateSetup
+} -cleanup {
+    ::edit_test::cleanup
+} -result {There must be one white king}
+
+
+test edit-validateSetup-rejects-too-many-white-pieces-1.0 {validateSetup rejects more than 16 white pieces} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    # Add an extra white queen on an empty square.
+    set ::setupBd [string replace $::setupBd 20 20 Q]
+
+    # Act
+    validateSetup
+} -cleanup {
+    ::edit_test::cleanup
+} -result {Too many white pieces}
+
+
+test edit-validateSetup-rejects-too-many-white-pawns-1.0 {validateSetup rejects more than 8 white pawns} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+
+    # Keep total pieces <= 16 while exceeding the pawn limit:
+    # remove a non-pawn piece, then add an extra pawn on an empty square.
+    set ::setupBd [string replace $::setupBd 2 2 .]
+    set ::setupBd [string replace $::setupBd 20 20 P]
+
+    # Act
+    validateSetup
+} -cleanup {
+    ::edit_test::cleanup
+} -result {Too many white pawns}
+
+
+test edit-makeSetupFen-starting-position-1.0 {makeSetupFen builds standard starting FEN} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set ::toMove White
+    set ::castling KQkq
+    set ::epFile -
+    set ::moveNum 1
+
+    # Act
+    set fen [makeSetupFen]
+
+    # Assert
+    list $fen $::setupFen
+} -cleanup {
+    ::edit_test::cleanup
+} -result {{rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1} {rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1}}
+
+
+test edit-makeSetupFen-en-passant-white-to-move-1.0 {makeSetupFen sets ep square on rank 6 when White is to move} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set ::toMove White
+    set ::castling -
+    set ::epFile e
+    set ::moveNum 17
+
+    # Act
+    makeSetupFen
+} -cleanup {
+    ::edit_test::cleanup
+} -result {rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - e6 0 17}
+
+
+test edit-makeSetupFen-en-passant-black-to-move-1.0 {makeSetupFen sets ep square on rank 3 when Black is to move} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set ::toMove Black
+    set ::castling -
+    set ::epFile e
+    set ::moveNum 17
+
+    # Act
+    makeSetupFen
+} -cleanup {
+    ::edit_test::cleanup
+} -result {rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b - e3 0 17}
+
+
+test edit-makeSetupFen-invalid-board-prefixes-error-1.0 {makeSetupFen prefixes Invalid board when validateSetup fails} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::setupBd [::edit_test::initialBoardString]
+    set ::setupBd [string replace $::setupBd 10 10 X]
+
+    # Act
+    makeSetupFen
+} -cleanup {
+    ::edit_test::cleanup
+} -result {Invalid board: Invalid piece: X}
+
+
+test edit-fenErrorDialog-adds-parent-when-setup-exists-1.0 {fenErrorDialog uses -parent .setup when .setup exists} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    ::edit_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        if {[lindex $args 0] eq ".setup"} { return 1 }
+        return 0
+    }
+    ::edit_test::stubCommand tk_messageBox {args} {
+        lappend ::edit_test::tkMessageBoxCalls $args
+        return ok
+    }
+
+    # Act
+    fenErrorDialog "boom"
+
+    # Assert
+    set call [lindex $::edit_test::tkMessageBoxCalls 0]
+    expr {[lsearch -exact $call "-parent"] != -1 && [lindex $call [expr {[lsearch -exact $call "-parent"] + 1}]] eq ".setup"}
+} -cleanup {
+    ::edit_test::cleanup
+} -result {1}
+
+
+test edit-fenErrorDialog-no-parent-when-setup-missing-1.0 {fenErrorDialog omits -parent when .setup does not exist} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    ::edit_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in this test" }
+        return 0
+    }
+    ::edit_test::stubCommand tk_messageBox {args} {
+        lappend ::edit_test::tkMessageBoxCalls $args
+        return ok
+    }
+
+    # Act
+    fenErrorDialog "boom"
+
+    # Assert
+    set call [lindex $::edit_test::tkMessageBoxCalls 0]
+    expr {[lsearch -exact $call "-parent"] == -1}
+} -cleanup {
+    ::edit_test::cleanup
+} -result {1}
+
+
+test edit-pasteFEN-empty-selection-shows-help-1.0 {pasteFEN shows an explanatory error when selection is empty} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    ::edit_test::stubCommand selection {subcmd args} {
+        # Simulate no selection.
+        error "no selection"
+    }
+    ::edit_test::stubCommand fenErrorDialog {msg} {
+        lappend ::edit_test::tkMessageBoxCalls $msg
+        return
+    }
+
+    # Act
+    pasteFEN
+
+    # Assert
+    set msg [lindex $::edit_test::tkMessageBoxCalls 0]
+    expr {[string match "*FEN is the standard text representation of a chess position*" $msg]}
+} -cleanup {
+    ::edit_test::cleanup
+} -result {1}
+
+
+test edit-pasteFEN-invalid-fen-shows-error-1.0 {pasteFEN rejects invalid FEN and shows an explanatory error} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    ::edit_test::stubCommand selection {subcmd args} {
+        if {$subcmd ne "get"} { error "selection $subcmd not stubbed" }
+        return "not a fen"
+    }
+    ::edit_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "startBoard"} { error "sc_game $subcmd not stubbed" }
+        error "invalid"
+    }
+    ::edit_test::stubCommand fenErrorDialog {msg} {
+        lappend ::edit_test::tkMessageBoxCalls $msg
+        return
+    }
+
+    # Act
+    pasteFEN
+
+    # Assert
+    set msg [lindex $::edit_test::tkMessageBoxCalls 0]
+    expr {[string match "*is not a valid chess position in FEN notation*" $msg]}
+} -cleanup {
+    ::edit_test::cleanup
+} -result {1}
+
+
+test edit-pasteFEN-valid-fen-updates-board-1.0 {pasteFEN calls updateBoard -pgn on success} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::edit_test::fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    ::edit_test::stubCommand selection {subcmd args} {
+        if {$subcmd ne "get"} { error "selection $subcmd not stubbed" }
+        return $::edit_test::fen
+    }
+    ::edit_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "startBoard"} { error "sc_game $subcmd not stubbed" }
+        return
+    }
+    ::edit_test::stubCommand updateBoard {args} {
+        lappend ::edit_test::updateBoardCalls [list updateBoard {*}$args]
+        return
+    }
+
+    # Act
+    pasteFEN
+
+    # Assert
+    set ::edit_test::updateBoardCalls
+} -cleanup {
+    unset -nocomplain ::edit_test::fen
+    ::edit_test::cleanup
+} -result {{updateBoard -pgn}}
+
+
+test edit-copyFEN-copies-to-clipboard-1.0 {copyFEN writes sc_pos fen to clipboard and owns selection} -setup {
+    ::edit_test::setup
+} -body {
+    # Arrange
+    set ::scid_test::sc_pos_fen "fen-value"
+
+    ::edit_test::stubCommand winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed" }
+        return 0
+    }
+    ::edit_test::stubCommand text {w args} {
+        ::scid_test::widgets::defineTextWidget $w
+        return $w
+    }
+    ::edit_test::stubCommand clipboard {subcmd args} {
+        lappend ::edit_test::clipboardCalls [list $subcmd {*}$args]
+        return
+    }
+    ::edit_test::stubCommand selection {subcmd args} {
+        lappend ::edit_test::selectionCalls [list $subcmd {*}$args]
+        if {$subcmd eq "get"} { return "fen-value" }
+        return
+    }
+
+    # Act
+    copyFEN
+
+    # Assert
+    list \
+        [::scid_test::widgets::getText .tempFEN] \
+        $::edit_test::clipboardCalls \
+        $::edit_test::selectionCalls
+} -cleanup {
+    ::edit_test::cleanup
+} -result {fen-value {clear {append fen-value}} {{own .tempFEN} get}}
+
+
+cleanupTests

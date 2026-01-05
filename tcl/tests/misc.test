@@ -1,0 +1,394 @@
+package require tcltest 2.5
+
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+namespace eval ::misc_test {
+    variable stubbedCommands {}
+    variable createdCommands {}
+
+    # bind scripts indexed by ($widget,$sequence)
+    array set binds {}
+
+    # combobox state indexed by ($path,*)
+    array set comboValues {}
+    array set comboCurrent {}
+}
+
+proc ::misc_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::misc_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::misc_test::cleanupCommands {} {
+    variable createdCommands
+    foreach cmd $createdCommands {
+        catch {rename $cmd ""}
+    }
+    set createdCommands {}
+}
+
+proc ::misc_test::defineCombobox {path args} {
+    variable createdCommands
+    variable comboValues
+    variable comboCurrent
+
+    set values {}
+    set idx [lsearch -exact $args -values]
+    if {$idx != -1 && ($idx + 1) < [llength $args]} {
+        set values [lindex $args [expr {$idx + 1}]]
+    }
+
+    set comboValues($path) $values
+    set comboCurrent($path) 0
+
+    proc ::$path {subcmd args} [format {
+        switch -- $subcmd {
+            configure {
+                return
+            }
+            get {
+                if {![info exists ::misc_test::comboValues(%2$s)]} {
+                    error "Unknown combobox: %2$s"
+                }
+                set values $::misc_test::comboValues(%2$s)
+                set idx $::misc_test::comboCurrent(%2$s)
+                if {$idx < 0 || $idx >= [llength $values]} { return "" }
+                return [lindex $values $idx]
+            }
+            current {
+                if {[llength $args] == 0} {
+                    return $::misc_test::comboCurrent(%2$s)
+                }
+                set ::misc_test::comboCurrent(%2$s) [lindex $args 0]
+                return
+            }
+            default {
+                error "combobox %2$s subcommand $subcmd not stubbed"
+            }
+        }
+    } [list ::$path] [list $path]]
+
+    lappend createdCommands ::$path
+    return $path
+}
+
+proc ::misc_test::setup {} {
+    ::misc_test::restoreStubs
+    ::misc_test::cleanupCommands
+    ::scid_test::widgets::reset
+
+    array unset ::misc_test::binds
+    array unset ::misc_test::comboValues
+    array unset ::misc_test::comboCurrent
+
+    # Ensure ttk namespace exists for stubbing.
+    namespace eval ::ttk {}
+
+    # Provide a minimal bind/event harness for CreateSelectDBWidget.
+    ::misc_test::stubCommand bind {w sequence script} {
+        set ::misc_test::binds($w,$sequence) $script
+        return
+    }
+
+    ::misc_test::stubCommand event {subcmd w sequence args} {
+        if {$subcmd ne "generate"} { error "event $subcmd not stubbed" }
+        if {![info exists ::misc_test::binds($w,$sequence)]} { return }
+        uplevel #0 $::misc_test::binds($w,$sequence)
+        return
+    }
+
+    ::misc_test::stubCommand grid {args} { return }
+
+    ::misc_test::stubCommand ::ttk::combobox {path args} {
+        return [::misc_test::defineCombobox $path {*}$args]
+    }
+
+    # Provide default translation (tests can override).
+    ::misc_test::stubCommand tr {s} { return $s }
+}
+
+proc ::misc_test::cleanup {} {
+    ::misc_test::restoreStubs
+    ::misc_test::cleanupCommands
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::misc_test::selectedBase
+    unset -nocomplain ::misc_test::comment
+    unset -nocomplain ::misc_test::setCommentCalls
+
+    array unset ::misc_test::binds
+    array unset ::misc_test::comboValues
+    array unset ::misc_test::comboCurrent
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] misc.tcl]
+
+test misc-format_clock-trims-leading-zeros-1.0 {format_clock trims unnecessary leading zeros and keeps minutes} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [format_clock "0:00:05"] \
+        [format_clock "0:01:05"] \
+        [format_clock "1:02:03"] \
+        [format_clock "0:05"]
+} -cleanup {
+    ::misc_test::cleanup
+} -result {0:05 1:05 1:02:03 0:05}
+
+test misc-format_clock_from_seconds-formats-positive-and-negative-1.0 {format_clock_from_seconds formats positive and negative durations} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [format_clock_from_seconds 0] \
+        [format_clock_from_seconds 65] \
+        [format_clock_from_seconds 3600] \
+        [format_clock_from_seconds -5] \
+        [format_clock_from_seconds -3661]
+} -cleanup {
+    ::misc_test::cleanup
+} -result {0:00 1:05 1:00:00 -0:05 -1:01:01}
+
+test misc-clock_to_seconds-parses-hms-and-ms-1.0 {clock_to_seconds parses hh:mm:ss and mm:ss with optional sign} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [clock_to_seconds "0:05"] \
+        [clock_to_seconds "1:02:03"] \
+        [clock_to_seconds "-0:05"] \
+        [clock_to_seconds ""]
+} -cleanup {
+    ::misc_test::cleanup
+} -result {5 3723 -5 {}}
+
+test misc-clock_to_seconds-rejects-invalid-1.0 {clock_to_seconds returns empty string for invalid inputs} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [clock_to_seconds "abc"] \
+        [clock_to_seconds "1:2:03"] \
+        [clock_to_seconds "1:02:3"] \
+        [clock_to_seconds "0:0"] \
+        [clock_to_seconds "-"]
+} -cleanup {
+    ::misc_test::cleanup
+} -result {{} {} {} {} {}}
+
+test misc-storeEmtComment-prepends-when-missing-1.0 {storeEmtComment prepends an %emt tag when absent} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange
+    set ::misc_test::comment "Hello"
+    set ::misc_test::setCommentCalls {}
+    ::misc_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            getComment { return $::misc_test::comment }
+            setComment {
+                lappend ::misc_test::setCommentCalls [lindex $args 0]
+                return
+            }
+            default { error "sc_pos $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    storeEmtComment 0 0 5
+
+    # Assert
+    set ::misc_test::setCommentCalls
+} -cleanup {
+    ::misc_test::cleanup
+} -result {{[%emt 0:00:05]Hello}}
+
+test misc-storeEmtComment-replaces-existing-tag-1.0 {storeEmtComment replaces an existing %emt tag in the current comment} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange
+    set ::misc_test::comment {[%emt 9:99:99]Hello}
+    set ::misc_test::setCommentCalls {}
+    ::misc_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            getComment { return $::misc_test::comment }
+            setComment {
+                lappend ::misc_test::setCommentCalls [lindex $args 0]
+                return
+            }
+            default { error "sc_pos $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    storeEmtComment 1 2 3
+
+    # Assert
+    set ::misc_test::setCommentCalls
+} -cleanup {
+    ::misc_test::cleanup
+} -result {{[%emt 1:02:03]Hello}}
+
+test misc-storeEvalComment-prepends-when-missing-1.0 {storeEvalComment prepends an %eval tag when absent} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange
+    set ::misc_test::comment "Hello"
+    set ::misc_test::setCommentCalls {}
+    ::misc_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            getComment { return $::misc_test::comment }
+            setComment {
+                lappend ::misc_test::setCommentCalls [lindex $args 0]
+                return
+            }
+            default { error "sc_pos $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    storeEvalComment 0.12
+
+    # Assert
+    set ::misc_test::setCommentCalls
+} -cleanup {
+    ::misc_test::cleanup
+} -result {{[%eval 0.12]Hello}}
+
+test misc-storeEvalComment-replaces-existing-tag-1.0 {storeEvalComment replaces an existing %eval tag in the current comment} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange
+    set ::misc_test::comment {[%eval -0.14]Hello}
+    set ::misc_test::setCommentCalls {}
+    ::misc_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            getComment { return $::misc_test::comment }
+            setComment {
+                lappend ::misc_test::setCommentCalls [lindex $args 0]
+                return
+            }
+            default { error "sc_pos $subcmd not stubbed" }
+        }
+    }
+
+    # Act
+    storeEvalComment 0.56
+
+    # Assert
+    set ::misc_test::setCommentCalls
+} -cleanup {
+    ::misc_test::cleanup
+} -result {{[%eval 0.56]Hello}}
+
+test misc-CreateSelectDBWidget-selects-ref-base-and-sets-var-1.0 {CreateSelectDBWidget selects the reference base and updates the target variable} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange
+    # TODO: CreateSelectDBWidget currently parses the displayed combobox value to
+    # extract the base number; it should instead map the selected index to the
+    # base ID directly (avoids translation/format brittleness).
+    set ::misc_test::selectedBase ""
+
+    ::misc_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return 2 }
+            list { return {1 2 3} }
+            isReadOnly {
+                set base [lindex $args 0]
+                expr {$base == 3}
+            }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    namespace eval ::file {}
+    ::misc_test::stubCommand ::file::BaseName {base} { return "db$base" }
+    ::misc_test::stubCommand tr {s} { return $s }
+
+    # Act
+    CreateSelectDBWidget .sel ::misc_test::selectedBase 1 0
+
+    # Assert
+    list \
+        $::misc_test::selectedBase \
+        [.sel.lb get] \
+        $::misc_test::comboValues(.sel.lb)
+} -cleanup {
+    ::misc_test::cleanup
+} -result {1 {Database 1: db1} {{Database 1: db1} {Database 2: db2}}}
+
+test misc-CreateSelectDBWidget-supports-multi-digit-base-numbers-1.0 {CreateSelectDBWidget supports multi-digit base numbers} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange
+    set ::misc_test::selectedBase ""
+
+    ::misc_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return 10 }
+            list { return {1 2 10} }
+            isReadOnly { return 0 }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    namespace eval ::file {}
+    ::misc_test::stubCommand ::file::BaseName {base} { return "db$base" }
+    ::misc_test::stubCommand tr {s} { return $s }
+
+    # Act
+    CreateSelectDBWidget .sel3 ::misc_test::selectedBase 10 1
+
+    # Assert
+    list \
+        $::misc_test::selectedBase \
+        [.sel3.lb get] \
+        $::misc_test::comboValues(.sel3.lb)
+} -cleanup {
+    ::misc_test::cleanup
+} -result {10 {Database 10: db10} {{Database 1: db1} {Database 2: db2} {Database 10: db10}}}
+
+test misc-CreateSelectDBWidget-defaults-to-current-and-filters-readonly-1.0 {CreateSelectDBWidget defaults ref_base from sc_base current and can filter read-only bases} -setup {
+    ::misc_test::setup
+} -body {
+    # Arrange
+    set ::misc_test::selectedBase ""
+
+    ::misc_test::stubCommand sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return 2 }
+            list { return {1 2 3} }
+            isReadOnly {
+                set base [lindex $args 0]
+                expr {$base == 3}
+            }
+            default { error "sc_base $subcmd not stubbed" }
+        }
+    }
+
+    namespace eval ::file {}
+    ::misc_test::stubCommand ::file::BaseName {base} { return "db$base" }
+    ::misc_test::stubCommand tr {s} { return $s }
+
+    # Act
+    CreateSelectDBWidget .sel2 ::misc_test::selectedBase "" 0
+
+    # Assert
+    list \
+        $::misc_test::selectedBase \
+        [.sel2.lb get] \
+        $::misc_test::comboValues(.sel2.lb)
+} -cleanup {
+    ::misc_test::cleanup
+} -result {2 {Database 2: db2} {{Database 1: db1} {Database 2: db2}}}
+
+cleanupTests

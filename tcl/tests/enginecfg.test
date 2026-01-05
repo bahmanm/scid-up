@@ -1,0 +1,276 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] enginecfg.tcl]
+
+namespace eval ::enginecfg_test {
+    variable stubbedCommands {}
+
+    variable writeCalls 0
+    variable saveCalls {}
+}
+
+proc ::enginecfg_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::enginecfg_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::enginecfg_test::setup {} {
+    ::enginecfg_test::restoreStubs
+
+    set ::enginecfg_test::writeCalls 0
+    set ::enginecfg_test::saveCalls {}
+
+    # Keep file output deterministic for tests that call ::enginecfg::write.
+    set ::scidVersion "test"
+
+    # Default empty engine list.
+    if {![info exists ::engines(list)]} { set ::engines(list) {} }
+    set ::engines(list) {}
+
+    # Ensure the yes/no message box has an explicit answer when needed.
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+}
+
+proc ::enginecfg_test::cleanup {} {
+    ::enginecfg_test::restoreStubs
+
+    unset -nocomplain ::scidVersion
+    unset -nocomplain ::engines(list)
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+}
+
+# ---- Tests ----
+
+test enginecfg-names-sorts-by-last-use-1.0 {::enginecfg::names returns names sorted by time field (descending)} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list \
+        [list "A" cmd {} {} {} 10 {} 1 {}] \
+        [list "B" cmd {} {} {} 50 {} 1 {}] \
+        [list "C" cmd {} {} {} 20 {} 1 {}]]
+
+    # Act
+    ::enginecfg::names
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {B C A}
+
+
+test enginecfg-get-normalises-url-metadata-1.0 {::enginecfg::get ensures url metadata list contains six elements} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list \
+        [list "E" cmd {} {} {} 0 {} 1 {}]]
+
+    # Act
+    set cfg [::enginecfg::get E]
+
+    # Assert
+    lindex $cfg 6
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {white 1 word false normal {}}
+
+
+test enginecfg-uniquename-appends-copy-number-1.0 {::enginecfg::uniquename appends/increments numeric suffixes to ensure uniqueness} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list \
+        [list "Stockfish" cmd {} {} {} 0 {} 1 {}] \
+        [list "Stockfish (1)" cmd {} {} {} 0 {} 1 {}]]
+
+    # Act
+    ::enginecfg::uniquename "Stockfish"
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {Stockfish (2)}
+
+
+test enginecfg-rename-updates-list-and-writes-1.0 {::enginecfg::rename updates engine name, preserves uniqueness, and writes the list} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list \
+        [list "Old" cmd {} {} {} 0 {} 1 {}] \
+        [list "New" cmd {} {} {} 0 {} 1 {}]]
+
+    ::enginecfg_test::stubCommand ::enginecfg::write {} {
+        incr ::enginecfg_test::writeCalls
+        return
+    }
+
+    # Act
+    set renamed [::enginecfg::rename Old New]
+
+    # Assert
+    list \
+        $renamed \
+        [lindex [lindex $::engines(list) 0] 0] \
+        $::enginecfg_test::writeCalls
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {{New (1)} {New (1)} 1}
+
+
+test enginecfg-add-forces-save-1.0 {::enginecfg::add appends and invokes save with force_write=true} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list [list "Engine" cmd {} {} {} 0 {} 1 {}]]
+
+    ::enginecfg_test::stubCommand ::enginecfg::save {enginecfg force_write} {
+        lappend ::enginecfg_test::saveCalls [list $enginecfg $force_write]
+        return [lindex $enginecfg 0]
+    }
+
+    set cfg [list "Engine" cmd2 {} {} {} 0 {} 1 {}]
+
+    # Act
+    set added [::enginecfg::add $cfg]
+
+    # Assert
+    list \
+        $added \
+        [llength $::engines(list)] \
+        [lindex [lindex $::enginecfg_test::saveCalls 0] 1]
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {{Engine (1)} 2 true}
+
+
+test enginecfg-save-strips-default-and-internal-options-1.0 {::enginecfg::save persists only non-default, non-internal UCI options} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set options [list \
+        [list Threads 1 spin 1 1 16 {} 0] \
+        [list Skill 10 spin 0 0 20 {} 0] \
+        [list Hidden 5 spin 0 0 10 {} 1]]
+
+    set cfg [list "E" cmd {} {} {} 0 {} 1 $options]
+    set ::engines(list) [list $cfg]
+
+    ::enginecfg_test::stubCommand ::enginecfg::write {} {
+        incr ::enginecfg_test::writeCalls
+        return
+    }
+
+    # Act
+    ::enginecfg::save $cfg
+
+    # Assert
+    list \
+        [lindex [lindex $::engines(list) 0] 8] \
+        $::enginecfg_test::writeCalls
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {{{Skill 10}} 1}
+
+
+test enginecfg-save-no-write-when-unchanged-1.0 {::enginecfg::save does not write when the configuration is unchanged} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set options [list [list Skill 10 spin 0 0 20 {} 0]]
+    set cfg [list "E" cmd {} {} {} 0 {} 1 $options]
+
+    # Persisted form is already "{Skill 10}", but ::enginecfg::save is called
+    # with the full option descriptors.
+    set persisted $cfg
+    lset persisted 8 [list [list Skill 10]]
+    set ::engines(list) [list $persisted]
+
+    ::enginecfg_test::stubCommand ::enginecfg::write {} {
+        error "write should not be called for unchanged config"
+    }
+
+    # Act
+    ::enginecfg::save $cfg
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {E}
+
+
+test enginecfg-write-creates-engine-list-file-1.0 {::enginecfg::write writes the engine list file in config directory} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::scidVersion "9.9"
+    set ::engines(list) [list [list "E" cmd {--uci} /tmp 2500 99 {white 1 word false normal {}} 1 {{Skill 10}}]]
+
+    set enginesFile [scidConfigFile engines]
+    if {[file exists $enginesFile]} { file delete -force $enginesFile }
+
+    # Act
+    ::enginecfg::write
+
+    # Assert
+    set ch [open $enginesFile r]
+    set data [read $ch]
+    close $ch
+
+    list \
+        [expr {[string match "*Analysis engines list file for Scid 9.9*" $data]}] \
+        [expr {[regexp {\n\s*Name\s+E\s*\n} $data]}] \
+        [expr {[regexp {\n\s*Cmd\s+cmd\s*\n} $data]}] \
+        [expr {[string match "*UCIoptions*Skill 10*" $data]}]
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {1 1 1 1}
+
+
+test enginecfg-remove-cancelled-1.0 {::enginecfg::remove returns false and does not write when cancelled} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list [list "E" cmd {} {} {} 0 {} 1 {}]]
+    set ::scid_test::tk_messageBox_answer "no"
+
+    ::enginecfg_test::stubCommand ::enginecfg::write {} {
+        error "write should not be called when removal is cancelled"
+    }
+
+    # Act
+    set removed [::enginecfg::remove E]
+
+    # Assert
+    list $removed [llength $::engines(list)]
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {false 1}
+
+
+test enginecfg-remove-confirmed-1.0 {::enginecfg::remove removes engine and writes when confirmed} -setup {
+    ::enginecfg_test::setup
+} -body {
+    # Arrange
+    set ::engines(list) [list [list "E" cmd {} {} {} 0 {} 1 {}]]
+    set ::scid_test::tk_messageBox_answer "yes"
+
+    ::enginecfg_test::stubCommand ::enginecfg::write {} {
+        incr ::enginecfg_test::writeCalls
+        return
+    }
+
+    # Act
+    set removed [::enginecfg::remove E]
+
+    # Assert
+    list $removed [llength $::engines(list)] $::enginecfg_test::writeCalls
+} -cleanup {
+    ::enginecfg_test::cleanup
+} -result {true 0 1}
+
+
+cleanupTests

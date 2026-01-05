@@ -1,0 +1,376 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# `tcl/board.tcl` assumes the `::board` namespace exists at load time.
+namespace eval ::board {}
+
+# `tcl/board.tcl` initialises itself at load time (calls `InitBoard`, which
+# calls `setPieceFont` and `SetBoardTextures`), so we need minimal `image` and
+# `glob` support under plain `tclsh`.
+namespace eval ::board_test {
+    variable createdImageCommands {}
+    array set imageHeight {}
+    array set imageWidth {}
+}
+
+proc ::board_test::dispatchPhotoImage {name subcmd args} {
+    switch -- $subcmd {
+        copy {
+            # No-op photo copy for headless tests.
+            return
+        }
+        get {
+            # Return a deterministic RGB triple.
+            return {0 0 0}
+        }
+        default {
+            error "Photo image $name subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+if {![llength [info commands image]]} {
+    proc image {subcmd args} {
+        switch -- $subcmd {
+            create {
+                # `image create photo name ?options...?`
+                set type [lindex $args 0]
+                if {$type ne "photo"} {
+                    error "image create $type not stubbed in tests"
+                }
+
+                set name [lindex $args 1]
+                if {$name eq "" || [string match "-*" $name]} {
+                    error "image create photo requires an explicit name in tests"
+                }
+
+                set height 20
+                set width 20
+                set heightIdx [lsearch -exact $args "-height"]
+                if {$heightIdx != -1 && ($heightIdx + 1) < [llength $args]} {
+                    set height [lindex $args [expr {$heightIdx + 1}]]
+                }
+                set widthIdx [lsearch -exact $args "-width"]
+                if {$widthIdx != -1 && ($widthIdx + 1) < [llength $args]} {
+                    set width [lindex $args [expr {$widthIdx + 1}]]
+                }
+
+                if {![llength [info commands $name]]} {
+                    interp alias {} $name {} ::board_test::dispatchPhotoImage $name
+                    lappend ::board_test::createdImageCommands $name
+                }
+
+                set ::board_test::imageHeight($name) $height
+                set ::board_test::imageWidth($name) $width
+                return $name
+            }
+            height {
+                set name [lindex $args 0]
+                if {![info exists ::board_test::imageHeight($name)]} {
+                    return 20
+                }
+                return $::board_test::imageHeight($name)
+            }
+            width {
+                set name [lindex $args 0]
+                if {![info exists ::board_test::imageWidth($name)]} {
+                    return 20
+                }
+                return $::board_test::imageWidth($name)
+            }
+            delete {
+                foreach name $args {
+                    catch {rename $name ""}
+                    unset -nocomplain ::board_test::imageHeight($name)
+                    unset -nocomplain ::board_test::imageWidth($name)
+                }
+                return
+            }
+            default {
+                error "image $subcmd not stubbed in tests"
+            }
+        }
+    }
+}
+
+# Minimal environment expected by InitBoard/setPieceFont/SetBoardTextures.
+set ::scidImgDir [file join [::scid_test::repoRoot] _dummy_images]
+set ::boardStyles {Merida}
+set ::boardStyle Merida
+set ::boardSize 40
+set ::borderwidth 0
+
+# Provide placeholder board texture images.
+image create photo emptySquare -height 20 -width 20
+set ::boardfile_lite emptySquare
+set ::boardfile_dark emptySquare
+
+# Stub `glob` so `setPieceFont` initialises a single synthetic board size.
+rename glob ::board_test::glob_real
+proc glob {args} {
+    set dir ""
+    set dirIdx [lsearch -exact $args "-directory"]
+    if {$dirIdx != -1 && ($dirIdx + 1) < [llength $args]} {
+        set dir [lindex $args [expr {$dirIdx + 1}]]
+    }
+    if {$dir eq ""} {
+        set dir [::scid_test::tempDir]
+    }
+    return [list [file join $dir dummy.png]]
+}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] board.tcl]
+
+# Restore real `glob` after module initialisation.
+rename glob {}
+rename ::board_test::glob_real glob
+
+namespace eval ::board_test {
+    variable createdCommands {}
+    array set coords {}
+}
+
+proc ::board_test::defineScoreCanvas {path} {
+    variable createdCommands
+
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::board_test::dispatchScoreCanvas $path
+    lappend createdCommands $path
+    return $path
+}
+
+proc ::board_test::dispatchScoreCanvas {path subcmd args} {
+    switch -- $subcmd {
+        coords {
+            set tag [lindex $args 0]
+            set values [lrange $args 1 end]
+            set ::board_test::coords($path,$tag) $values
+            return
+        }
+        default {
+            error "Score canvas $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::board_test::getCoords {path tag} {
+    if {![info exists ::board_test::coords($path,$tag)]} {
+        error "No coords recorded for $path tag $tag"
+    }
+    return $::board_test::coords($path,$tag)
+}
+
+proc ::board_test::setup {} {
+    # Reset recorded state.
+    array unset ::board_test::coords
+    array set ::board_test::coords {}
+
+    # Remove any previously created widget command doubles.
+    foreach w $::board_test::createdCommands {
+        catch {rename $w ""}
+    }
+    set ::board_test::createdCommands {}
+
+    # Ensure consistent globals used by the procs under test.
+    set ::squareColor_lite "#eeeeee"
+    set ::squareColor_dark "#111111"
+}
+
+proc ::board_test::cleanup {} {
+    foreach w $::board_test::createdCommands {
+        catch {rename $w ""}
+    }
+    set ::board_test::createdCommands {}
+
+    unset -nocomplain ::squareColor_lite
+    unset -nocomplain ::squareColor_dark
+}
+
+# ---- Tests ----
+
+test board-sq-valid-1.0 {::board::sq returns indices for valid SAN squares} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [::board::sq a1] \
+        [::board::sq h1] \
+        [::board::sq a8] \
+        [::board::sq h8]
+} -cleanup {
+    ::board_test::cleanup
+} -result {0 7 56 63}
+
+
+test board-sq-invalid-1.0 {::board::sq returns -1 for invalid square names} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [::board::sq ""] \
+        [::board::sq notASquare] \
+        [::board::sq z9]
+} -cleanup {
+    ::board_test::cleanup
+} -result {-1 -1 -1}
+
+
+test board-san-roundtrip-1.0 {::board::san converts indices to squares and round-trips with ::board::sq} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange
+    set indices {0 7 8 27 56 63}
+
+    # Act
+    set squares {}
+    foreach i $indices {
+        lappend squares [::board::san $i]
+    }
+
+    set roundTrip {}
+    foreach sq $squares {
+        lappend roundTrip [::board::sq $sq]
+    }
+
+    # Assert
+    list $squares $roundTrip
+} -cleanup {
+    ::board_test::cleanup
+} -result {{a1 h1 a2 d4 a8 h8} {0 7 8 27 56 63}}
+
+
+test board-san-out-of-range-1.0 {::board::san returns empty string for out-of-range indices} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange / Act / Assert
+    list \
+        [::board::san -1] \
+        [::board::san 64]
+} -cleanup {
+    ::board_test::cleanup
+} -result {{} {}}
+
+
+test board-defaultColor-parity-1.0 {::board::defaultColor returns dark for a1 and alternates by square parity} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange
+    set a1 [::board::sq a1]
+    set b1 [::board::sq b1]
+    set a2 [::board::sq a2]
+
+    # Act
+    set cA1 [::board::defaultColor $a1]
+    set cB1 [::board::defaultColor $b1]
+    set cA2 [::board::defaultColor $a2]
+
+    # Assert
+    list $cA1 $cB1 $cA2
+} -cleanup {
+    ::board_test::cleanup
+} -result {{#111111} #eeeeee #eeeeee}
+
+
+test board-updateEvalBar-empty-1.0 {::board::updateEvalBar clears bar coords when score is empty} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange
+    set w .b
+    ::board_test::defineScoreCanvas $w.score
+
+    set ::board::_evalbarShow($w) 1
+    set ::board::_evalbarHeight($w) 100
+    set ::board::_evalbarWidth($w) 10
+    set ::board::_evalbarScale($w) 1
+
+    # Act
+    ::board::updateEvalBar $w ""
+
+    # Assert
+    list \
+        $::board::_evalbarScore($w) \
+        [::board_test::getCoords $w.score barUp] \
+        [::board_test::getCoords $w.score barDown]
+} -cleanup {
+    unset -nocomplain ::board::_evalbarShow(.b)
+    unset -nocomplain ::board::_evalbarHeight(.b)
+    unset -nocomplain ::board::_evalbarWidth(.b)
+    unset -nocomplain ::board::_evalbarScale(.b)
+    unset -nocomplain ::board::_evalbarScore(.b)
+    ::board_test::cleanup
+} -result {{} {0 0 0 0} {0 0 0 0}}
+
+
+test board-updateEvalBar-cp-1.0 {::board::updateEvalBar positions bars according to numeric score} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange
+    set w .b
+    ::board_test::defineScoreCanvas $w.score
+
+    set ::board::_evalbarShow($w) 1
+    set ::board::_evalbarHeight($w) 100
+    set ::board::_evalbarWidth($w) 10
+    set ::board::_evalbarScale($w) 1
+
+    # Act
+    ::board::updateEvalBar $w 2
+
+    # Assert
+    # midY = h/2 + score*scale = 50 + 2 = 52
+    list \
+        $::board::_evalbarScore($w) \
+        [::board_test::getCoords $w.score barUp] \
+        [::board_test::getCoords $w.score barDown]
+} -cleanup {
+    unset -nocomplain ::board::_evalbarShow(.b)
+    unset -nocomplain ::board::_evalbarHeight(.b)
+    unset -nocomplain ::board::_evalbarWidth(.b)
+    unset -nocomplain ::board::_evalbarScale(.b)
+    unset -nocomplain ::board::_evalbarScore(.b)
+    ::board_test::cleanup
+} -result {2 {0 0 10 52} {0 52 10 101}}
+
+
+test board-updateEvalBar-mate-1.0 {::board::updateEvalBar treats mate notation as +/- max score} -setup {
+    ::board_test::setup
+} -body {
+    # Arrange
+    set w .b
+    ::board_test::defineScoreCanvas $w.score
+
+    set ::board::_evalbarShow($w) 1
+    set ::board::_evalbarHeight($w) 100
+    set ::board::_evalbarWidth($w) 10
+    set ::board::_evalbarScale($w) 1
+    set ::board::_evalbarMaxScore($w) 4
+
+    # Act
+    ::board::updateEvalBar $w "+M12"
+    set upPlus [::board_test::getCoords $w.score barUp]
+    set downPlus [::board_test::getCoords $w.score barDown]
+
+    ::board::updateEvalBar $w "-M5"
+    set upMinus [::board_test::getCoords $w.score barUp]
+    set downMinus [::board_test::getCoords $w.score barDown]
+
+    # Assert
+    # +M => midY = 50 + 4 = 54; -M => midY = 50 - 4 = 46
+    list $upPlus $downPlus $upMinus $downMinus
+} -cleanup {
+    unset -nocomplain ::board::_evalbarShow(.b)
+    unset -nocomplain ::board::_evalbarHeight(.b)
+    unset -nocomplain ::board::_evalbarWidth(.b)
+    unset -nocomplain ::board::_evalbarScale(.b)
+    unset -nocomplain ::board::_evalbarMaxScore(.b)
+    unset -nocomplain ::board::_evalbarScore(.b)
+    ::board_test::cleanup
+} -result {{0 0 10 54} {0 54 10 101} {0 0 10 46} {0 46 10 101}}
+
+
+cleanupTests

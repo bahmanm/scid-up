@@ -20,6 +20,19 @@ if { $macOS } {
 
   $m add separator
 
+  ################################################################################
+  # ::tk::mac::OpenDocument
+  #   Opens one or more documents requested by macOS (typically via Finder).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `args`: One or more file paths to open.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `::file::Open` for each requested file.
+  #   - Uses `::mac_open_queue` to serialise re-entrant calls.
+  ################################################################################
   proc ::tk::mac::OpenDocument { args } {
     # The opening of big databases displays a progress bar that must process
     # the events to allow user interruption.
@@ -41,6 +54,18 @@ if { $macOS } {
   }
 
   # To Quit (cmd-q)
+  ################################################################################
+  # ::tk::mac::Quit
+  #   Exits Scid when macOS requests application termination (Cmd+Q).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `args`: Unused (provided by the Tk/macOS hook signature).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `::file::Exit`.
+  ################################################################################
   proc ::tk::mac::Quit { args } { ::file::Exit }
 
   ## To get Help
@@ -326,6 +351,22 @@ $m  add command -label HelpAbout -command helpAbout
 ##################################################
 # Store menu labels for translations and help messages
 set ::menuHelpMessage {}
+################################################################################
+# ::translateMenuLabels
+#   Records menu labels for translation/help lookup and applies translations.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `m`: Menu widget path whose entries should be processed.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::MenuLabels($m,$idx)` for non-separator, non-tearoff entries.
+#   - Configures menu entry `-label` and `-underline` values.
+#   - Installs a `<<MenuSelect>>` binding to update `::menuHelpMessage` and call
+#     `updateStatusBar`.
+#   - Recursively processes cascade submenus (except `.menu.options.language`).
+################################################################################
 proc translateMenuLabels {m} {
     bind $m <<MenuSelect>> {
         set idx [%W index active]
@@ -367,10 +408,24 @@ proc translateMenuLabels {m} {
         }
     }
 }
-# Issue a command to a menu entry
+################################################################################
+# ::menuConfig
+#   Issues a menu subcommand to an entry identified by its original label.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `m`: Menu widget path.
+#   - `label`: Original (untranslated) label to locate via `::MenuLabels`.
+#   - `cmd`: Menu subcommand to invoke (e.g. `entryconfig`).
+#   - `args`: Arguments to pass to the menu subcommand.
+# Returns:
+#   - None.
+# Side effects:
+#   - Invokes `$m $cmd $idx ...` for the first matching entry.
+################################################################################
 proc menuConfig {{m} {label} {cmd} args} {
     foreach {key lbl} [array get ::MenuLabels "$m*"] {
-        if {$lbl == $label} {
+        if {$lbl eq $label} {
             set idx [lindex [split $key ","] 1]
             $m $cmd $idx {*}$args
             break
@@ -387,6 +442,24 @@ array unset ::MenuLabels ".menu.file,$fileExitHack"
 # updateMenuStates:
 #   Update all the menus, rechecking which state each item should be in.
 #
+################################################################################
+# ::updateMenuStates
+#   Updates dynamic menu entry state and contents for the requested top-level menu.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `menuname` (optional): Menu widget path whose state should be updated.
+# Returns:
+#   - None.
+# Side effects:
+#   - For `.menu.file`: refreshes bookmarks and recent file menus.
+#   - For `.menu.db`: updates `::autoLoadBases_currdb`.
+#   - For `.menu.tools`: enables/disables training menu items based on
+#     `::interactionHandler`.
+#   - For `.menu.game`: enables/disables game navigation actions and toolbar
+#     buttons based on filter/game state.
+#   - For `.menu.options`: refreshes `::optionsFullScreen` from `wm attributes`.
+################################################################################
 proc updateMenuStates {{menuname}} {
   set m .menu
   switch -- $menuname {
@@ -452,7 +525,21 @@ proc updateMenuStates {{menuname}} {
   }
 }
 
-# Update the dynamic menus relative to current/open databases
+################################################################################
+# ::menuUpdateBases
+#   Rebuilds menus whose entries depend on the currently open databases.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Rebuilds database switch/copy/import submenus from `sc_base list`.
+#   - Updates `::currentSlot` and configures menu item states based on:
+#     - current database (`::curr_db`), clipbase (`::clipbase_db`)
+#     - read-only status, compactability, and whether the database is empty.
+################################################################################
 proc menuUpdateBases {} {
   set ::currentSlot $::curr_db
   .menu.db delete $::menuDbSwitchIdx end
@@ -499,6 +586,21 @@ proc menuUpdateBases {} {
   menuConfig .menu.db.utils FileMaintNameEditor entryconfig -state $canChange
 }
 
+################################################################################
+# ::menuUpdateThemes
+#   Rebuilds the theme selection menu from the available ttk themes.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Replaces theme entries under `.menu.options.theme` starting at
+#     `::menuThemeListIdx`.
+#   - Uses/updates `::lookTheme` and applies the selected theme via
+#     `ttk::style theme use`.
+################################################################################
 proc menuUpdateThemes {} {
   set m .menu.options.theme
   $m delete $::menuThemeListIdx end
@@ -514,6 +616,21 @@ proc menuUpdateThemes {} {
 # configMenuText:
 #    Reconfigures the main window menus. Called when the language is changed.
 #
+################################################################################
+# ::configMenuText
+#   Configures a specific menu entry label/underline for a given language.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `menu`: Menu widget path.
+#   - `entry`: Entry index (integer).
+#   - `tag`: Menu label tag key used in `::menuLabel`/`::menuUnder`.
+#   - `lang`: Language key (e.g. `E`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures `$menu entryconfig $entry -label ... -underline ...`.
+################################################################################
 proc configMenuText {menu entry tag lang} {
   global menuLabel menuUnder
   if {[info exists menuLabel($lang,$tag)] && [info exists menuUnder($lang,$tag)]} {
@@ -523,6 +640,21 @@ proc configMenuText {menu entry tag lang} {
   }
 }
 
+################################################################################
+# ::setLanguageMenus
+#   Applies the current language to all registered menus and refreshes dependants.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates menu labels/underlines for all entries recorded in `::MenuLabels`.
+#   - Calls: `::optable::ConfigMenus`, `::preport::ConfigMenus`,
+#     `::tools::graphs::score::ConfigMenus`, and `::tools::graphs::rating::ConfigMenus`.
+#   - Optionally reports duplicate underline characters when `::verifyMenus` is set.
+################################################################################
 proc setLanguageMenus {} {
   set lang $::language
   foreach {key lbl} [array get ::MenuLabels] {
@@ -551,9 +683,16 @@ proc setLanguageMenus {} {
 }
 
 ################################################################################
-# checkMenuUnderline:
-#  Given a menu widget, returns a list of all the underline
-#  characters that appear more than once.
+# ::checkMenuUnderline
+#   Returns a list of duplicate underline characters within a menu.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `menu`: Menu widget path.
+# Returns:
+#   - A list of lowercase characters that appear more than once as underlines.
+# Side effects:
+#   - None.
 ################################################################################
 proc checkMenuUnderline {menu} {
   array set found {}
@@ -578,7 +717,16 @@ proc checkMenuUnderline {menu} {
 }
 
 ################################################################################
-#
+# ::configInformant
+#   Builds the informant threshold configuration UI.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w`: Parent widget path to populate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates ttk widgets under `$w.spinF` and binds spinboxes to `informant(*)`.
 ################################################################################
 proc configInformant { w } {
   global informant
@@ -608,7 +756,18 @@ proc configInformant { w } {
 }
 
 ################################################################################
-
+# ::getBooksDir
+#   Prompts for an opening books directory and updates an entry widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `widget`: Entry widget path whose contents should be updated.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_chooseDirectory` dialog.
+#   - On selection, calls `::setBooksDir` and updates the entry widget.
+################################################################################
 proc getBooksDir { widget } {
   global scidBooksDir
   set dir [tk_chooseDirectory -initialdir $scidBooksDir -parent [winfo toplevel $widget] -mustexist 1]
@@ -619,11 +778,35 @@ proc getBooksDir { widget } {
   }
 }
 
+################################################################################
+# ::setBooksDir
+# Visibility:
+#   Private.
+# Inputs:
+#   - `dir`: Directory path to use as the opening books directory.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the global `scidBooksDir`.
+################################################################################
 proc setBooksDir { dir } {
   global scidBooksDir
   set scidBooksDir $dir
 }
 
+################################################################################
+# ::getTacticsBasesDir
+#   Prompts for the tactics bases directory and updates an entry widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `widget`: Entry widget path whose contents should be updated.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_chooseDirectory` dialog.
+#   - On selection, calls `::setTacticsBasesDir` and updates the entry widget.
+################################################################################
 proc getTacticsBasesDir { widget } {
   global scidBasesDir
   set dir [tk_chooseDirectory -initialdir $scidBasesDir -parent [winfo toplevel $widget] -mustexist 1]
@@ -634,11 +817,36 @@ proc getTacticsBasesDir { widget } {
   }
 }
 
+################################################################################
+# ::setTacticsBasesDir
+# Visibility:
+#   Private.
+# Inputs:
+#   - `dir`: Directory path to use as the tactics bases directory.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the global `scidBasesDir`.
+################################################################################
 proc setTacticsBasesDir { dir } {
   global scidBasesDir
   set scidBasesDir $dir
 }
 
+################################################################################
+# ::getPhotoDir
+#   Prompts for the player photo directory and updates an entry widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `widget`: Entry widget path whose contents should be updated.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_chooseDirectory` dialog.
+#   - On selection, calls `::setPhotoDir` and, when it reports success, updates
+#     the entry widget.
+################################################################################
 proc getPhotoDir { widget } {
   set idir [pwd]
   if { [info exists ::scidPhotoDir] } { set idir $::scidPhotoDir }
@@ -651,6 +859,21 @@ proc getPhotoDir { widget } {
   }
 }
 
+################################################################################
+# ::setPhotoDir
+#   Updates the player photo directory and reloads player photos.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `dir`: Directory path containing player images.
+# Returns:
+#   - The number of images found (as reported by `loadPlayersPhoto`).
+# Side effects:
+#   - Updates `::scidPhotoDir` and registers it via `::options.store`.
+#   - Calls `loadPlayersPhoto`.
+#   - Shows a `tk_messageBox` with a summary of loaded images.
+#   - Calls `::notify::GameChanged`.
+################################################################################
 proc setPhotoDir { dir } {
     set ::scidPhotoDir $dir
     ::options.store ::scidPhotoDir
@@ -661,6 +884,20 @@ proc setPhotoDir { dir } {
     return $ret
 }
 
+################################################################################
+# ::getThemePkgFile
+#   Prompts for a theme package index file and updates an entry widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `widget`: Entry widget path whose contents should be updated.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_getOpenFile` dialog.
+#   - Calls `::readThemePkgFile` to load the selected file.
+#   - On (reported) success, updates the entry widget contents.
+################################################################################
 proc getThemePkgFile { widget} {
   global initialDir
   set fullname [tk_getOpenFile -parent [winfo toplevel $widget] -title "Select a pkgIndex.tcl file for themes" -initialdir [file dirname $::ThemePackageFile] -initialfile $::ThemePackageFile \
@@ -671,6 +908,20 @@ proc getThemePkgFile { widget} {
   }
 }
 
+################################################################################
+# ::readThemePkgFile
+#   Loads a theme package index file and refreshes the theme menu.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `fullname`: Path to a theme `pkgIndex.tcl` file (may be empty).
+# Returns:
+#   - `0` on success or no-op, otherwise `1` on error.
+# Side effects:
+#   - May call `::safeSourceStyle` to load ttk themes.
+#   - May call `::menuUpdateThemes` and update `::ThemePackageFile`.
+#   - Shows a `tk_messageBox` describing how many new themes were found.
+################################################################################
 proc readThemePkgFile { fullname } {
     if {$fullname ne "" && $fullname != $::ThemePackageFile } {
         set count [llength [ttk::style theme names]]
@@ -690,6 +941,19 @@ proc readThemePkgFile { fullname } {
     return $ret
 }
 
+################################################################################
+# ::getECOFile
+#   Prompts for an ECO file and updates an entry widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `widget`: Entry widget path whose contents should be updated.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_getOpenFile` dialog.
+#   - Calls `::readECOFile` and, on success, updates the entry widget.
+################################################################################
 proc getECOFile { widget } {
   global ecoFile
   set ftype { { "Scid ECO files" {".eco"} } }
@@ -700,6 +964,20 @@ proc getECOFile { widget } {
   }
 }
 
+################################################################################
+# ::readECOFile
+#   Loads an ECO file into Scid.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `fullname`: Path to an ECO file (may be empty).
+# Returns:
+#   - `1` on successful load, otherwise `0`.
+# Side effects:
+#   - Calls `sc_eco read` when a filename is provided.
+#   - Updates `ecoFile`.
+#   - Shows `tk_messageBox` status/warning messages.
+################################################################################
 proc readECOFile { fullname } {
   global ecoFile
   if {[string compare $fullname ""]} {
@@ -717,6 +995,20 @@ proc readECOFile { fullname } {
   return 0
 }
 
+################################################################################
+# ::updateLocale
+#   Applies the selected numeric locale formatting and refreshes dependent UI.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None (uses `locale(numeric)`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_info decimal`.
+#   - Calls `::windows::gamelist::Refresh`.
+#   - Calls `updateTitle`.
+################################################################################
 proc updateLocale {} {
   global locale
   sc_info decimal $locale(numeric)
@@ -724,6 +1016,20 @@ proc updateLocale {} {
   updateTitle
 }
 
+################################################################################
+# ::chooseHighlightColor
+#   Prompts for the “highlight last move” colour and refreshes the board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows a `tk_chooseColor` dialog.
+#   - Updates `::highlightLastMoveColor` when a colour is selected.
+#   - Calls `updateBoard` when a colour is selected.
+################################################################################
 proc chooseHighlightColor {} {
   set col [ tk_chooseColor -initialcolor $::highlightLastMoveColor -title "Scid"]
   if { $col != "" } {

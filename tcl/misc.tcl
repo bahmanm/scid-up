@@ -7,7 +7,19 @@
 ### Miscellaneous routines called by other Tcl functions
 
 ################################################################################
-# vwait but will timeout after a delay. Var must be fully qualified (::)
+# ::vwaitTimed
+#   Waits for a variable to be set, optionally timing out after a delay.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `var`: Fully-qualified variable name to wait on (e.g. `::someVar`).
+#   - `delay` (optional): Timeout in milliseconds (0 means no timeout).
+#   - `warn` (optional): When `warnuser`, shows an error dialog on timeout.
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules/cancels an `after` timer when `delay` is non-zero.
+#   - May show a `tk_messageBox` on timeout.
 ################################################################################
 proc vwaitTimed { var {delay 0} {warn "warnuser"} } {
 
@@ -30,11 +42,21 @@ proc vwaitTimed { var {delay 0} {warn "warnuser"} } {
 
 ## FROM TK 8.5.9
 ## ttk::bindMouseWheel $bindtag $command...
-#	Adds basic mousewheel support to $bindtag.
-#	$command will be passed one additional argument
-#	specifying the mousewheel direction (-1: up, +1: down).
-#
-
+################################################################################
+# ::bindMouseWheel
+#   Adds basic mouse wheel bindings for a bind tag across supported window systems.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `bindtag`: Bind tag to attach the mouse wheel bindings to.
+#   - `callback`: Command prefix invoked with one extra argument:
+#       - `-1` for upward scrolling
+#       - `+1` for downward scrolling
+# Returns:
+#   - None.
+# Side effects:
+#   - Installs `bind` handlers on `$bindtag` for the current windowing system.
+################################################################################
 proc bindMouseWheel {bindtag callback} {
     switch -- [tk windowingsystem] {
 	x11 {
@@ -62,12 +84,21 @@ proc bindMouseWheel {bindtag callback} {
     }
 }
 
-# dialogbuttonframe:
-#   Creates a frame that will be shown at the bottom of a
-#   dialog window. It takes two parameters: the frame widget
-#   name to create, and a list of button args. Each element
-#   should contain a widget name, and button arguments.
-#
+################################################################################
+# ::dialogbuttonframe
+#   Creates and packs a standard button strip frame for dialogs.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `frame`: Frame widget path to create.
+#   - `buttonlist`: List of button descriptors; each element is
+#     `{name arg...}` for `ttk::button`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a `ttk::frame` and one `ttk::button` per list element.
+#   - Packs the buttons to the right with consistent padding.
+################################################################################
 proc dialogbuttonframe {frame buttonlist} {
   ttk::frame $frame
   set bnames {}
@@ -87,48 +118,91 @@ proc dialogbuttonframe {frame buttonlist} {
   }
 }
 
-# packbuttons
-#   Packs a row of dialog buttons to the left/right of their frame
-#   with a standard amount of padding.
-#
+################################################################################
+# ::packbuttons
+# Visibility:
+#   Public.
+# Inputs:
+#   - `side`: Pack side (e.g. `left` or `right`).
+#   - `args`: Widget paths to pack.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `pack` with standard padding.
+################################################################################
 proc packbuttons {side args} {
   pack {*}$args -side $side -padx 5 -pady 3
 }
+################################################################################
+# ::packdlgbuttons
+# Visibility:
+#   Public.
+# Inputs:
+#   - `args`: Widget paths to pack.
+# Returns:
+#   - None.
+# Side effects:
+#   - Packs dialog buttons to the right with standard padding.
+################################################################################
 proc packdlgbuttons {args} {
   pack {*}$args -side right -padx 5 -pady "15 5"
 }
-# dialogbutton:
-#   Creates a button that will be shown in a dialog box, so it
-#   is given a minimum width.
-#
+################################################################################
+# ::dialogbutton
+#   Creates a dialog button with a minimum width derived from its label.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w`: Button widget path.
+#   - `args`: Arguments forwarded to `ttk::button`.
+# Returns:
+#   - The result of `ttk::button`.
+# Side effects:
+#   - Creates/configures the button widget.
+################################################################################
 proc dialogbutton {w args} {
   set retval [ttk::button $w {*}$args] ;# -style TButton
   set length [string length [$w cget -text]]
   if {$length < 7} { set length 7 }
   $w configure -width $length
-  return retval
+  return $retval
 }
 
+################################################################################
+# ::dialogbuttonsmall
+#   Creates a small dialog button with a minimum width derived from its label.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w`: Button widget path.
+#   - `args`: Arguments forwarded to `ttk::button`.
+#   - `style` (optional): ttk style name (default: `Small.TButton`).
+# Returns:
+#   - The result of `ttk::button`.
+# Side effects:
+#   - Creates/configures the button widget.
+################################################################################
 proc dialogbuttonsmall {w args {style "Small.TButton"} } {
   set retval [ttk::button $w -style $style {*}$args]
   set length [string length [$w cget -text]]
   if {$length < 7} { set length 7 }
   $w configure -width $length
-  return retval
+  return $retval
 }
 
-# autoscrollframe
-#   Creates and returns a frame containing a widget which is gridded
-#   with scrollbars that automatically hide themselves when they are
-#   not needed.
-#   The frame and widget may already exist; they are created if needed.
-#   FBF 2011.03.05:
-#     $frame and $w aspects are not changed if they already exists
-#     scrollbars are created on time 0, otherwise they are not hidden
-#
-#   Usage:
-#      autoscrollframe [-bars none|x|y|both] frame type w args
-#
+################################################################################
+# ::autoscrollframe
+#   Creates a frame containing a widget with auto-hiding scrollbars.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `args`: `[-bars none|x|y|both] frame type w ?configure-args...?`
+# Returns:
+#   - The frame widget path.
+# Side effects:
+#   - Creates/configures the frame and widget if they do not exist.
+#   - Adds and manages scrollbars via `::autoscrollBars`.
+################################################################################
 proc autoscrollframe {args} {
   set bars both
   if {[lindex $args 0] == "-bars"} {
@@ -163,6 +237,22 @@ proc autoscrollframe {args} {
   return $retval
 }
 
+################################################################################
+# ::autoscrollBars
+#   Adds auto-hiding scrollbars to a widget gridded in a frame.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `bars`: One of `none`, `x`, `y`, `both`.
+#   - `frame`: Parent frame widget path.
+#   - `w`: Scrollable widget path to configure.
+#   - `frame_row` (optional): Grid row to use for the widget.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates ttk scrollbars and configures `$w` x/y view commands.
+#   - Initialises `_autoscroll(*)` state and binds mouse wheel scrolling.
+################################################################################
 proc autoscrollBars {bars frame w {frame_row 0}} {
   global _autoscroll
 
@@ -190,6 +280,19 @@ proc autoscrollBars {bars frame w {frame_row 0}} {
   }
 }
 
+################################################################################
+# ::_autoscrollMouseWheel
+# Visibility:
+#   Private.
+# Inputs:
+#   - `w`: Scrollable widget path.
+#   - `bar`: Associated scrollbar widget path.
+#   - `direction`: Scroll direction (-1 or +1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Scrolls the widget when the scrollbar is currently visible/enabled.
+################################################################################
 proc _autoscrollMouseWheel {{w} {bar} {direction}} {
   if {$::_autoscroll($bar) == 0} return
   $w yview scroll $direction units
@@ -207,6 +310,20 @@ array set _autoscroll {}
 #   causes the other to be shown etc. This usually happens because
 #   the stupid Tcl/Tk text widget doesn't handle scrollbars well.
 #
+################################################################################
+# ::_autoscroll
+#   y/x scrollcommand handler that hides/shows a scrollbar based on range.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `bar`: Scrollbar widget path.
+#   - `args`: Either `{min max}` or any args forwarded to `$bar set`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Shows/hides the scrollbar via `grid configure` / `grid remove`.
+#   - Updates `_autoscroll($bar)` and `_autoscroll(time:$bar)`.
+################################################################################
 proc _autoscroll {bar args} {
   global _autoscroll
   if {[llength $args] == 2} {
@@ -228,6 +345,17 @@ proc _autoscroll {bar args} {
   $bar set {*}$args
 }
 
+################################################################################
+# ::_autoscrollMap
+# Visibility:
+#   Private.
+# Inputs:
+#   - `frame`: Frame widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - None (reserved hook; currently does not perform any action).
+################################################################################
 proc _autoscrollMap {frame} {
   # wm geometry [winfo toplevel $frame] [wm geometry [winfo toplevel $frame]]
 }
@@ -240,6 +368,20 @@ proc _autoscrollMap {frame} {
 array set scid_busycursor {}
 set scid_busycursorState 0
 
+################################################################################
+# ::doBusyCursor
+#   Recursively applies or restores a “busy” cursor for a widget subtree.
+# Visibility:
+#   Private.
+# Inputs:
+#   - `w`: Root widget path.
+#   - `flag`: When true, applies `watch`; otherwise restores the prior cursor.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads/stores previous cursor values in `scid_busycursor($w)`.
+#   - Configures widget cursors for `$w` and its children.
+################################################################################
 proc doBusyCursor {w flag} {
   global scid_busycursor
   if {! [winfo exists $w]} { return }
@@ -256,6 +398,19 @@ proc doBusyCursor {w flag} {
   foreach i [winfo children $w] { doBusyCursor $i $flag }
 }
 
+################################################################################
+# ::busyCursor
+#   Enables or disables the busy cursor state for a widget subtree.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w`: Root widget path.
+#   - `flag` (optional): When true, enables busy cursor; when false, disables.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `scid_busycursorState` and calls `::doBusyCursor`.
+################################################################################
 proc busyCursor {w {flag 1}} {
   global scid_busycursor scid_busycursorState
   if {$scid_busycursorState == $flag} { return }
@@ -263,6 +418,17 @@ proc busyCursor {w {flag 1}} {
   doBusyCursor $w $flag
 }
 
+################################################################################
+# ::unbusyCursor
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w`: Root widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::busyCursor $w 0`.
+################################################################################
 proc unbusyCursor {w} {busyCursor $w 0}
 
 
@@ -274,6 +440,21 @@ proc unbusyCursor {w} {busyCursor $w 0}
 set horizRuleCounter 0
 set vertRuleCounter 0
 
+################################################################################
+# ::addHorizontalRule
+#   Adds a horizontal separator to a window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w`: Parent widget path.
+#   - `ypadding` (optional): Vertical padding (currently unused by implementation).
+#   - `relief` (optional): Visual style hint (kept for compatibility).
+#   - `height` (optional): Height hint (kept for compatibility).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and packs a `ttk::separator` and increments `horizRuleCounter`.
+################################################################################
 proc addHorizontalRule {w {ypadding 5} {relief sunken} {height 2} } {
   global horizRuleCounter
 
@@ -285,6 +466,20 @@ proc addHorizontalRule {w {ypadding 5} {relief sunken} {height 2} } {
   incr horizRuleCounter
 }
 
+################################################################################
+# ::addVerticalRule
+#   Adds a vertical separator to a window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w`: Parent widget path.
+#   - `xpadding` (optional): Horizontal padding (currently unused by implementation).
+#   - `relief` (optional): Visual style hint (kept for compatibility).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and packs a `ttk::separator` and increments `vertRuleCounter`.
+################################################################################
 proc addVerticalRule {w {xpadding 5} {relief sunken}} {
   global vertRuleCounter
 
@@ -300,6 +495,23 @@ proc addVerticalRule {w {xpadding 5} {relief sunken}} {
 #   Creates a window with a label, progress bar, and (if specified),
 #   a cancel button and cancellation command.
 #
+################################################################################
+# ::progressWindow
+#   Creates a standard progress dialog with an optional cancel button.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `title`: Window title string.
+#   - `text`: Primary label text.
+#   - `button` (optional): Cancel/close button label (empty disables the button).
+#   - `cancelCmdPrefix` (optional): Command prefix invoked when cancelled.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.progressWin` and related widgets and grabs focus.
+#   - Records/restores focus via `::progressWin_focus`.
+#   - Calls `::progressBarSet` to initialise the progress canvas.
+################################################################################
 proc progressWindow { title text {button ""} {cancelCmdPrefix {progressBarCancel}} } {
   set w .progressWin
   if {[winfo exists $w]} { return }
@@ -341,6 +553,20 @@ proc progressWindow { title text {button ""} {cancelCmdPrefix {progressBarCancel
   progressBarSet $w.f.c 401 21
 }
 
+################################################################################
+# ::progressBarSet
+#   Initialises global progress canvas state for `::progressCallBack`.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `canvasname`: Canvas widget path.
+#   - `width`: Canvas width in pixels.
+#   - `height`: Canvas height in pixels.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::progressCanvas(*)` fields and schedules initialisation clearing.
+################################################################################
 proc progressBarSet { canvasname width height } {
   update idletasks
   set ::progressCanvas(name) $canvasname
@@ -352,11 +578,38 @@ proc progressBarSet { canvasname width height } {
   after idle { unset ::progressCanvas(init) }
 }
 
+################################################################################
+# ::progressBarCancel
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::progressCanvas(cancel)` to request cancellation.
+################################################################################
 proc progressBarCancel { } {
   set ::progressCanvas(cancel) 1
 }
 
 
+################################################################################
+# ::progressCallBack
+#   Updates the progress bar and optional log area; breaks when cancelled.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `done`: Either `"init"` or a fraction in `[0,1]`.
+#   - `msg` (optional): Message line to append to the progress log (if present).
+# Returns:
+#   - On `"init"`, returns the initialisation flag value.
+#   - Otherwise returns nothing meaningful.
+# Side effects:
+#   - Updates the progress bar canvas and time estimate.
+#   - Calls `update` to process events.
+#   - Returns `-code break` when cancelled or the window is closed.
+################################################################################
 proc progressCallBack {done {msg ""}} {
   if {$done == "init"} {
     if {[info exists ::progressCanvas(init)]} {
@@ -405,6 +658,17 @@ proc progressCallBack {done {msg ""}} {
   }
 }
 
+################################################################################
+# ::changeProgressWindow
+# Visibility:
+#   Public.
+# Inputs:
+#   - `newtext`: Replacement text for the progress window label.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.progressWin` label when the window exists.
+################################################################################
 proc changeProgressWindow {newtext} {
   set w .progressWin
   if {[winfo exists $w]} {
@@ -413,6 +677,19 @@ proc changeProgressWindow {newtext} {
   }
 }
 
+################################################################################
+# ::updateProgressWindow
+#   Updates the progress bar to reflect completion fraction.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `done`: Units completed.
+#   - `total`: Units total (0 means treat as complete).
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::progressCallBack` when `.progressWin` exists.
+################################################################################
 proc updateProgressWindow {done total} {
   set w .progressWin
   if {! [winfo exists $w]} { return }
@@ -424,6 +701,20 @@ proc updateProgressWindow {done total} {
   ::progressCallBack $done
 }
 
+################################################################################
+# ::closeProgressWindow
+#   Closes the progress window (with an optional “show log then close” flow).
+# Visibility:
+#   Public.
+# Inputs:
+#   - `force` (optional): When true, closes immediately.
+# Returns:
+#   - None.
+# Side effects:
+#   - Destroys `.progressWin` and releases the grab, or switches into a
+#     “close confirmation” state when a log is present.
+#   - Restores focus to `::progressWin_focus` when possible.
+################################################################################
 proc closeProgressWindow {{force false}} {
   set w .progressWin
   if {! [winfo exists $w]} { return }
@@ -442,6 +733,23 @@ proc closeProgressWindow {{force false}} {
   catch {focus $::progressWin_focus}
 }
 
+################################################################################
+# ::CreateSelectDBWidget
+#   Creates a combobox for selecting an open database and binds it to a variable.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `w` (optional): Parent widget path where `$w.lb` is created.
+#   - `varname` (optional): Fully-qualified variable name to set on selection.
+#   - `ref_base` (optional): Base ID to preselect (defaults to `sc_base current`).
+#   - `readOnly` (optional): When false, filters out read-only bases.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and grids `ttk::combobox $w.lb`.
+#   - Binds `<<ComboboxSelected>>` to update `$varname`.
+#   - Triggers an initial `<<ComboboxSelected>>` event.
+################################################################################
 proc CreateSelectDBWidget {{w} {varname} {ref_base ""} {readOnly 1}} {
   set listbases {}
   if {$ref_base == ""} { set ref_base [sc_base current] }
@@ -462,11 +770,32 @@ proc CreateSelectDBWidget {{w} {varname} {ref_base ""} {readOnly 1}} {
 
   bind $w.lb <<ComboboxSelected>> [list apply {{w varName prefixLen} {
     upvar #0 $varName var
-    set var [string index [$w get] $prefixLen]
+    # The combobox value is of the form "<Database> <n>: <name>".
+    # Use `scan` to extract the full (possibly multi-digit) base number.
+    #
+    # NOTE: This still relies on parsing the displayed string. A more robust
+    # approach is to map the selected index to the base ID directly.
+    scan [string range [$w get] $prefixLen end] %d var
   } ::} $w.lb $varname $tr_prefix_len]
   $w.lb current $selected
   event generate $w.lb <<ComboboxSelected>>
 }
+
+################################################################################
+# ::storeEmtComment
+#   Stores elapsed move time as a `[%emt ...]` tag in the current move comment.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `h`: Hours component.
+#   - `m`: Minutes component.
+#   - `s`: Seconds component.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads/modifies the current move comment via `sc_pos getComment` /
+#     `sc_pos setComment`.
+################################################################################
 proc storeEmtComment { h m s } {
     set time "[format "%d" $h]:[format "%02d" $m]:[format "%02d" $s]"
 
@@ -477,6 +806,20 @@ proc storeEmtComment { h m s } {
       sc_pos setComment "\[%emt $time\]$comment"
     }
   }
+
+################################################################################
+# ::storeEvalComment
+#   Stores an evaluation value as a `[%eval ...]` tag in the current move comment.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `value`: Evaluation value to store (format is caller-defined).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads/modifies the current move comment via `sc_pos getComment` /
+#     `sc_pos setComment`.
+################################################################################
 proc storeEvalComment { value } {
     #Replace %eval if present, otherwise prepend it
     if {[regsub {\[%eval\s*.*?\]} [sc_pos getComment] "\[%eval $value\]" comment]} {
@@ -486,14 +829,34 @@ proc storeEvalComment { value } {
     }
   }
 
-# Format a string that represents a time in the format 0:00:00 by removing the
-# unnecessary leading zeros.
-# Always show the minutes even if they are zero: 0:00:05 --> 0:05
+################################################################################
+# ::format_clock
+#   Normalises a clock string by removing unnecessary leading zeros.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `clk`: Clock string in `h:mm:ss` or `m:ss` style.
+# Returns:
+#   - A normalised string (e.g. `0:00:05` becomes `0:05`).
+# Side effects:
+#   - None.
+################################################################################
 proc format_clock {clk} {
     return "[string trimleft [string range $clk 0 end-4] {0:}][string range $clk end-3 end]"
 }
 
-# Convert seconds to hours, minutes and seconds and return a string in the format 0:00:00
+################################################################################
+# ::format_clock_from_seconds
+#   Converts seconds to a human-readable clock string.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `seconds`: Integer seconds (may be negative).
+# Returns:
+#   - A clock string in `h:mm:ss` or `m:ss` style (with a leading `-` when negative).
+# Side effects:
+#   - None.
+################################################################################
 proc format_clock_from_seconds {seconds} {
     set res ""
     if { $seconds < 0 } {
@@ -507,6 +870,18 @@ proc format_clock_from_seconds {seconds} {
     return $res
 }
 
+################################################################################
+# ::clock_to_seconds
+#   Parses a clock string into seconds.
+# Visibility:
+#   Public.
+# Inputs:
+#   - `clk`: Clock string (`h:mm:ss` or `m:ss`) with optional leading `-`.
+# Returns:
+#   - Integer seconds, or empty string if parsing fails.
+# Side effects:
+#   - None.
+################################################################################
 proc clock_to_seconds {clk} {
     if {$clk eq ""} { return "" }
 
@@ -528,10 +903,28 @@ proc clock_to_seconds {clk} {
 }
 
 ################################################################################
-# clock widget
+# ::gameclock
+#   A lightweight chess clock utility used by the main UI and PGN annotations.
 ################################################################################
 namespace eval gameclock {
   array set data {}
+
+  ################################################################################
+  # ::gameclock::new
+  #   Creates (optionally) and initialises a clock widget instance.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `parent`: Parent widget path (empty string means “no widget”, data-only).
+  #   - `n`: Clock slot/ID.
+  #   - `size` (optional): Canvas size in pixels.
+  #   - `showfall` (optional): When true, shows elapsed-overrun in red.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates and packs a `canvas` under `$parent` when `parent` is non-empty.
+  #   - Initialises `::gameclock::data(*)` for the slot.
+  #   - Calls `::gameclock::reset` and `::gameclock::draw`.
   ################################################################################
   proc new { parent n { size 100 } {showfall 0} } {
     global ::gameclock::data
@@ -555,6 +948,19 @@ namespace eval gameclock {
     ::gameclock::reset $n
     ::gameclock::draw $n
   }
+
+  ################################################################################
+  # ::gameclock::draw
+  #   Redraws the analogue/digital clock display and updates main-window fields.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::gamePlayers(clockW)` / `::gamePlayers(clockB)` for slots 1/2.
+  #   - Draws on the associated canvas (if it exists).
   ################################################################################
   proc draw { n } {
     global ::gameclock::data
@@ -604,6 +1010,20 @@ namespace eval gameclock {
       $data(id$n) create text $cx [expr {$cy + $size/4 }] -text "$m:$s" -anchor center -fill $color -tag aig$n
     }
   }
+
+  ################################################################################
+  # ::gameclock::every
+  #   Ticks the clock and reschedules itself.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `ms`: Tick interval in milliseconds.
+  #   - `body`: Command prefix to execute each tick.
+  #   - `n`: Clock slot/ID.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Increments `::gameclock::data(counter$n)` and schedules `after`.
   ################################################################################
   proc every {ms body n} {
     incr ::gameclock::data(counter$n)
@@ -613,32 +1033,103 @@ namespace eval gameclock {
       set ::gameclock::data(after$n) [after $ms [list ::gameclock::every $ms $body $n]]
     }
   }
+
+  ################################################################################
+  # ::gameclock::getSec
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  # Returns:
+  #   - Seconds remaining/elapsed (sign convention as stored in `data(counter$n)`).
+  # Side effects:
+  #   - None.
   ################################################################################
   proc getSec { n } {
     return [expr {0 - $::gameclock::data(counter$n)}]
   }
+
+  ################################################################################
+  # ::gameclock::setSec
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  #   - `value`: Counter value to set.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `data(counter$n)` and redraws the clock.
   ################################################################################
   proc setSec { n value } {
     set ::gameclock::data(counter$n) $value
     ::gameclock::draw $n
   }
+
+  ################################################################################
+  # ::gameclock::add
+  #   Applies an increment (or decrement) to the clock counter and redraws.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  #   - `value`: Seconds to add (sign is applied by the current counter convention).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `data(counter$n)` and redraws the clock.
   ################################################################################
   proc add { n value } {
     set ::gameclock::data(counter$n) [expr {$::gameclock::data(counter$n) - $value }]
     ::gameclock::draw $n
   }
 
+
+  ################################################################################
+  # ::gameclock::reset
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Stops any running timer and resets the counter to 0.
   ################################################################################
   proc reset { n } {
     ::gameclock::stop $n
     set ::gameclock::data(counter$n) 0
   }
+
+  ################################################################################
+  # ::gameclock::start
+  #   Starts ticking the clock once per second.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sets `data(running$n)` and schedules recurring `after` ticks.
   ################################################################################
   proc start { n } {
     if {$::gameclock::data(running$n)} { return }
     set ::gameclock::data(running$n) 1
     ::gameclock::every 1000 [list draw $n] $n
   }
+
+  ################################################################################
+  # ::gameclock::stop
+  #   Stops ticking the clock.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  # Returns:
+  #   - `1` when a running clock was stopped, otherwise `0`.
+  # Side effects:
+  #   - Cancels any scheduled `after` tick and clears running state.
   ################################################################################
   proc stop { n } {
     if {! $::gameclock::data(running$n)} { return 0 }
@@ -649,6 +1140,19 @@ namespace eval gameclock {
     }
     return 1
   }
+
+  ################################################################################
+  # ::gameclock::storeTimeComment
+  #   Stores clock time as a `[%clk ...]` tag in the current move comment.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `color`: Clock slot/ID to read.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Reads/modifies the current move comment via `sc_pos getComment` /
+  #     `sc_pos setComment`.
   ################################################################################
   proc storeTimeComment { color } {
     set sec [::gameclock::getSec $color]
@@ -664,6 +1168,17 @@ namespace eval gameclock {
       sc_pos setComment "\[%clk $time\]$comment"
     }
   }
+
+  ################################################################################
+  # ::gameclock::toggleClock
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Starts or stops the clock depending on its current state.
   ################################################################################
   proc toggleClock { n } {
     if { $::gameclock::data(running$n) } {
@@ -672,6 +1187,19 @@ namespace eval gameclock {
       start $n
     }
   }
+
+  ################################################################################
+  # ::gameclock::setColor
+  #   Applies a foreground/background theme to the clock widget.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - `n`: Clock slot/ID.
+  #   - `color`: Colour scheme name (`white` or non-white treated as dark).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Configures the clock canvas and updates `data(fg$n)`.
   ################################################################################
   proc setColor { n color } {
     if {$color == "white"} {
@@ -686,6 +1214,17 @@ namespace eval gameclock {
     $::gameclock::data(id$n) itemconfigure clock$n -fill $fg
     $::gameclock::data(id$n) itemconfigure aig$n -fill $fg
   }
+
+  ################################################################################
+  # ::gameclock::isRunning
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - `1` when any supported clock slot is running, otherwise `0`.
+  # Side effects:
+  #   - None.
   ################################################################################
   proc isRunning { } {
     global ::gameclock::data
@@ -696,12 +1235,27 @@ namespace eval gameclock {
   }
 }
 ################################################################################
-# html generation
+# ::html
+#   HTML export helpers for the current game or filter.
 ################################################################################
 namespace eval html {
   set data {}
   set idx 0
 
+  ################################################################################
+  # ::html::exportCurrentFilter
+  #   Exports the current filter as HTML (plus supporting assets and PGN).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Prompts for an output file path via `tk_getSaveFile`.
+  #   - Copies assets into the destination directory.
+  #   - Loads games, generates per-game HTML, and exports a `.pgn` file.
+  #   - Uses `progressWindow` and `updateProgressWindow`.
   ################################################################################
   proc exportCurrentFilter {} {
     # Check that we have some games to export:
@@ -761,10 +1315,36 @@ namespace eval html {
     exportPGN "[file join $dirtarget $prefix].pgn" "filter"
     sc_game load $savedGameNum
   }
+
+  ################################################################################
+  # ::html::sc_progressBar
+  #   Cancels HTML export (used as a progress window cancel callback).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Sets `::html::cancelHTML`.
   ################################################################################
   proc sc_progressBar {} {
     set ::html::cancelHTML 1
   }
+
+  ################################################################################
+  # ::html::exportCurrentGame
+  #   Exports the current game as HTML (plus supporting assets and PGN).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Prompts for an output file path via `tk_getSaveFile`.
+  #   - Copies assets into the destination directory.
+  #   - Exports the current game as HTML and as `.pgn`.
   ################################################################################
   proc exportCurrentGame {} {
 
@@ -792,7 +1372,7 @@ namespace eval html {
         [sc_game info result] [sc_game tags get "Date"]
     exportPGN "[file join $dirtarget $prefix].pgn" "current"
   }
-  ################################################################################
+
   # Dictionary mapping from special characters to their entities. (from tcllib)
   variable entities {
     \xa0 &nbsp; \xa1 &iexcl; \xa2 &cent; \xa3 &pound; \xa4 &curren;
@@ -850,10 +1430,40 @@ namespace eval html {
     \u2021 &Dagger; \u2030 &permil; \u2039 &lsaquo; \u203A &rsaquo;
     \u20AC &euro;
   }
+  ################################################################################
+  # ::html::html_entities
+  #   Replaces special characters with HTML entities.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `s`: String to escape.
+  # Returns:
+  #   - Escaped HTML string.
+  # Side effects:
+  #   - None.
+  ################################################################################
   proc html_entities {s} {
     variable entities
     return [string map $entities $s]
   }
+
+  ################################################################################
+  # ::html::toHtml
+  #   Writes an HTML page for a game (or a multi-game export).
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `dt`: Data list as produced by `::html::fillData`.
+  #   - `game`: Game index, or `-1` for single-game export.
+  #   - `dirtarget`: Output directory path.
+  #   - `prefix`: Output filename prefix.
+  #   - `players` (optional): Full game list for navigation.
+  #   - `this_players` (optional): Label for the current game.
+  #   - `event` (optional), `eco` (optional), `result` (optional), `date` (optional).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Writes one `.html` file under `dirtarget`.
   ################################################################################
   proc toHtml { dt game dirtarget prefix {players ""} {this_players ""} {event ""} {eco "ECO"} {result "*"} {date ""} } {
 
@@ -979,6 +1589,18 @@ namespace eval html {
     puts $f "</html>"
     close $f
   }
+
+  ################################################################################
+  # ::html::colorSq
+  #   Returns the CSS class name for a board square colour.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `sq`: Square index (0-based).
+  # Returns:
+  #   - `"bs"` for black squares, `"ws"` for white squares.
+  # Side effects:
+  #   - None.
   ################################################################################
   proc colorSq {sq} {
     if { [expr {$sq % 2}] == 1 && [expr {int($sq / 8) %2 }] == 0 || [expr {$sq % 2}] == 0 && [expr {int($sq / 8) %2 }] == 1 } {
@@ -987,6 +1609,18 @@ namespace eval html {
       return "ws"
     }
   }
+
+  ################################################################################
+  # ::html::piece2gif
+  #   Maps a FEN piece character to a bitmap name prefix.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `piece`: Single character piece designator or space.
+  # Returns:
+  #   - Bitmap name string (e.g. `wk`, `bp`, `sq`).
+  # Side effects:
+  #   - None.
   ################################################################################
   proc piece2gif {piece} {
     if {$piece == "K"} { return "wk" }
@@ -1003,6 +1637,19 @@ namespace eval html {
     if {$piece == "p"} { return "bp" }
     if {$piece == " "} { return "sq" }
   }
+
+  ################################################################################
+  # ::html::insertMiniDiag
+  #   Writes a miniature board diagram as an HTML table for a FEN.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `fen`: FEN board portion (piece placement).
+  #   - `f`: File channel to write to.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Writes HTML to the given channel.
   ################################################################################
   proc insertMiniDiag {fen f} {
 
@@ -1032,7 +1679,17 @@ namespace eval html {
   }
 
   ################################################################################
-  # fill data with { idx FEN prev next move nag comment depth }
+  # ::html::fillData
+  #   Builds the move/variation navigation data for the current game.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Resets `::html::data` and `::html::idx` and walks the current game.
+  ################################################################################
   proc fillData {} {
     set ::html::data {}
     set ::html::idx -1
@@ -1040,6 +1697,18 @@ namespace eval html {
     parseGame
   }
 
+  ################################################################################
+  # ::html::parseGame
+  #   Traverses the current game, recording mainline and variations into `data`.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `prev` (optional): Previous element index sentinel; internal use.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Appends to `::html::data` via `::html::recordElt` and manages variation
+  #     recursion via `sc_var`.
   ################################################################################
   proc parseGame { {prev -2} } {
     global ::html::data ::html::idx
@@ -1088,6 +1757,20 @@ namespace eval html {
       sc_move forward
     }
   }
+
+  ################################################################################
+  # ::html::recordElt
+  #   Records a single move element into `::html::data`.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `dots`: Whether to include ellipsis move formatting.
+  #   - `prev` (optional): Previous element index sentinel; internal use.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Reads game state via `sc_pos`, `sc_move`, `sc_var`, and `sc_game`.
+  #   - Appends an element (as an array serialisation) to `::html::data`.
   ################################################################################
   proc recordElt { dots {prev -2} } {
     global ::html::data ::html::idx
@@ -1179,6 +1862,18 @@ namespace eval html {
   # puts $f "</html>"
   # close $f
   # }
+  ################################################################################
+  # ::html::exportPGN
+  #   Exports a selection of games to a PGN file.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - `fName`: Output PGN file path.
+  #   - `selection`: Export selector (e.g. `filter` or `current`).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Calls `sc_base export` and may show a `progressWindow`.
   ################################################################################
   proc exportPGN { fName selection } {
     if {$selection == "filter"} {

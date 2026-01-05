@@ -1,0 +1,283 @@
+package require tcltest 2.5
+
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# Ensure namespaces exist prior to sourcing the module under test.
+namespace eval ::docking {}
+namespace eval ::win {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] windows.tcl]
+
+namespace eval ::windows_test {
+    variable stubbedCommands {}
+
+    # Lambda used by the winfo stub.
+    # Shape: { {w} { ...; return <0|1> } <namespace> }
+    variable winfoExistsLambda [list {w} { return 0 } ::]
+
+    variable createdCommands {}
+    variable calls {}
+    array set wmGeometry {}
+}
+
+proc ::windows_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::windows_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::windows_test::setWinfoExistsPredicate {lambda} {
+    # Configure how the winfo stub answers `winfo exists <path>`.
+    # Use a lambda list of the form: { {w} { ...; return <0|1> } <namespace> }.
+    set ::windows_test::winfoExistsLambda $lambda
+}
+
+proc ::windows_test::setup {} {
+    ::windows_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::windows_test::calls {}
+    catch {array unset ::windows_test::wmGeometry}
+    array set ::windows_test::wmGeometry {}
+
+    # Provide defaults expected by windows.tcl.
+    set ::windowsDock 0
+
+    array set ::winGeometry {}
+    array set winWidth {}
+    array set winHeight {}
+    array set winX {}
+    array set winY {}
+
+    # Default: no widgets exist.
+    set ::windows_test::winfoExistsLambda [list {w} { return 0 } ::]
+
+    # Stub Tk/windowing commands used by these helpers.
+    ::windows_test::stubCommand winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                # `winfo exists <path>`: tests configure existence via
+                # `::windows_test::setWinfoExistsPredicate`.
+                set w [lindex $args 0]
+                return [apply $::windows_test::winfoExistsLambda $w]
+            }
+            id { return 123 }
+            default { error "winfo $subcmd not stubbed" }
+        }
+    }
+
+    ::windows_test::stubCommand frame {path args} {
+        lappend ::windows_test::calls [list frame $path {*}$args]
+        return $path
+    }
+
+    ::windows_test::stubCommand toplevel {path args} {
+        lappend ::windows_test::calls [list toplevel $path {*}$args]
+        return $path
+    }
+
+    ::windows_test::stubCommand bind {w sequence script} {
+        lappend ::windows_test::calls [list bind $w $sequence $script]
+        return
+    }
+
+    ::windows_test::stubCommand after {args} {
+        lappend ::windows_test::calls [list after {*}$args]
+        return
+    }
+
+    ::windows_test::stubCommand focus {w} {
+        lappend ::windows_test::calls [list focus $w]
+        return
+    }
+
+    ::windows_test::stubCommand destroy {w} {
+        lappend ::windows_test::calls [list destroy $w]
+        return
+    }
+
+    ::windows_test::stubCommand wm {subcmd win args} {
+        switch -- $subcmd {
+            geometry {
+                # Getter: `wm geometry <win>` returns current geometry string.
+                # Setter: `wm geometry <win> <spec>` stores and records the update.
+                if {[llength $args] == 0} {
+                    if {![info exists ::windows_test::wmGeometry($win)]} {
+                        return ""
+                    }
+                    return $::windows_test::wmGeometry($win)
+                }
+                set ::windows_test::wmGeometry($win) [lindex $args 0]
+                lappend ::windows_test::calls [list wm geometry $win [lindex $args 0]]
+                return
+            }
+            deiconify {
+                lappend ::windows_test::calls [list wm deiconify $win]
+                return
+            }
+            default { error "wm $subcmd not stubbed" }
+        }
+    }
+
+    # Minimal docking/window helpers.
+    ::windows_test::stubCommand ::win::isDocked {w} { return [list "" $w] }
+    ::windows_test::stubCommand ::win::manageWindow {w args} {
+        lappend ::windows_test::calls [list win manageWindow $w {*}$args]
+        return
+    }
+
+    ::windows_test::stubCommand ::docking::find_tbn {w} { return "" }
+    ::windows_test::stubCommand ::docking::_cleanup_tabs {tab} {
+        lappend ::windows_test::calls [list docking cleanup_tabs $tab]
+        return
+    }
+}
+
+proc ::windows_test::cleanup {} {
+    ::windows_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::windowsDock
+
+    catch {unset ::winGeometry}
+    catch {unset winWidth}
+    catch {unset winHeight}
+    catch {unset winX}
+    catch {unset winY}
+
+    catch {unset ::windows_test::wmGeometry}
+    set ::windows_test::calls {}
+}
+
+
+test windows-createToplevel-creates-container-and-toplevel-1.0 {createToplevel creates a container frame and a toplevel and calls manageWindow} -setup {
+    ::windows_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set res [createToplevel .mywin]
+
+    # Assert
+    list $res $::windows_test::calls [info exists ::winGeometry(.fdockmywin)]
+} -cleanup {
+    ::windows_test::cleanup
+} -result {{} {{frame .fdockmywin -container 1} {toplevel .mywin -use 123} {win manageWindow .fdockmywin {}}} 1}
+
+
+test windows-createToplevel-already-exists-raises-window-1.0 {createToplevel returns already_exists and deiconifies when window already exists and not docked} -setup {
+    ::windows_test::setup
+} -body {
+    # Arrange
+
+    ::windows_test::setWinfoExistsPredicate [list {w} { expr {$w eq ".mywin"} } ::]
+
+    # Act
+    set res [createToplevel .mywin]
+
+    # Assert
+    list $res $::windows_test::calls
+} -cleanup {
+    ::windows_test::cleanup
+} -result {already_exists {{wm deiconify .mywin}}}
+
+
+test windows-recordWinSize-parses-geometry-1.0 {recordWinSize records width/height and x/y from wm geometry} -setup {
+    ::windows_test::setup
+} -body {
+    # Arrange
+    ::windows_test::setWinfoExistsPredicate [list {w} { expr {$w eq ".w"} } ::]
+
+    set ::windows_test::wmGeometry(.w) "800x600+10+20"
+
+    # Act
+    recordWinSize .w
+
+    # Assert
+    list $winWidth(.w) $winHeight(.w) $winX(.w) $winY(.w)
+} -cleanup {
+    ::windows_test::cleanup
+} -result {800 600 10 20}
+
+
+test windows-setWinLocation-sets-geometry-1.0 {setWinLocation applies saved x/y when present} -setup {
+    ::windows_test::setup
+} -body {
+    # Arrange
+    set winX(.w) 33
+    set winY(.w) 44
+
+    # Act
+    setWinLocation .w
+
+    # Assert
+    list $::windows_test::calls $::windows_test::wmGeometry(.w)
+} -cleanup {
+    ::windows_test::cleanup
+} -result {{{wm geometry .w +33+44}} +33+44}
+
+
+test windows-setWinSize-sets-geometry-1.0 {setWinSize applies saved width/height when present} -setup {
+    ::windows_test::setup
+} -body {
+    # Arrange
+    set winWidth(.w) 640
+    set winHeight(.w) 480
+
+    # Act
+    setWinSize .w
+
+    # Assert
+    list $::windows_test::calls $::windows_test::wmGeometry(.w)
+} -cleanup {
+    ::windows_test::cleanup
+} -result {{{wm geometry .w 640x480}} 640x480}
+
+
+test windows-cleanup_todo_remove-no-tab-noop-1.0 {cleanup_todo_remove is a no-op when no docking tab is found} -setup {
+    ::windows_test::setup
+} -body {
+    # Arrange
+    ::windows_test::stubCommand ::docking::find_tbn {w} { return "" }
+
+    # Act
+    cleanup_todo_remove .mywin
+
+    # Assert
+    set calls $::windows_test::calls
+    set afterCall [lindex $calls 0]
+    set focusCall [lindex $calls 1]
+
+    list [lrange $afterCall 0 1] [string match "*destroy .fdockmywin*" [lindex $afterCall 2]] $focusCall
+} -cleanup {
+    ::windows_test::cleanup
+} -result {{after idle} 1 {focus .main}}
+
+
+test windows-createToplevelFinalize-binds-destroy-1.0 {createToplevelFinalize binds Destroy on the toplevel to trigger cleanup} -setup {
+    ::windows_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    createToplevelFinalize .mywin
+
+    # Assert
+    set ::windows_test::calls
+} -cleanup {
+    ::windows_test::cleanup
+} -result {{bind .mywin <Destroy> {+apply {{w} {
+      if {[string equal $w %W]} {
+        cleanup_todo_remove $w
+      }
+    } ::} .mywin}}}
+
+
+cleanupTests

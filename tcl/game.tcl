@@ -1,10 +1,21 @@
 
-
+################################################################################
 # ::game::Clear
-#
-#   Clears the active game, checking first if it is altered.
-#   Updates any affected windows.
-#
+#   Clears the current game after confirming whether unsaved changes should be
+#   discarded.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - "cancel" when the user cancels discarding changes.
+#   - None otherwise.
+# Side effects:
+#   - May call `::notify::DatabaseModified` for either `::curr_db` or
+#     `::clipbase_db`, depending on how the user chooses to proceed.
+#   - Clears the current game via `sc_game new`.
+#   - Calls `::notify::GameChanged`.
+################################################################################
 proc ::game::Clear {} {
   set confirm [::game::ConfirmDiscard]
   if {$confirm == 0} { return "cancel"}
@@ -15,10 +26,21 @@ proc ::game::Clear {} {
   ::notify::GameChanged
 }
 
+################################################################################
 # ::game::Strip
-#
-#   Strips all comments or variations from a game
-#
+#   Removes all comments or variations from the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - type: String identifying what to strip (passed through to `sc_game strip`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Records undo state via `undoFeature save`.
+#   - Mutates the current game via `sc_game strip`.
+#   - Shows a `tk_messageBox` on failure.
+#   - Refreshes UI via `updateBoard -pgn` and `updateTitle` on success.
+################################################################################
 proc ::game::Strip {type} {
   undoFeature save
   if {[catch {sc_game strip $type} result]} {
@@ -29,8 +51,22 @@ proc ::game::Strip {type} {
   updateTitle
 }
 
+################################################################################
 # ::game::TruncateBegin
-#
+#   Truncates the current game to the current position by removing all moves
+#   before the current position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Records undo state via `undoFeature save`.
+#   - Mutates the current game via `sc_game truncate -start`.
+#   - Shows a `tk_messageBox` on failure.
+#   - Refreshes UI via `updateBoard -pgn` and `updateTitle` on success.
+################################################################################
 proc ::game::TruncateBegin {} {
   undoFeature save
   if {[catch {sc_game truncate -start} result]} {
@@ -41,8 +77,22 @@ proc ::game::TruncateBegin {} {
   updateTitle
 }
 
+################################################################################
 # ::game::Truncate
-#
+#   Truncates the current game to the current position by removing all moves
+#   after the current position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Records undo state via `undoFeature save`.
+#   - Mutates the current game via `sc_game truncate`.
+#   - Shows a `tk_messageBox` on failure.
+#   - Refreshes UI via `updateBoard -pgn` and `updateTitle` on success.
+################################################################################
 proc ::game::Truncate {} {
   undoFeature save
   if {[catch {sc_game truncate} result]} {
@@ -53,11 +103,19 @@ proc ::game::Truncate {} {
   updateTitle
 }
 
-# game::LoadNextPrev
-#
-#   Loads the next or previous filtered game in the database.
-#   The parameter <action> should be "previous" or "next".
-#
+################################################################################
+# ::game::LoadNextPrev
+#   Loads the next or previous game within the active filter.
+# Visibility:
+#   Public.
+# Inputs:
+#   - action: "previous" or "next" (passed through to `sc_filter`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Loads a game via `::game::Load` when `sc_filter $action` returns a non-zero
+#     game number.
+################################################################################
 proc ::game::LoadNextPrev {action} {
   set number [sc_filter $action]
   if {$number == 0} {
@@ -66,20 +124,37 @@ proc ::game::LoadNextPrev {action} {
   ::game::Load $number
 }
 
+################################################################################
 # ::game::Reload
-#
-#   Reloads the current game.
-#
+#   Reloads the current game from the active database.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reloads the current game via `::game::Load [sc_game number]` when a base is
+#     in use and the current game number is valid.
+################################################################################
 proc ::game::Reload {} {
   if {![sc_base inUse]} { return }
   if {[sc_game number] < 1} { return }
   ::game::Load [sc_game number]
 }
 
+################################################################################
 # ::game::LoadRandom
-#
-#   Loads a random game from the database.
-#
+#   Loads a random game from the active database and filter.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Loads a random filtered game via `::game::Load`.
+################################################################################
 proc ::game::LoadRandom {} {
   set db [sc_base current]
   set filter "dbfilter"
@@ -90,11 +165,23 @@ proc ::game::LoadRandom {} {
   ::game::Load [split [lindex $gnumber 0] "_"]
 }
 
+################################################################################
 # ::game::LoadMenu
-#
-#   Produces a popup dialog for loading a game or other actions
-#   such as merging it into the current game.
-#
+#   Shows a context menu for actions on a specific game (browse, load, merge).
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Widget path used as the menu parent and name prefix.
+#   - base: Base slot number for the target game.
+#   - gnum: Game number within the base.
+#   - x, y: Screen coordinates for menu placement.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/configures a Tk `menu` widget.
+#   - Posts the menu and binds menu items to actions (`::gbrowser::new`,
+#     `::file::SwitchToBase` + `::game::Load`, and `mergeGame`).
+################################################################################
 proc ::game::LoadMenu {w base gnum x y} {
   set m $w.gLoadMenu
   if {! [winfo exists $m]} {
@@ -122,10 +209,21 @@ proc ::game::LoadMenu {w base gnum x y} {
 set ::game::moveEntryNumber ""
 trace add variable ::game::moveEntryNumber write {::utils::validate::Regexp {^[0-9]*$}}
 
+################################################################################
 # ::game::GotoMoveNumber
-#
-#    Prompts for the move number to go to in the current game.
-#
+#   Prompts for a move number and navigates to it in the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and displays a modal dialog `.mnumDialog`.
+#   - Updates `::game::moveEntryNumber`.
+#   - May move to a specific ply via `sc_move ply`.
+#   - Refreshes the board via `updateBoard -pgn` when the user confirms.
+################################################################################
 proc ::game::GotoMoveNumber {} {
   set ::game::moveEntryNumber ""
   set w [toplevel .mnumDialog]
@@ -169,8 +267,19 @@ proc ::game::GotoMoveNumber {} {
 }
 
 ################################################################################
-# merge game gnum in base srcBase in current game in base destBase
-# then switch to destbase
+# ::game::mergeInBase
+#   Merges a game from one base into the current game of another base.
+# Visibility:
+#   Public.
+# Inputs:
+#   - srcBase: Source base slot number.
+#   - destBase: Destination base slot number (becomes the active base).
+#   - gnum: Game number in `srcBase` to be merged.
+# Returns:
+#   - None.
+# Side effects:
+#   - Switches the active base via `::file::SwitchToBase`.
+#   - Merges the source game via `mergeGame`.
 ################################################################################
 proc ::game::mergeInBase { srcBase destBase gnum } {
   ::file::SwitchToBase $destBase
@@ -187,10 +296,28 @@ proc ::game::mergeInBase { srcBase destBase gnum } {
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation.
 
+################################################################################
 # ::game::Load
-#
-#   Loads a specified game from the active database.
-#
+#   Loads a game into the current context, optionally positioning to a specific
+#   ply.
+# Visibility:
+#   Public.
+# Inputs:
+#   - selection: Game identifier for `sc_game load` (commonly a game number, but
+#     also supports composite forms used elsewhere in Scid).
+#   - ply: Optional ply index; when provided, navigates via `sc_move ply`.
+# Returns:
+#   - 0 when the user cancels discarding changes, or when `sc_game load` fails.
+#   - None on success.
+# Side effects:
+#   - May call `::notify::DatabaseModified` for either `::curr_db` or
+#     `::clipbase_db`, depending on how the user chooses to proceed.
+#   - Loads the game via `sc_game load`.
+#   - May move to a ply via `sc_move ply`.
+#   - Configures board orientation via `::board::flipAuto` based on the `FlipB`
+#     tag in `sc_game tag get Extra` (defaulting to -1 when absent).
+#   - Calls `::notify::GameChanged` on both success and load failure.
+################################################################################
 proc ::game::Load { selection {ply ""} } {
   set confirm [::game::ConfirmDiscard]
   if {$confirm == 0} { return 0}
@@ -214,17 +341,26 @@ proc ::game::Load { selection {ply ""} } {
 }
 
 
+################################################################################
 # ::game::ConfirmDiscard
-#   Prompts the user if they want to discard the changes to the
-#   current game. Returns :
-# 0 -> cancel action
-# 1 -> continue (saved)
-# 2 -> continue (added to clipbase)
-# 3 -> continue (discarded or no changes)
-#
-# If the game has been saved (res == 1 || res == 2) the caller should
-# ::notify::DatabaseModified
-#
+#   Prompts the user to decide how to handle unsaved changes in the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - 0 to cancel the caller's action.
+#   - 1 to continue after saving to the current database.
+#   - 2 to continue after saving to the clipbase.
+#   - 3 to continue after discarding changes (or when there are no changes).
+# Side effects:
+#   - Shows a modal confirmation dialog `.confirmDiscard` when the game is altered.
+#   - May save the game via `sc_game save`.
+#   - Updates `::game::answer` (dialog result state).
+# Notes:
+#   - When this returns 1 or 2, the caller is expected to invoke
+#     `::notify::DatabaseModified` for the affected database.
+################################################################################
 proc ::game::ConfirmDiscard {} {
   if {! [sc_game altered]} { return 3 }
 
@@ -300,7 +436,20 @@ proc ::game::ConfirmDiscard {} {
 # Grouping intercommunication between windows
 # When complete this should be moved to a new notify.tcl file
 namespace eval ::notify {
-  # To be called when the current game change or the Header infos (player names, site, result, etc) are modified
+  ################################################################################
+  # ::notify::GameChanged
+  #   Notifies the UI that the current game (or its header information) has changed.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates main game UI via `updateMainGame`.
+  #   - Triggers a full position update via `::notify::PosChanged newgame`.
+  #   - Refreshes dependent windows (`::windows::gamelist::Refresh`, `::maint::Refresh`).
+  ################################################################################
   proc GameChanged {} {
     updateMainGame
     ::notify::PosChanged newgame
@@ -308,19 +457,26 @@ namespace eval ::notify {
     ::maint::Refresh
   }
 
-  # To be called when the current position changes
-  # - draw the new position
-  # @-animate: if true will try to animate the moving piece
-  #            ignored if more than one piece is in a different position
-  #
-  # - inform the other modules that the current position is changed
-  # @-pgn: must be ne "" if the pgn notation is different (new moves, new tags, etc)
-  # Examples:
-  # ::notify::posChanged         -> only the current position has changed
-  # ::notify::posChanged pgnonly -> only the pgn has changed
-  # ::notify::posChanged -pgn    -> both the pgn and the current position are different
-  # ::notify::posChanged newgame -> everything is different and this is a new game
-  #
+  ################################################################################
+  # ::notify::PosChanged
+  #   Notifies the UI and engines that the current position and/or game text has
+  #   changed.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - pgn: Optional string flag. Non-empty indicates the game text needs a refresh.
+  #     The value "pgnonly" indicates that only PGN text has changed.
+  #     The value "newgame" indicates a new game was loaded/created.
+  #   - animate: Optional non-empty value enables board animation (where supported).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates the board marks and pieces via `::board::setmarks` and `::board::update`.
+  #   - Schedules `::notify::privGameTextChanged` and `::notify::privPosChanged` via
+  #     idle callbacks.
+  #   - Generates `<<NotifyNewGame>>` events when `pgn` is "newgame".
+  #   - Notifies the engine window via `::enginewin::onPosChanged` (except for "pgnonly").
+  ################################################################################
   proc PosChanged {{pgn ""} {animate ""}} {
     set pgnNeedsUpdate [expr {$pgn ne ""}]
 
@@ -352,15 +508,36 @@ namespace eval ::notify {
     }
   }
 
-  # Invoke all the function that don't care about the current position but want
-  # to be notified when the game text (tags, comments, notation) has changed.
+  ################################################################################
+  # ::notify::privGameTextChanged
+  #   Performs deferred updates that depend on the game text (tags, comments, PGN).
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Refreshes PGN and graphs views.
+  ################################################################################
   proc privGameTextChanged {} {
     ::pgn::Refresh 1
     ::tools::graphs::score::Refresh 0
   }
 
-  # Invoke all the function that want to be notified when the current position
-  # or the game text (tags, comments, notation) has changed.
+  ################################################################################
+  # ::notify::privPosChanged
+  #   Performs deferred updates that depend on the current position and/or game
+  #   text.
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates status, title, toolbars, analysis panes, tree filter, and other UI.
+  ################################################################################
   proc privPosChanged {} {
     moveEntry_Clear
     updateStatusBar
@@ -377,7 +554,21 @@ namespace eval ::notify {
     ::updateTreeFilter
   }
 
-  # To be called when the current database change or a new base is opened
+  ################################################################################
+  # ::notify::DatabaseChanged
+  #   Notifies the UI that the current database has changed (or a new base was opened).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - None.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates `::curr_db` from `sc_base current`.
+  #   - Refreshes switcher, stats, maintenance, menus, and graphs.
+  #   - Sets `::treeWin` based on `.treeWin$::curr_db` existence.
+  #   - Refreshes the ECO graph window if present.
+  ################################################################################
   proc DatabaseChanged {} {
     set ::curr_db [sc_base current]
     ::windows::switcher::Refresh
@@ -391,7 +582,20 @@ namespace eval ::notify {
     if {[winfo exists .ecograph]} { ::windows::eco::update }
   }
 
-  # To be called after modifying data in a database
+  ################################################################################
+  # ::notify::DatabaseModified
+  #   Notifies the UI that a database's contents were modified.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - dbase: Base slot number that was modified.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Refreshes menus, tree filter, gamelist, switcher, stats, maintenance, and graphs.
+  #   - Notifies search UI via `::search::DatabaseModified`.
+  #   - Refreshes the ECO graph window if present.
+  ################################################################################
   proc DatabaseModified {dbase} {
     menuUpdateBases
     ::updateTreeFilter $dbase
@@ -407,7 +611,21 @@ namespace eval ::notify {
     if {[winfo exists .ecograph]} { ::windows::eco::update }
   }
 
-  # To be called when the filter of a database is changed (searches)
+  ################################################################################
+  # ::notify::filter
+  #   Notifies the UI that a database filter has changed (typically due to searches).
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - dbase: Base slot number whose filter changed.
+  #   - filter: Filter name.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Generates `<<NotifyFilter>>` for windows and search panes.
+  #   - Refreshes the tree and, for the main "dbfilter", refreshes stats/maintenance/graphs.
+  #   - Refreshes the ECO graph window if present.
+  ################################################################################
   proc filter {dbase filter} {
     # TODO: Avoid direct access to ::search::dbase_
     foreach wnd [concat [::win::getWindows] [array names ::search::dbase_]] {
@@ -424,8 +642,21 @@ namespace eval ::notify {
     }
   }
 
-  # To be called when the engine evaluation for the current position changes.
-  # If both bestmove and score are eq "" the engine was closed, disconnected or locked.
+  ################################################################################
+  # ::notify::EngineBestMove
+  #   Notifies the UI that an engine's best-move evaluation has changed.
+  # Visibility:
+  #   Public.
+  # Inputs:
+  #   - engineID: Engine identifier.
+  #   - bestmove: Best move string. When empty, indicates the engine is closed,
+  #     disconnected, or locked.
+  #   - evaluation: Engine evaluation payload (format depends on caller).
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Updates the main evaluation bar via `::updateMainEvalBar`.
+  ################################################################################
   proc EngineBestMove {engineID bestmove evaluation} {
     ::updateMainEvalBar $engineID $bestmove $evaluation
   }

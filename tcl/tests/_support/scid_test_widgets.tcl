@@ -42,6 +42,12 @@ namespace eval ::scid_test::widgets {
 
 	# Store `index` calls per widget, indexed by ($path).
 	array set indexCalls {}
+
+	# Store `mark set` calls per widget, indexed by ($path).
+	array set markSetCalls {}
+
+	# Store `window create` calls per widget, indexed by ($path).
+	array set windowCreateCalls {}
 }
 
 # Resets all widget doubles created via this helper.
@@ -59,6 +65,8 @@ proc ::scid_test::widgets::reset {} {
     variable seeCalls
     variable yviewCalls
     variable indexCalls
+    variable markSetCalls
+    variable windowCreateCalls
 
     foreach w $created {
         catch {rename $w ""}
@@ -78,6 +86,8 @@ proc ::scid_test::widgets::reset {} {
     array unset seeCalls
     array unset yviewCalls
     array unset indexCalls
+    array unset markSetCalls
+    array unset windowCreateCalls
 }
 
 # Defines a lightweight widget command double.
@@ -218,19 +228,44 @@ proc ::scid_test::widgets::dispatchText {path subcmd args} {
     variable tagAddCalls
     variable tagNextRangeCalls
     variable tagNextRangeResults
+    variable markSetCalls
+    variable windowCreateCalls
     variable seeCalls
     variable yviewCalls
     variable indexCalls
 
     switch -- $subcmd {
+        mark {
+            # mark set <markName> <index>
+            set markSubcmd [lindex $args 0]
+            if {$markSubcmd ne "set"} {
+                error "Widget $path mark $markSubcmd not stubbed"
+            }
+            set markName [lindex $args 1]
+            set index [lindex $args 2]
+            lappend markSetCalls($path) [list $markName $index]
+            return
+        }
+        window {
+            # window create <index> -window <widgetPath>
+            set winSubcmd [lindex $args 0]
+            if {$winSubcmd ne "create"} {
+                error "Widget $path window $winSubcmd not stubbed"
+            }
+            lappend windowCreateCalls($path) [list {*}$args]
+            return
+        }
         see {
             # see <index>
             lappend seeCalls($path) [lindex $args 0]
             return
         }
         yview {
-            # yview moveto <fraction>
+            # yview ?moveto <fraction>?
             lappend yviewCalls($path) [list {*}$args]
+            if {[llength $args] == 0} {
+                return {0.0 1.0}
+            }
             return
         }
         index {
@@ -360,6 +395,22 @@ proc ::scid_test::widgets::getTagRemoveCalls {path} {
         return {}
     }
     return $tagRemoveCalls($path)
+}
+
+proc ::scid_test::widgets::getMarkSetCalls {path} {
+    variable markSetCalls
+    if {![info exists markSetCalls($path)]} {
+        return {}
+    }
+    return $markSetCalls($path)
+}
+
+proc ::scid_test::widgets::getWindowCreateCalls {path} {
+    variable windowCreateCalls
+    if {![info exists windowCreateCalls($path)]} {
+        return {}
+    }
+    return $windowCreateCalls($path)
 }
 
 proc ::scid_test::widgets::getTagAddCalls {path} {

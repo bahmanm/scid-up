@@ -1,0 +1,229 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# `tcl/main.tcl` executes `loadPlayersPhoto` at file scope, which requires Tk's
+# `image` command. Provide a minimal stub so the file can be sourced under plain
+# `tclsh`.
+if {![llength [info commands image]]} {
+    proc image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        # Supported forms (minimal):
+        #   image create photo <name> ?options...?
+        set type [lindex $args 0]
+        if {$type ne "photo"} {
+            error "image create $type not stubbed in tests"
+        }
+        return
+    }
+}
+
+# Ensure the directories queried by loadPlayersPhoto exist so `glob -directory`
+# does not error.
+set _photosRoot [::scid_test::tempDir]
+foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
+    set $dirVar $_photosRoot
+}
+file mkdir [file join $::scidShareDir photos]
+unset _photosRoot
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] main.tcl]
+
+namespace eval ::main_test {
+    variable stubbedCommands {}
+    variable addSanMoveCalls {}
+    variable scPosMovesResult {}
+    variable sanToUciResult "0000"
+}
+
+proc ::main_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::main_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::main_test::setup {} {
+    ::main_test::restoreStubs
+
+    set ::main_test::addSanMoveCalls {}
+
+    # Reset move entry state.
+    set ::moveEntry(Text) ""
+    set ::moveEntry(List) {}
+    set ::moveEntry(Coord) ""
+    set ::moveEntry(AutoExpand) 0
+
+    # Default chess stubs (overridable per test).
+    set ::main_test::scPosMovesResult {}
+    set ::main_test::sanToUciResult "0000"
+
+    # Stub UI update hooks.
+    ::main_test::stubCommand updateStatusBar {} { return }
+
+    # Stub translation helpers.
+    ::main_test::stubCommand ::trans {s} { return $s }
+    ::main_test::stubCommand ::untrans {s} { return $s }
+
+    # Stub prefix length helper (case-insensitive).
+    ::main_test::stubCommand strPrefixLen {prefix text} {
+        set prefix [string tolower $prefix]
+        set text [string tolower $text]
+        set n 0
+        set max [string length $prefix]
+        for {set i 0} {$i < $max} {incr i} {
+            if {[string index $prefix $i] ne [string index $text $i]} {
+                break
+            }
+            incr n
+        }
+        return $n
+    }
+
+    # Chess bridge stubs.
+    ::main_test::stubCommand sc_pos {subcmd args} {
+        switch -- $subcmd {
+            moves { return $::main_test::scPosMovesResult }
+            default { error "sc_pos $subcmd not stubbed in tests" }
+        }
+    }
+    ::main_test::stubCommand sc_game {subcmd args} {
+        switch -- $subcmd {
+            SANtoUCI { return $::main_test::sanToUciResult }
+            default { error "sc_game $subcmd not stubbed in tests" }
+        }
+    }
+
+    # Move application.
+    ::main_test::stubCommand addSanMove {move} {
+        lappend ::main_test::addSanMoveCalls $move
+        return 1
+    }
+}
+
+proc ::main_test::arrangeMoveEntry {args} {
+    array set opts {
+        -coord x
+        -autoExpand 0
+        -moves {}
+        -sanToUci 0000
+    }
+    array set opts $args
+
+    set ::moveEntry(Coord) $opts(-coord)
+    set ::moveEntry(AutoExpand) $opts(-autoExpand)
+    set ::main_test::scPosMovesResult $opts(-moves)
+    set ::main_test::sanToUciResult $opts(-sanToUci)
+}
+
+proc ::main_test::cleanup {} {
+    ::main_test::restoreStubs
+
+    unset -nocomplain ::moveEntry(Text)
+    unset -nocomplain ::moveEntry(List)
+    unset -nocomplain ::moveEntry(Coord)
+    unset -nocomplain ::moveEntry(AutoExpand)
+}
+
+# ---- Tests ----
+
+test main-moveEntry_Clear-1.0 {moveEntry_Clear resets move entry state} -setup {
+    ::main_test::setup
+} -body {
+    # Arrange
+    set ::moveEntry(Text) "e4"
+    set ::moveEntry(List) {e4 e5}
+
+    # Act
+    moveEntry_Clear
+
+    # Assert
+    list $::moveEntry(Text) $::moveEntry(List)
+} -cleanup {
+    ::main_test::cleanup
+} -result {{} {}}
+
+test main-moveEntry_Char-rejects-non-matching-char-1.0 {moveEntry_Char rejects a character that yields no matching moves} -setup {
+    ::main_test::setup
+} -body {
+    # Arrange
+    ::main_test::arrangeMoveEntry -coord x -moves {e4}
+
+    # Act
+    set res [moveEntry_Char N]
+
+    # Assert
+    list $res $::moveEntry(Text) $::moveEntry(List) $::main_test::addSanMoveCalls
+} -cleanup {
+    ::main_test::cleanup
+} -result {0 {} {} {}}
+
+test main-moveEntry_Char-filters-and-sorts-moves-1.0 {moveEntry_Char filters by prefix and sorts matches} -setup {
+    ::main_test::setup
+} -body {
+    # Arrange
+    ::main_test::arrangeMoveEntry -coord x -moves {Nf3 Nxe5+ Ne2}
+
+    # Act
+    set res [moveEntry_Char n]
+
+    # Assert
+    list $res $::moveEntry(Text) $::moveEntry(List)
+} -cleanup {
+    ::main_test::cleanup
+} -result {3 n {Ne2 Ne5 Nf3}}
+
+test main-moveEntry_Char-adds-null-move-1.0 {moveEntry_Char adds the null move when "-" or "--" is entered and SANtoUCI accepts it} -setup {
+    ::main_test::setup
+} -body {
+    # Arrange
+    ::main_test::arrangeMoveEntry -coord "" -moves {} -sanToUci 0000
+
+    # Act
+    set res [moveEntry_Char -]
+
+    # Assert
+    list $res $::moveEntry(Text) $::moveEntry(List)
+} -cleanup {
+    ::main_test::cleanup
+} -result {1 - --}
+
+test main-moveEntry_Char-autoexpand-completes-move-1.0 {moveEntry_Char completes the move when AutoExpand is enabled and there is a single match} -setup {
+    ::main_test::setup
+} -body {
+    # Arrange
+    ::main_test::arrangeMoveEntry -coord x -autoExpand 1 -moves {O-O}
+
+    # Act
+    set res [moveEntry_Char o]
+
+    # Assert
+    list $res $::main_test::addSanMoveCalls $::moveEntry(Text) $::moveEntry(List)
+} -cleanup {
+    ::main_test::cleanup
+} -result {1 O-O {} {}}
+
+test main-moveEntry_Backspace-updates-text-and-list-1.0 {moveEntry_Backspace removes last char and recomputes the move list} -setup {
+    ::main_test::setup
+} -body {
+    # Arrange
+    ::main_test::arrangeMoveEntry -coord x -moves {Nf3 Ne2}
+    set ::moveEntry(Text) "nf"
+
+    # Act
+    set res [moveEntry_Backspace]
+
+    # Assert
+    list $res $::moveEntry(Text) $::moveEntry(List)
+} -cleanup {
+    ::main_test::cleanup
+} -result {2 n {Ne2 Nf3}}
+
+cleanupTests
+

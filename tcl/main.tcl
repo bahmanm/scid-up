@@ -34,12 +34,38 @@
 set moveEntry(Text) ""
 set moveEntry(List) {}
 
+################################################################################
+# moveEntry_Clear
+#   Clears the keyboard move-entry buffer.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Resets `moveEntry(Text)` and `moveEntry(List)`.
+################################################################################
 proc moveEntry_Clear {} {
     global moveEntry
     set moveEntry(Text) ""
     set moveEntry(List) {}
 }
 
+################################################################################
+# moveEntry_Complete
+#   Attempts to commit the currently selected keyboard-entered move.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - 0 when there is no matching candidate move.
+#   - Otherwise, the result of `addSanMove`.
+# Side effects:
+#   - Clears the move-entry buffer via `moveEntry_Clear`.
+#   - May mutate the current game by calling `addSanMove`.
+################################################################################
 proc moveEntry_Complete {} {
     lassign $::moveEntry(List) move
     if {$move eq ""} { return 0 }
@@ -50,6 +76,19 @@ proc moveEntry_Complete {} {
     return [addSanMove [::untrans $move]]
 }
 
+################################################################################
+# moveEntry_Backspace
+#   Removes the last character from the keyboard move-entry buffer.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - The return value of `moveEntry_Char` (match count or move-commit result).
+# Side effects:
+#   - Updates `moveEntry(Text)` and recomputes `moveEntry(List)`.
+#   - Updates UI status via `updateStatusBar` (through `moveEntry_Char`).
+################################################################################
 proc moveEntry_Backspace {} {
     global moveEntry
     set moveEntry(Text) [string range $moveEntry(Text) 0 \
@@ -57,6 +96,24 @@ proc moveEntry_Backspace {} {
     moveEntry_Char ""
 }
 
+################################################################################
+# moveEntry_Char
+#   Adds a character to the keyboard move-entry buffer and updates candidate
+#   moves.
+# Visibility:
+#   Private.
+# Inputs:
+#   - ch: The character to append to `moveEntry(Text)`.
+# Returns:
+#   - (int) Number of matching candidates after filtering.
+#   - Or, when a move is auto-committed, the return value of `moveEntry_Complete`.
+# Side effects:
+#   - Updates `moveEntry(Text)` and `moveEntry(List)`.
+#   - Queries legal moves via `sc_pos moves`.
+#   - May probe the null move via `sc_game SANtoUCI "--"`.
+#   - Updates UI status via `updateStatusBar`.
+#   - May commit a move to the game via `moveEntry_Complete`.
+################################################################################
 proc moveEntry_Char {ch} {
     global moveEntry
     set oldMoveText $moveEntry(Text)
@@ -109,9 +166,20 @@ proc moveEntry_Char {ch} {
     return $len
 }
 
-# updateMainGame:
-#   Updates the main board with games's info
-#
+################################################################################
+# updateMainGame
+#   Refreshes main-window player metadata for the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `gamePlayers(nameW)`, `gamePlayers(nameB)`, `gamePlayers(eloW)`,
+#     `gamePlayers(eloB)`, and clears the clock fields.
+#   - Reads game metadata via `sc_game info`.
+################################################################################
 proc updateMainGame {} {
     global gamePlayers
     set gamePlayers(nameW)  [sc_game info white]
@@ -125,9 +193,20 @@ proc updateMainGame {} {
     set gamePlayers(movetime) ""
 }
 
-# updateTitle:
-#   Updates the main Scid window title.
-#
+################################################################################
+# updateTitle
+#   Updates the application window titles to reflect the current database/game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the root window title (`.`) and main window title (`.main`).
+#   - Reads database metadata via `sc_base filename` / `sc_base numGames`.
+#   - Reads game metadata via `sc_game info` and `sc_game altered`.
+################################################################################
 proc updateTitle {} {
     set title "Scid - "
     set fname [sc_base filename $::curr_db]
@@ -148,9 +227,23 @@ proc updateTitle {} {
     }
 }
 
-# updateStatusBar:
-#   Updates the main Scid window status bar.
-#
+################################################################################
+# updateStatusBar
+#   Updates the main status area (info text, evaluation bar, and context alerts).
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.main.board` info/alerts via `::board::setInfo*`.
+#   - Updates `.main.board` evaluation bar via `::board::updateEvalBar`.
+#   - Reads/updates `::gamePlayers(clockW)`, `::gamePlayers(clockB)`, and
+#     `::gamePlayers(movetime)`.
+#   - May set/unset `::guessedAddMove` and update `::gameLastMove`.
+#   - Reads game/position state via `sc_pos` / `sc_game`.
+################################################################################
 proc updateStatusBar {} {
     if {! [winfo exists .main]} { return }
 
@@ -259,6 +352,21 @@ proc updateStatusBar {} {
     }
 }
 
+################################################################################
+# updateMainToolbar
+#   Updates main-board navigation/variation toolbar bindings for the current
+#   position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures `.main.board` toolbar button commands/images.
+#   - Updates `::gameInfoBar(...)` command entries.
+#   - Reads position state via `sc_pos isAt ...` and `sc_var level`.
+################################################################################
 proc updateMainToolbar {} {
   if {[sc_pos isAt start]} {
     ::board::setButtonCmd .main.board leavevar ""
@@ -299,8 +407,25 @@ proc updateMainToolbar {} {
   set ::gameInfoBar(tb_BD_SelectMarker) "::selectMarker"
 }
 
-# Update the "tree" filter of databases that have a view (gamelist or tree windows)
-# which depends on the current position.
+################################################################################
+# ::updateTreeFilter
+#   Updates position-dependent "tree" filters for windows that track the current
+#   board position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - base (int|string, optional): Database slot to prioritise (passed through to
+#     the window discovery helpers).
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates `::treeFilterUpdating_` / `::treeFilterUpdatingBases_` for
+#     cancellation and restart handling.
+#   - Runs `sc_filter search <base> "tree" board` for affected bases.
+#   - Updates progress UI via `progressBarSet` / `::progressBarCancel`.
+#   - Notifies listeners via `::notify::filter <base> tree`.
+#   - May schedule a restart via `after idle` if the position changes mid-update.
+################################################################################
 proc ::updateTreeFilter {{base ""}} {
     if { [info exists ::treeFilterUpdating_] } {
         set ::treeFilterUpdating_ {}
@@ -341,6 +466,20 @@ proc ::updateTreeFilter {{base ""}} {
     unset ::treeFilterUpdating_
 }
 
+################################################################################
+# ::cancelUpdateTreeFilter
+#   Cancels (or narrows) an in-progress `::updateTreeFilter` run.
+# Visibility:
+#   Private.
+# Inputs:
+#   - progressbar: Progress-bar descriptor as stored in the update tracking list.
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates `::treeFilterUpdating_` / `::treeFilterUpdatingBases_` to remove the
+#     cancelled target.
+#   - May call `::progressBarCancel` when cancelling the last remaining update.
+################################################################################
 proc ::cancelUpdateTreeFilter {progressbar} {
     if {![info exists ::treeFilterUpdating_]} {
         return
@@ -360,10 +499,24 @@ proc ::cancelUpdateTreeFilter {progressbar} {
     }
 }
 
-# Update the main eval bar to reflect the engine's evaluation.
-# If there is only one engine running, il will show that evaluation in the bar.
-# If there are multiple engines running, the eval bar will remain associated
-# with the first engine that send its evaluation until it stops running.
+################################################################################
+# ::updateMainEvalBar
+#   Updates the main evaluation bar (and optional best-move arrow) from engine
+#   output.
+# Visibility:
+#   Private.
+# Inputs:
+#   - engineID: Engine window/slot identifier reporting the evaluation.
+#   - bestmove: Best move in SAN (possibly containing chess-piece glyphs).
+#   - evaluation: Numeric evaluation value understood by `::board::updateEvalBar`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.main.board` evaluation bar via `::board::updateEvalBar`.
+#   - When enabled, draws the best-move arrow via `::board::mark::DrawBestMove`.
+#   - Tracks the "owning" engine in `::mainEvalBarEngineID_`.
+#   - May unset `::mainEvalBarEngineID_` when the engine clears its output.
+################################################################################
 proc ::updateMainEvalBar {engineID bestmove evaluation} {
     if {! $::showEvalBar(.main) || ![winfo exists .main.board]} { return }
 
@@ -383,17 +536,21 @@ proc ::updateMainEvalBar {engineID bestmove evaluation} {
     }
 }
 
-# Create a menu containing:
-# - the engine currently associated with the evaluation bar
-# - engines open in enginewin windows
-# - the configured engines that can be started
-# - a command to add a new local engine
-# - a command to show/hide the best move arrow
-# - the command to hide the evaluation bar
-# Behavior:
-# - if the currently associated engine is selected, stop it
-# - if a different engine is selected, stop the current engine and start the new one.
-# Returns the name of the created menu.
+################################################################################
+# ::createMainEvalBarMenu
+#   Creates the evaluation-bar context menu for selecting/starting engines and
+#   toggling evaluation features.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Widget path of the evaluation bar/board.
+# Returns:
+#   - (string) Path of the created menu widget (`$w.evalbar_menu`).
+# Side effects:
+#   - Creates/destroys `$w.evalbar_menu`.
+#   - May start/stop engines via `::enginewin::start` / `::enginewin::stop`.
+#   - May update `::mainEvalBarEngineID_` and `::showMainEvalBarArrow`.
+################################################################################
 proc ::createMainEvalBarMenu {w} {
     if {[winfo exists $w.evalbar_menu]} { destroy $w.evalbar_menu }
     menu $w.evalbar_menu
@@ -449,6 +606,18 @@ proc ::createMainEvalBarMenu {w} {
     return $w.evalbar_menu
 }
 
+################################################################################
+# toggleRotateBoard
+#   Flips the main board orientation.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `.main.board` orientation via `::board::flip`.
+################################################################################
 proc toggleRotateBoard {} {
     ::board::flip .main.board
 }
@@ -459,11 +628,34 @@ proc toggleRotateBoard {} {
 ############################################################
 ### The board:
 
+################################################################################
+# toggleShowMaterial
+#   Toggles material display in the main game-info view.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Toggles material display via `::board::toggleMaterial`.
+################################################################################
 proc toggleShowMaterial {} {
     board::toggleMaterial .main.board
 }
 
-# MouseWheel in main window:
+################################################################################
+# main_mousewheelHandler
+#   Handles mouse-wheel navigation in the main window.
+# Visibility:
+#   Private.
+# Inputs:
+#   - direction: Signed scroll direction (negative for back, positive for forward).
+# Returns:
+#   - None.
+# Side effects:
+#   - Navigates the game via `::move::Back` or `::move::Forward`.
+################################################################################
 proc main_mousewheelHandler {direction} {
     if {$direction < 0} {
         ::move::Back
@@ -473,8 +665,17 @@ proc main_mousewheelHandler {direction} {
 }
 
 ################################################################################
-# added by Pascal Georges
-# returns a list of num moves from main line following current position
+# getNextMoves
+#   Returns a short textual preview of upcoming main-line moves.
+# Visibility:
+#   Private.
+# Inputs:
+#   - num (int, optional): Maximum number of half-moves to include (default 4).
+# Returns:
+#   - (string) A space-prefixed string containing up to `num` moves.
+# Side effects:
+#   - Temporarily advances the game via `sc_move forward`, then restores the
+#     original position via `sc_move back`.
 ################################################################################
 proc getNextMoves { {num 4} } {
     set tmp ""
@@ -488,7 +689,22 @@ proc getNextMoves { {num 4} } {
     return $tmp
 }
 ################################################################################
-# displays a box with main line and variations for easy selection with keyboard
+# showVars
+#   Displays a temporary variations chooser for quick selection via keyboard.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - No-op when `::autoplayMode == 1`, when there are no variations, or when the
+#     `.variations` window already exists.
+#   - Creates the `.variations` toplevel with a `ttk::treeview` list.
+#   - Enters the selected variation via `::move::EnterVar`.
+#   - Temporarily moves into/out of variations via `sc_var moveInto` / `sc_var exit`.
+#   - Captures/restores focus and grab via `::tk::SetFocusGrab` /
+#     `::tk::RestoreFocusGrab`.
 ################################################################################
 proc showVars {} {
     if {$::autoplayMode == 1} { return }
@@ -555,22 +771,37 @@ proc showVars {} {
     ::tk::RestoreFocusGrab $w $w.lbVar
 }
 ################################################################################
-#
+# updateBoard
+#   Notifies listeners that the current position has changed.
+# Visibility:
+#   Public.
+# Inputs:
+#   - args: Optional flags forwarded to `::notify::PosChanged` (e.g. `-pgn`,
+#     `-animate`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Triggers UI refresh via `::notify::PosChanged`.
 ################################################################################
-
-# updateBoard:
-#    Updates the main board.
-#    If a parameter "-pgn" is specified, the PGN text is also regenerated.
-#    If a parameter "-animate" is specified, board changes are animated.
-#
 proc updateBoard {args} {
     ::notify::PosChanged {*}$args
 }
 
 
-# updateGameInfo:
-#    Update the game status window .main.gameInfo
-#
+################################################################################
+# updateGameInfo
+#   Regenerates the main-window game-info panel content.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Replaces `.main.gameInfo.text` contents and toggles wrapping/tagging.
+#   - Renders the game info text via `::htext::display` and `sc_game info`.
+#   - Updates player photos via `togglePhotosSize 0`.
+################################################################################
 proc updateGameInfo {} {
     global gameInfo
 
@@ -592,6 +823,21 @@ proc updateGameInfo {} {
 }
 
 set photosMinimized 0
+################################################################################
+# togglePhotosSize
+#   Toggles whether the player photos are shown minimised or full-height.
+# Visibility:
+#   Private.
+# Inputs:
+#   - toggle (bool/int, optional): When true, flips `::photosMinimized`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Places/unplaces `.main.photoW` / `.main.photoB` relative to
+#     `.main.gameInfo.text`.
+#   - Updates photo image data via `updatePlayerPhotos`.
+#   - Mutates `::photosMinimized`.
+################################################################################
 proc togglePhotosSize {{toggle 1}} {
     place forget .main.photoW
     place forget .main.photoB
@@ -613,8 +859,23 @@ proc togglePhotosSize {{toggle 1}} {
 }
 
 
-# readPhotoFile executed once at startup for each SPF file. Loads SPI file if it exists.
-# Otherwise it generates index information and tries to write SPI file to disk (if it can be done)
+################################################################################
+# readPhotoFile
+#   Indexes a Scid photo file (`.spf`) and optionally generates/uses its `.spi`
+#   index.
+# Visibility:
+#   Private.
+# Inputs:
+#   - fname: Path to a `.spf` file.
+# Returns:
+#   - (int) Number of photos indexed from the file.
+# Side effects:
+#   - Populates `::unsafe::photobegin(*)`, `::unsafe::photosize(*)`, and
+#     `::unsafe::spffile(*)`.
+#   - May `safeSource` an existing `.spi` file.
+#   - May write a new `.spi` file when permissions allow.
+#   - Emits startup progress via `::splash::add`.
+################################################################################
 proc readPhotoFile {fname} {
     set count 0
     set writespi 0
@@ -687,7 +948,17 @@ proc readPhotoFile {fname} {
 }
 
 
-#convert $data string tolower case and strip the first two blanks.
+################################################################################
+# trimString
+# Visibility:
+#   Private.
+# Inputs:
+#   - data: String to normalise.
+# Returns:
+#   - (string) Lowercased string with the first two spaces removed.
+# Side effects:
+#   - None.
+################################################################################
 proc trimString {data} {
     set data [string tolower $data]
     set strindex [string first "\ " $data]
@@ -698,7 +969,19 @@ proc trimString {data} {
 }
 
 
-# retrieve photo from the SPF file using index information
+################################################################################
+# getphoto
+#   Retrieves raw photo data for a player from an indexed `.spf` file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - name: Normalised key used in `::unsafe::spffile(*)`.
+# Returns:
+#   - (string) Photo data block (may be empty when not found).
+# Side effects:
+#   - Reads from disk using offsets stored in `::unsafe::photobegin(*)` and
+#     `::unsafe::photosize(*)`.
+################################################################################
 proc getphoto {name} {
     set data ""
     if {[info exists ::unsafe::spffile($name)]} {
@@ -711,6 +994,22 @@ proc getphoto {name} {
 }
 
 
+################################################################################
+# loadPlayersPhoto
+#   Initialises player-photo images and indexes available `.spf` photo files.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - (list) `{nImages nFiles}` for indexed photo entries and `.spf` files.
+# Side effects:
+#   - Creates Tk images `photoW` and `photoB`.
+#   - Clears `::gamePlayers(photoW)` / `::gamePlayers(photoB)`.
+#   - Scans `::scidDataDir`, `::scidUserDir`, `::scidConfigDir`, and
+#     `[file join $::scidShareDir "photos"]` (and `::scidPhotoDir` when set).
+#   - Populates photo index arrays via `readPhotoFile`.
+################################################################################
 proc loadPlayersPhoto {} {
   set ::gamePlayers(photoW) {}
   set ::gamePlayers(photoB) {}
@@ -738,10 +1037,19 @@ proc loadPlayersPhoto {} {
 }
 loadPlayersPhoto
 
-# Normalizes player or game engine names by standardizing case, removing
-# specific prefixes ('deep '), and eliminating excess whitespace.
+################################################################################
+# normalizePlayerName
+#   Normalises a player/engine name for photo lookup.
+# Visibility:
+#   Public.
+# Inputs:
+#   - engine: Raw player or engine name.
 # Returns:
-#     A list with two elements: the normalized engine name and the spell name.
+#   - (list) `{normalisedName spelledName}`.
+# Side effects:
+#   - May consult name spelling via `sc_name retrievename`.
+#   - May consult `::unsafe::spffile(*)` to shorten engine-style names.
+################################################################################
 proc normalizePlayerName { engine } {
     set spelled $engine
     catch {
@@ -777,9 +1085,20 @@ proc normalizePlayerName { engine } {
 }
 
 
+################################################################################
 # updatePlayerPhotos
-#   Updates the images photoW and photoB for the two players of the current game.
-#
+#   Updates `photoW` and `photoB` image contents for the current game's players.
+# Visibility:
+#   Public.
+# Inputs:
+#   - force: Reserved for future use (currently unused).
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates `::gamePlayers(photoW)` / `::gamePlayers(photoB)` as the "last
+#     rendered" names.
+#   - Recreates `photoW` / `photoB` image data via `image create photo ... -data`.
+################################################################################
 proc updatePlayerPhotos {{force ""}} {
     foreach {name img} {nameW photoW nameB photoB} {
         set spellname $::gamePlayers($name)
@@ -808,7 +1127,18 @@ set KNIGHT 5
 set PAWN 6
 
 ################################################################################
-#
+# getPromoPiece
+#   Prompts the user to select a promotion piece.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - (int) Piece selector: 2=queen, 3=rook, 4=bishop, 5=knight.
+# Side effects:
+#   - Creates and destroys `.promoWin`.
+#   - Temporarily grabs focus via `grab` / `tkwait window`.
+#   - Uses global `::result` to communicate selection.
 ################################################################################
 proc getPromoPiece {} {
     set w .promoWin
@@ -832,16 +1162,24 @@ proc getPromoPiece {} {
     return $::result
 }
 
-# TODO: remove this
-# confirmReplaceMove:
-#   Asks the user what to do when adding a move when a move already
-#   exists.
-#   Returns a string value:
-#      "replace" to replace the move, truncating the game.
-#      "var" to add the move as a new variation.
-#      "cancel" to do nothing.
-#
-
+################################################################################
+# confirmReplaceMove
+#   Prompts for how to handle adding a move when a move already exists (unless
+#   the review window is open).
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - "replace" to replace/truncate the existing continuation.
+#   - "mainline" to create a new main line.
+#   - "var" to add the move as a new variation.
+#   - "cancel" to abort.
+# Side effects:
+#   - Returns `"var"` without prompting when `::reviewgame::window` exists.
+#   - Otherwise shows a modal `tk_dialog`.
+#   - Temporarily adjusts `*Dialog.msg.wrapLength` option.
+################################################################################
 proc confirmReplaceMove {} {
     if {[winfo exists $::reviewgame::window]} {
         return "var"
@@ -859,10 +1197,25 @@ proc confirmReplaceMove {} {
     return "cancel"
 }
 
-# Add a move to the current game.
-# If the current position is not the end of the game, the default action is to add the move as a new variant.
-# The move notation can be SAN or UCI.
-# Return true if the move is both legal and has been successfully added.
+################################################################################
+# addMoveEx
+#   Adds a move to the current game, optionally creating a new line/variation.
+# Visibility:
+#   Private.
+# Inputs:
+#   - move: Move in SAN or UCI notation.
+#   - action (string, optional): How to handle existing continuations
+#     (`replace`, `mainline`, `var`). Defaults to `var`.
+# Returns:
+#   - 1 on success.
+#   - 0 on failure.
+# Side effects:
+#   - Records undo state via `undoFeature save`.
+#   - May create/promote variations via `sc_var create` / `sc_var promote`.
+#   - Mutates the game via `sc_move addSan`.
+#   - On error, reverts via `undoFeature undo`.
+#   - Triggers UI refresh via `::notify::PosChanged -pgn -animate`.
+################################################################################
 proc addMoveEx {{move} {action "var"}} {
     undoFeature save
     if {[catch {
@@ -891,12 +1244,40 @@ proc addMoveEx {{move} {action "var"}} {
     return 1
 }
 
+################################################################################
+# addMove
+#   Adds a move to the current game using board-square indices.
+# Visibility:
+#   Public.
+# Inputs:
+#   - sq1: Source square index.
+#   - sq2: Destination square index.
+#   - animate (string, optional): Animation flag forwarded to `addMoveUCI`.
+# Returns:
+#   - 1 on success.
+#   - 0 on failure.
+# Side effects:
+#   - May mutate the current game via `addMoveUCI`.
+################################################################################
 proc addMove { sq1 sq2 {animate "-animate"}} {
     set moveUCI [::board::san $sq2][::board::san $sq1]
     return [addMoveUCI $moveUCI $animate]
 }
 
-# Return true if the move is legal and has been successfully added.
+################################################################################
+# addSanMove
+#   Adds a SAN move to the current game.
+# Visibility:
+#   Public.
+# Inputs:
+#   - san: SAN move string.
+# Returns:
+#   - 1 on success.
+#   - 0 on failure.
+# Side effects:
+#   - Converts SAN to UCI via `sc_game SANtoUCI`.
+#   - May mutate the current game via `addMoveUCI`.
+################################################################################
 proc addSanMove { {san} } {
     if {[catch {sc_game SANtoUCI $san} moveUCI]} {
         return 0
@@ -904,12 +1285,25 @@ proc addSanMove { {san} } {
     return [addMoveUCI $moveUCI]
 }
 
-# addMoveUCI:
-#   Adds the move indicated if it is legal.
-#   If the move is a promotion, getPromoPiece will be called
-#   to get the promotion piece from the user.
-#   Return true if the move is legal and has been successfully added.
-#
+################################################################################
+# addMoveUCI
+#   Adds a UCI move to the current game (handling promotions and null moves).
+# Visibility:
+#   Public.
+# Inputs:
+#   - moveUCI: UCI move string (e.g. "e2e4", "e7e8q", "0000").
+#   - animate (string, optional): Animation flag forwarded to UI refresh.
+# Returns:
+#   - 1 on success.
+#   - 0 on failure.
+# Side effects:
+#   - May prompt for promotion via `getPromoPiece`.
+#   - May consult `::interactionHandler` to block moves.
+#   - May follow an existing continuation via `::move::Follow`.
+#   - Otherwise may add a move/variation via `addMoveEx`.
+#   - May send the move to external hardware via `::novag::addMove`.
+#   - Schedules a sound announcement via `after idle`.
+################################################################################
 proc addMoveUCI {{moveUCI} {animate "-animate"}} {
     set sq1 [::board::sq [string range $moveUCI 0 1] ]
     set sq2 [::board::sq [string range $moveUCI 2 3] ]
@@ -947,6 +1341,19 @@ proc addMoveUCI {{moveUCI} {animate "-animate"}} {
     return 1
 }
 
+################################################################################
+# suggestMove
+#   Determines whether the UI should suggest a move for the current square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - 1 when suggestion logic should run.
+#   - 0 when suggestions are disabled.
+# Side effects:
+#   - May consult `::interactionHandler`.
+################################################################################
 proc suggestMove {} {
     if {! $::suggestMoves} { return 0}
     if {[info exists ::interactionHandler]} {
@@ -955,12 +1362,20 @@ proc suggestMove {} {
     return 1
 }
 
-# enterSquare:
-#   Called when the mouse pointer enters a board square.
-#   Finds the best matching square for a move (if there is a
-#   legal move to or from this square), and colors the squares
-#   to indicate the suggested move.
-#
+################################################################################
+# enterSquare
+#   Highlights a suggested move when the pointer enters a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - square: Board square index under the pointer.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `bestSq`.
+#   - May query `sc_pos bestSquare`.
+#   - Colours squares on `.main.board` via `::board::colorSquare`.
+################################################################################
 proc enterSquare { square } {
     global bestSq bestcolor selectedSq
     if {$selectedSq == -1} {
@@ -975,10 +1390,18 @@ proc enterSquare { square } {
     }
 }
 
-# leaveSquare:
-#    Called when the mouse pointer leaves a board square.
-#    Recolors squares to normal (lite/dark) color.
-#
+################################################################################
+# leaveSquare
+#   Clears any suggestion highlight when the pointer leaves a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - square: Board square index under the pointer.
+# Returns:
+#   - None.
+# Side effects:
+#   - Restores default colouring via `::board::colorSquare`.
+################################################################################
 proc leaveSquare { square } {
     global selectedSq bestSq
     if {$selectedSq == -1} {
@@ -987,10 +1410,20 @@ proc leaveSquare { square } {
     }
 }
 
-# pressSquare:
-#    Called when the left mouse button is pressed on a square. Sets
-#    that square to be the selected square.
-#
+################################################################################
+# pressSquare
+#   Handles left-click on a square (selection or completing a two-click move).
+# Visibility:
+#   Private.
+# Inputs:
+#   - square: Board square index clicked.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `selectedSq` and colours squares via `::board::colorSquare`.
+#   - May start dragging via `::board::setDragSquare`.
+#   - May commit a move via `addMove`.
+################################################################################
 proc pressSquare { square } {
     global selectedSq highcolor
 
@@ -1016,12 +1449,22 @@ proc pressSquare { square } {
     }
 }
 
-# releaseSquare:
-#   Called when the left mouse button is released over a square.
-#   If the square is different to that the button was pressed on, it
-#   is a dragged move; otherwise it is just selecting this square as
-#   part of a move.
-#
+################################################################################
+# releaseSquare
+#   Handles mouse-button release and finalises drag moves on the main board.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board widget path.
+#   - x: Pointer x coordinate.
+#   - y: Pointer y coordinate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears drag state via `::board::setDragSquare`.
+#   - May commit a move via `addMove`.
+#   - Updates `selectedSq` and square colouring via `::board::colorSquare`.
+################################################################################
 proc releaseSquare { w x y } {
     global selectedSq bestSq
 
@@ -1055,9 +1498,22 @@ proc releaseSquare { w x y } {
     }
 }
 
-# addMarker:
-#   add/delete square markers and arrows to the current position
-#
+################################################################################
+# addMarker
+#   Adds or removes square markers/arrows for the current position.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board widget path.
+#   - x: Pointer x coordinate.
+#   - y: Pointer y coordinate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Uses `::markStartSq` to track the first click for arrow creation.
+#   - Updates the current position comment via `sc_pos setComment`.
+#   - Triggers a PGN-only refresh via `::notify::PosChanged pgnonly`.
+################################################################################
 proc addMarker {w x y} {
     set sq [::board::getSquare $w $x $y]
     if {! [info exists ::markStartSq]} {
@@ -1088,6 +1544,19 @@ proc addMarker {w x y} {
     ::notify::PosChanged pgnonly
 }
 
+################################################################################
+# selectMarker
+#   Opens a small popup to choose marker type and colour for annotations.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates the `.mainSelectMarker` toplevel.
+#   - Updates `::markType` and `::markColor` via radio-button selection.
+################################################################################
 proc selectMarker {} {
     set w_ .mainSelectMarker
     toplevel $w_
@@ -1174,9 +1643,20 @@ proc selectMarker {} {
     grid $w_.colors $w_.markers -sticky nsew -pady 12 -padx 12
 }
 
-# addNag:
-#   add a Nag to the current position
-#
+################################################################################
+# addNag
+#   Adds a NAG (Numeric Annotation Glyph) at the current position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - nag: NAG integer/string to add.
+# Returns:
+#   - None.
+# Side effects:
+#   - Records undo state via `undoFeature save`.
+#   - Updates the position via `sc_pos addNag`.
+#   - Triggers a PGN-only refresh via `::notify::PosChanged pgnonly`.
+################################################################################
 proc addNag {nag} {
     undoFeature save
     sc_pos addNag "$nag"
@@ -1184,7 +1664,18 @@ proc addNag {nag} {
 }
 
 ################################################################################
-#
+# undoFeature
+#   Executes a game undo/redo operation and refreshes the UI when needed.
+# Visibility:
+#   Public.
+# Inputs:
+#   - action: One of `save`, `undo`, `redo`, or `undoAll`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the undo stack via `sc_game undoPoint`.
+#   - Performs undo/redo via `sc_game undo` / `sc_game redo` / `sc_game undoAll`.
+#   - Notifies UI via `notify::GameChanged` for actions that change state.
 ################################################################################
 proc undoFeature {action} {
     if {$action == "save"} {
@@ -1204,39 +1695,18 @@ proc undoFeature {action} {
 ################################################################################
 # setInteractionHandler
 #   Installs (or clears) the global interaction-handler command prefix.
-#
-# Rationale:
-#   Some features temporarily “take over” board/move interaction (e.g. training
-#   or review modes). Rather than scattering feature-specific checks, the move
-#   pipeline consults a single handler for permission and for status/UI hints.
-#
-# Contract:
-#   `callback` is a command prefix (a Tcl list) that will be invoked with a
-#   subcommand appended, e.g.:
-#     `{*}$::interactionHandler premove $moveUCI`
-#
-#   The handler must accept (at least) the following subcommands and return a
-#   boolean-like 1/0 where noted:
-#
-#   - `info`:
-#       May return a 4-element list suitable for `::board::setInfoAlert`,
-#       otherwise Scid falls back to a generic “Playing…” status with a Stop
-#       action wired to `{*}$::interactionHandler stop`.
-#   - `stop`:
-#       Must terminate the session and clear the handler (typically by calling
-#       `::setInteractionHandler ""`).
-#   - `premove <uciMove>` (returns 1/0):
-#       Return 1 to block the player's move (e.g. not the player's turn); return
-#       0 to allow normal move entry.
-#   - `suggestMove` (returns 1/0):
-#       Return 0 to suppress the default move suggestion logic; return 1 to
-#       allow it.
-#   - `moveStart`, `moveEnd`, `moveExitVar`, `moveBack`, `moveForward`,
-#     `drawVarArrows` (each returns 1/0):
-#       Return 0 to veto the corresponding default action; return 1 to allow it.
-#
-#   The handler should be robust: it must not throw errors from these entry
-#   points, as they are called from core UI event paths.
+# Visibility:
+#   Public.
+# Inputs:
+#   - callback: Command prefix (Tcl list) invoked as `{*}$::interactionHandler <subcmd> ...`.
+#     Use an empty string to clear the handler. The handler is expected to support
+#     subcommands such as `info`, `stop`, `premove`, `suggestMove`, and `move*` veto
+#     checks.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets/unsets `::interactionHandler`.
+#   - Triggers UI refresh via `::notify::PosChanged`.
 ################################################################################
 proc setInteractionHandler { callback } {
     if {$callback eq ""} {
@@ -1249,7 +1719,18 @@ proc setInteractionHandler { callback } {
 }
 
 ################################################################################
-# In docked mode, resize board automatically
+# resizeMainBoard
+#   Resizes the main board to fit the available docked-window space.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - When `::autoResizeBoard` is enabled, updates `::boardSize` by calling
+#     `::board::resizeAuto`.
+#   - Reads widget geometry via `winfo` and forces layout via `update idletasks`.
 ################################################################################
 proc resizeMainBoard {} {
   if { $::autoResizeBoard } {
@@ -1268,7 +1749,18 @@ proc resizeMainBoard {} {
   }
 }
 ################################################################################
-# sets visibility of gameInfo panel at the bottom of main board
+# toggleGameInfo
+#   Shows or hides the main game-info panel.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Grids or ungrids `.main.gameInfo` based on `::showGameInfo`.
+#   - Regenerates content via `updateGameInfo`.
+################################################################################
 proc toggleGameInfo {} {
   if {$::showGameInfo} {
     grid .main.gameInfo -row 3 -column 0 -sticky news
@@ -1278,7 +1770,21 @@ proc toggleGameInfo {} {
   updateGameInfo
 }
 ################################################################################
-
+# CreateMainBoard
+#   Creates and wires the main board UI (board widget, toolbars, bindings).
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Main window path (typically `.main`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates UI widgets under `$w` (board, toolbars, menus, and game-info panel).
+#   - Registers options via `::options.store`.
+#   - Binds keyboard and mouse interactions for move entry and markers.
+#   - Performs initial refresh via `updateMainGame`, `updateStatusBar`,
+#     `updateMainToolbar`, and `updateTitle`.
+################################################################################
 proc CreateMainBoard { {w} } {
   ::win::createWindow $w [ ::tr "Board" ]
 
@@ -1362,6 +1868,22 @@ proc CreateMainBoard { {w} } {
   updateTitle
 }
 
+################################################################################
+# CreateGameInfo
+#   Creates and configures the main game-info panel and its context menu.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates `.main.gameInfo` widgets and initialises hypertext rendering via
+#     `::htext::init`.
+#   - Creates photo labels `.main.photoW` / `.main.photoB` bound to
+#     `togglePhotosSize`.
+#   - Creates `.main.gameInfo.menu` for toggles and delete action.
+################################################################################
 proc CreateGameInfo {} {
   # .gameInfo is the game information widget:
   #
@@ -1416,7 +1938,18 @@ proc CreateGameInfo {} {
   translateMenuLabels .main.gameInfo.menu
 }
 
-# Set toolbar help status messages:
+################################################################################
+# setToolbarTooltips
+#   Registers tooltips for main toolbar buttons.
+# Visibility:
+#   Private.
+# Inputs:
+#   - tb: Toolbar frame widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::utils::tooltip::Set` for each toolbar button.
+################################################################################
 proc setToolbarTooltips { tb } {
     foreach {b m} {
 	newdb FileNew open FileOpen finder FileFinder
@@ -1432,6 +1965,21 @@ proc setToolbarTooltips { tb } {
     }
 }
 
+################################################################################
+# InitToolbar
+#   Creates the main toolbar (buttons, menus, and default layout).
+# Visibility:
+#   Private.
+# Inputs:
+#   - tb: Toolbar frame widget path (typically `.main.tb`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates toolbar widgets and wires commands for common actions.
+#   - Refreshes bookmarks menu via `::bookmarks::RefreshMenu`.
+#   - Registers tooltips via `setToolbarTooltips`.
+#   - Applies current toolbar visibility via `redrawToolbar`.
+################################################################################
 proc InitToolbar {{tb}} {
 	ttk::frame $tb -relief raised -border 1
 	ttk::button $tb.newdb -image tb_newdb -command ::file::New -padding {2 0}
@@ -1486,6 +2034,21 @@ proc InitToolbar {{tb}} {
 	redrawToolbar
 }
 
+################################################################################
+# toggleToolbarButton
+#   Toggles a single toolbar button in the toolbar configuration UI.
+# Visibility:
+#   Private.
+# Inputs:
+#   - b: Container widget path holding the button widgets.
+#   - i: Toolbar button key (e.g. `open`, `save`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates `::toolbar_temp($i)` and persists to `::toolbar_state($i)`.
+#   - Updates the button state (`pressed` / `!pressed`).
+#   - Reapplies layout via `redrawToolbar`.
+################################################################################
 proc toggleToolbarButton { b i } {
     if { $::toolbar_temp($i) } {
 	set ::toolbar_temp($i) 0
@@ -1498,6 +2061,21 @@ proc toggleToolbarButton { b i } {
     redrawToolbar
 }
 
+################################################################################
+# toggleAllToolbarButtons
+#   Enables or disables all toolbar buttons in the toolbar configuration UI.
+# Visibility:
+#   Private.
+# Inputs:
+#   - b: Container widget path holding the button widgets.
+#   - state: Boolean-like value (1 to enable all, 0 to disable all).
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates `::toolbar_temp(*)` and persists to `::toolbar_state(*)`.
+#   - Updates each button widget state (`pressed` / `!pressed`).
+#   - Reapplies layout via `redrawToolbar`.
+################################################################################
 proc toggleAllToolbarButtons { b state } {
     foreach i [array names ::toolbar_temp] {
 	set ::toolbar_temp($i) $state
@@ -1507,6 +2085,20 @@ proc toggleAllToolbarButtons { b state } {
     redrawToolbar
 }
 
+################################################################################
+# ConfigToolbar
+#   Builds the toolbar configuration UI inside the given container.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Container widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a grid of toggle buttons and updates `::toolbar_state`.
+#   - Wires "all on/off" controls.
+#   - Registers tooltips via `setToolbarTooltips`.
+################################################################################
 proc ConfigToolbar { w } {
   array set ::toolbar_temp [array get ::toolbar_state]
   pack [ttk::frame $w.f] -side top -fill x
@@ -1530,6 +2122,18 @@ proc ConfigToolbar { w } {
   pack $w.on $w.off -side left -padx 2 -pady "5 0"
 }
 
+################################################################################
+# redrawToolbar
+#   Applies the current `::toolbar_state` by repacking toolbar widgets.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Packs/unpacks `.main.tb` children and may hide `.main.tb` entirely.
+################################################################################
 proc redrawToolbar {} {
   foreach i [winfo children .main.tb] { pack forget $i }
   set seenAny 0

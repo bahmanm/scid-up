@@ -17,12 +17,22 @@ trace add variable castling write {::utils::validate::Regexp {^(-|[a-hA-hKQkq]*)
 set setupBd {}
 set setupFen {}
 
-# setupBoard:
-#   The main procedure for creating the dialog for setting the start board.
-#   Calls switchPastePiece and makeSetupFen.
-#   On "Setup" button press, calls sc_pos startBoard to try to set the
-#   starting board.
-#
+################################################################################
+# setupBoard
+#   Opens the board setup dialog for editing the starting position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates the `.setup` dialog (widgets, bindings, and window geometry).
+#   - Initialises globals used by the dialog (e.g. `setupBd`, `setupFen`,
+#     `pastePiece`, `toMove`, `castling`, `epFile`, `moveNum`).
+#   - Reads the current position via `sc_pos board`/`sc_pos fen`.
+#   - Updates the setup board preview via `::board::update`.
+################################################################################
 proc setupBoard {} {
   global boardSizes boardSize setupBd pastePiece toMove epFile moveNum
   global origFen
@@ -206,6 +216,22 @@ proc setupBoard {} {
   set setupFen [makeSetupFen]
 }
 
+################################################################################
+# setSetupBoardToFen
+#   Loads a FEN into the setup dialog and updates the UI state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Widget path for the caller context. (Currently unused.)
+#   - setupFen: FEN string.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `sc_game startBoard` in a temporary pushed game state.
+#   - On error, shows `fenErrorDialog`.
+#   - On success, updates globals (`setupBd`, `setupFen`, `toMove`, `castling`,
+#     `epFile`, `moveNum`) and refreshes `.setup.l.bd`.
+################################################################################
 proc setSetupBoardToFen {w setupFen} {
   global setupBd toMove castling epFile moveNum
 
@@ -225,12 +251,20 @@ proc setSetupBoardToFen {w setupFen} {
 }
 
 
-# makeSetupFen:
-#    Reconstructs the FEN string from the current settings in the
-#    setupBoard dialog. Check to see if the position is
-#    acceptable (a position can be unacceptable by not having exactly
-#    one King per side, or by having more than 16 pieces per side).
-#
+################################################################################
+# makeSetupFen
+#   Reconstructs a FEN string from the current setup dialog state.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - FEN string, or a human-readable error string prefixed with `Invalid board:`
+#     when the position is not acceptable.
+# Side effects:
+#   - Reads globals (`setupBd`, `toMove`, `castling`, `epFile`, `moveNum`).
+#   - Updates `setupFen`.
+################################################################################
 proc makeSetupFen {} {
   global setupFen setupBd moveNum toMove castling epFile
   set fenStr ""
@@ -280,11 +314,19 @@ proc makeSetupFen {} {
   return $fenStr
 }
 
-# validateSetup:
-#   Called by makeSetupFen to check that the board is sensible: that is,
-#   that there is one king per side and there are at most 16 pieces per
-#   side and there are no pawn in the 1st or 8th row
-#
+################################################################################
+# validateSetup
+#   Validates the setup board string for basic chess legality constraints.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - Empty string when valid; otherwise an error message describing the first
+#     detected issue.
+# Side effects:
+#   - Reads `setupBd`.
+################################################################################
 proc validateSetup {} {
   global setupBd
   set wkCount 0; set bkCount 0; set wCount 0; set bCount 0
@@ -315,6 +357,23 @@ proc validateSetup {} {
   return ""
 }
 
+################################################################################
+# dragBoardPiece
+#   Starts/continues dragging a piece on the setup board.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Setup board widget path.
+#   - x: Screen X coordinate.
+#   - y: Screen Y coordinate.
+#   - startSq: Starting square index (0..63) from which the drag began.
+# Returns:
+#   - None.
+# Side effects:
+#   - May set `pastePiece` from the dragged square.
+#   - Updates the setup board’s drag state via `::board::setDragSquare`.
+#   - Moves the dragged piece image via `::board::dragPiece`.
+################################################################################
 proc dragBoardPiece {w x y startSq} {
   set square [::board::getSquare $w $x $y]
   if {$square != $startSq && [::board::getDragSquare $w] == -1} {
@@ -327,6 +386,22 @@ proc dragBoardPiece {w x y startSq} {
   ::board::dragPiece .setup.l.bd $x $y
 }
 
+################################################################################
+# setupBoardPiece
+#   Applies a piece placement/removal in the setup dialog.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Setup board widget path.
+#   - x: Screen X coordinate.
+#   - y: Screen Y coordinate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `setupBd` based on click/drag semantics.
+#   - Redraws `.setup.l.bd` via `::board::update`.
+#   - Updates `setupFen` via `makeSetupFen`.
+################################################################################
 proc setupBoardPiece {w x y} {
   global setupBd pastePiece setupFen
 
@@ -350,6 +425,21 @@ proc setupBoardPiece {w x y} {
   set setupFen [makeSetupFen]
 }
 
+################################################################################
+# exitSetupBoard
+#   Commits the setup position and closes the setup dialog.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Attempts to apply `setupFen` via `sc_game startBoard`.
+#   - On failure, restores undo state and shows `fenErrorDialog`.
+#   - On success, records history, destroys `.setup`, restores board flip state,
+#     and notifies listeners via `::notify::PosChanged -pgn`.
+################################################################################
 proc exitSetupBoard {} {
   global setupFen
 
@@ -368,7 +458,18 @@ proc exitSetupBoard {} {
 ### End of Board setup window
 ############################################################
 
-
+################################################################################
+# fenErrorDialog
+#   Shows an informational error message about invalid FEN input.
+# Visibility:
+#   Private.
+# Inputs:
+#   - msg: Optional message text.
+# Returns:
+#   - None (no meaningful return value).
+# Side effects:
+#   - Shows a `tk_messageBox`, using `.setup` as the parent when available.
+################################################################################
 proc fenErrorDialog {{msg {}}} {
   if {[winfo exists .setup]} {
     tk_messageBox -icon info -type ok -title "Scid: Invalid FEN" -message $msg -parent .setup
@@ -377,10 +478,20 @@ proc fenErrorDialog {{msg {}}} {
   }
 }
 
+################################################################################
 # copyFEN
-#
-#   Copies the FEN of the current position to the text clipboard.
-#
+#   Copies the FEN of the current position to the clipboard.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None (no meaningful return value).
+# Side effects:
+#   - Reads the current FEN via `sc_pos fen`.
+#   - Writes the clipboard via `clipboard clear`/`clipboard append`.
+#   - Creates/updates a temporary widget `.tempFEN` to own the selection.
+################################################################################
 proc copyFEN {} {
   set fen [sc_pos fen]
   # Create a text widget to hold the fen so it can be the owner
@@ -395,12 +506,21 @@ proc copyFEN {} {
   selection get
 }
 
+################################################################################
 # pasteFEN
-#
-#   Bypasses the board setup window and tries to paste the current
-#   text selection as the setup position, producing a message box
-#   if the selection does not appear to be a valid FEN string.
-#
+#   Attempts to set the current position from a pasted FEN string.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Reads from the clipboard/primary selection.
+#   - Calls `sc_game startBoard` to validate/apply the FEN.
+#   - On failure, shows `fenErrorDialog`.
+#   - On success, refreshes the UI via `updateBoard -pgn`.
+################################################################################
 proc pasteFEN {} {
   set fenStr ""
   if {[catch {set fenStr [selection get -selection CLIPBOARD]} ]} {

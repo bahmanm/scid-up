@@ -12,7 +12,23 @@ set pgnWin 0
 set filterGraph 0
 
 ################################################################################
-# Creates a toplevel window depending of the docking option
+# createToplevel
+#   Creates (or raises) a dockable toplevel window.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: (Optional) Toplevel widget path to create/raise (e.g. ".analysisWin").
+#   - closeto: (Optional) Reserved; currently unused.
+# Returns:
+#   - "already_exists" when the toplevel already exists (and is raised).
+#   - None otherwise.
+# Side effects:
+#   - Creates a container frame `.fdock<name>` and the toplevel `$w` when missing.
+#   - When `$w` already exists, resolves dock state via `::win::isDocked` and either:
+#     - selects the docked tab in its notebook, or
+#     - deiconifies the toplevel.
+#   - Initialises `::winGeometry($container)` if missing.
+#   - Calls `::win::manageWindow` for the container frame.
 ################################################################################
 proc createToplevel { {w} {closeto ""} } {
   # Raise window if already exist
@@ -39,8 +55,16 @@ proc createToplevel { {w} {closeto ""} } {
 }
 
 ################################################################################
-# In the case of a window closed without the context menu in docked mode, arrange for the tabs to be cleaned up
-# This function is necessary only if does exists a "destroy" command for the win created with createToplevel
+# createToplevelFinalize
+#   Registers cleanup so docked tabs are removed when a toplevel is destroyed.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Toplevel widget path previously created by `createToplevel`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Binds `$w`'s `<Destroy>` event to invoke `cleanup_todo_remove $w`.
 ################################################################################
 proc createToplevelFinalize {w} {
     bind $w <Destroy> [list +apply {{w} {
@@ -49,6 +73,21 @@ proc createToplevelFinalize {w} {
       }
     } ::} $w]
 }
+
+################################################################################
+# cleanup_todo_remove
+#   Removes the docking container for a toplevel and (if docked) cleans up its tab.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Toplevel widget path to clean up.
+# Returns:
+#   - No meaningful return value (returns `0/1` from `catch`).
+# Side effects:
+#   - If docked, forgets the corresponding tab and calls `::docking::_cleanup_tabs`.
+#   - Schedules destruction of the `.fdock<name>` container frame via `after idle`.
+#   - Attempts to restore focus to `.main`.
+################################################################################
 proc cleanup_todo_remove { w } {
     set dockw ".fdock[string range $w 1 end]"
     set tab [::docking::find_tbn $dockw]
@@ -60,9 +99,19 @@ proc cleanup_todo_remove { w } {
     catch { focus .main }
 }
 
-# recordWinSize:
-#   Records window width and height, for saving in options file.
-#
+################################################################################
+# recordWinSize
+#   Records a window's geometry (width/height and X/Y) for later restoration.
+# Visibility:
+#   Public.
+# Inputs:
+#   - win: Toplevel/widget path whose geometry should be recorded.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `winWidth($win)`, `winHeight($win)`, `winX($win)`, and `winY($win)`.
+#   - Reads `wm geometry $win` (expects a "<w>x<h>+<x>+<y>" shape).
+################################################################################
 proc recordWinSize {win} {
   global winWidth winHeight winX winY
   if {![winfo exists $win]} { return }
@@ -78,6 +127,18 @@ proc recordWinSize {win} {
   }
 }
 
+################################################################################
+# setWinLocation
+#   Restores a window's saved screen location (X/Y) when available.
+# Visibility:
+#   Public.
+# Inputs:
+#   - win: Toplevel/widget path whose location should be restored.
+# Returns:
+#   - No meaningful return value (returns `0/1` from `catch` when it applies geometry).
+# Side effects:
+#   - Reads `winX($win)` / `winY($win)` and may call `wm geometry $win +x+y`.
+################################################################################
 proc setWinLocation {win} {
   global winX winY
   set suffix ""
@@ -87,6 +148,18 @@ proc setWinLocation {win} {
   }
 }
 
+################################################################################
+# setWinSize
+#   Restores a window's saved size (width/height) when available.
+# Visibility:
+#   Public.
+# Inputs:
+#   - win: Toplevel/widget path whose size should be restored.
+# Returns:
+#   - No meaningful return value (returns `0/1` from `catch` when it applies geometry).
+# Side effects:
+#   - Reads `winWidth($win)` / `winHeight($win)` and may call `wm geometry $win wxh`.
+################################################################################
 proc setWinSize {win} {
   global winWidth winHeight
   set suffix ""
