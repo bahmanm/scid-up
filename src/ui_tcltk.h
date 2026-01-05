@@ -56,17 +56,20 @@ inline int Main (int argc, char* argv[], void (*exit) (void*)) {
 		strncpy(sourceFileName, Tcl_GetNameOfExecutable(), 4000);
 		#endif
 
-		char* dirname = strrchr(sourceFileName, '/');
-		if (dirname == 0) dirname = sourceFileName;
-		else dirname += 1;
-		strcpy (dirname, "tcl/start.tcl");
-		if (0 != Tcl_Access(sourceFileName, 4)) {
-			strcpy (dirname, "../tcl/start.tcl");
-		}
-		char* newArgv[10] = { argv[0], sourceFileName };
-		std::copy(argv + 1, argv + argc, newArgv + 2);
-		Tcl_Main(argc + 1, newArgv, UI_impl::initTclTk);
-	} else {
+			char* dirname = strrchr(sourceFileName, '/');
+			if (dirname == 0) dirname = sourceFileName;
+			else dirname += 1;
+			strcpy (dirname, "tcl/start.tcl");
+			if (0 != Tcl_Access(sourceFileName, 4)) {
+				strcpy (dirname, "../tcl/start.tcl");
+				if (0 != Tcl_Access(sourceFileName, 4)) {
+					strcpy (dirname, "../share/scid-up/tcl/start.tcl");
+				}
+			}
+			char* newArgv[10] = { argv[0], sourceFileName };
+			std::copy(argv + 1, argv + argc, newArgv + 2);
+			Tcl_Main(argc + 1, newArgv, UI_impl::initTclTk);
+		} else {
 		Tcl_Main (argc, argv, UI_impl::initTclTk);
 	}
 

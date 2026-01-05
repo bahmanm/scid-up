@@ -16,6 +16,8 @@
 cmake_minimum_required(VERSION 3.30)
 project(scidup VERSION 5.1.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 include(cmake/general.cmake)
 
 include(cmake/libs/threads.cmake)
@@ -27,5 +29,4 @@ include(cmake/bins/main.cmake)
 include(cmake/tests/all.cmake)
 include(cmake/tools/lint.cmake)
 
-include(GNUInstallDirs)
 include(cmake/packaging.cmake)
