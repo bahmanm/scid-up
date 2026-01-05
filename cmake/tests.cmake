@@ -13,7 +13,7 @@ add_test(
 set_tests_properties(
   cpp_test
   PROPERTIES
-  LABELS "cpp;gtest"
+  LABELS "cpp"
 )
 
 ### tcl_test

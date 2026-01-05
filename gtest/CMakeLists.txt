@@ -16,30 +16,32 @@
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "")
 
 # googletest
-if(NOT IS_DIRECTORY "${CMAKE_BINARY_DIR}/googletest")
-  find_package(Git)
-  execute_process(COMMAND ${GIT_EXECUTABLE} clone https://github.com/google/googletest.git "${CMAKE_BINARY_DIR}/googletest")
-endif()
-set(gtest_force_shared_crt ON CACHE BOOL "Always use msvcrt.dll")
-add_subdirectory(${CMAKE_BINARY_DIR}/googletest ${CMAKE_BINARY_DIR}/googletest/Build EXCLUDE_FROM_ALL)
+include(FetchContent)
+set(gtest_force_shared_crt ON CACHE BOOL "Always use msvcrt.dll" FORCE)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
+  URL_HASH SHA256=65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c
+)
+FetchContent_MakeAvailable(googletest)
 
-# scid_sources
-set(SCID_BASE
+# scidup_sources
+set(SCIDUP_TESTS_LIBS_CPPSUPPORT_SOURCES
   ../src/codec_scid4.cpp
   ../src/scidbase.cpp
   ../src/sortcache.cpp
   ../src/stored.cpp
   ../src/game.cpp ../src/position.cpp ../src/textbuf.cpp ../src/misc.cpp
 )
-add_library(scidup_cpp_base ${SCID_BASE})
-target_include_directories(scidup_cpp_base PUBLIC ../src)
-add_library(ScidUp::Tests::Libs::CppBase ALIAS scidup_cpp_base)
+add_library(scidup_tests_libs_cppsupport ${SCIDUP_TESTS_LIBS_CPPSUPPORT_SOURCES})
+target_include_directories(scidup_tests_libs_cppsupport PUBLIC ../src)
+add_library(ScidUp::Tests::Libs::CppBase ALIAS scidup_tests_libs_cppsupport)
 find_package(Threads REQUIRED)
-target_link_libraries(scidup_cpp_base PUBLIC Threads::Threads)
+target_link_libraries(scidup_tests_libs_cppsupport PUBLIC Threads::Threads)
 
-# scid_tests
-file(GLOB GTEST_SRC *.cpp)
-add_executable(scidup_cpp_test_bin ${GTEST_SRC})
-add_executable(ScidUp::Tests::Bins::CppTest ALIAS scidup_cpp_test_bin)
-target_compile_definitions(scidup_cpp_test_bin PRIVATE -DSCID_TESTDIR=\"${CMAKE_CURRENT_LIST_DIR}/\")
-target_link_libraries(scidup_cpp_test_bin PRIVATE ScidUp::Tests::Libs::CppBase gtest_main)
+# scidup_tests
+file(GLOB SCIDUP_TESTS_BINS_CPPTEST_SOURCES *.cpp)
+add_executable(scidup_tests_bins_cpptest ${SCIDUP_TESTS_BINS_CPPTEST_SOURCES})
+add_executable(ScidUp::Tests::Bins::CppTest ALIAS scidup_tests_bins_cpptest)
+target_compile_definitions(scidup_tests_bins_cpptest PRIVATE SCIDUP_TEST_RESOURCES_DIR=\"${CMAKE_CURRENT_LIST_DIR}/\")
+target_link_libraries(scidup_tests_bins_cpptest PRIVATE ScidUp::Tests::Libs::CppBase gtest_main)

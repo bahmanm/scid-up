@@ -24,9 +24,9 @@
 
 namespace {
 
-const char* gameUTF8 = SCID_TESTDIR "res_gameUTF8.pgn";
-const char* gameLatin1 = SCID_TESTDIR "res_gameLatin1.pgn";
-const char* gameLatin1Conv = SCID_TESTDIR "res_gameLatin1expected.pgn";
+const char* gameUTF8 = SCIDUP_TEST_RESOURCES_DIR "res_gameUTF8.pgn";
+const char* gameLatin1 = SCIDUP_TEST_RESOURCES_DIR "res_gameLatin1.pgn";
+const char* gameLatin1Conv = SCIDUP_TEST_RESOURCES_DIR "res_gameLatin1expected.pgn";
 
 auto readFile(const char* filename) {
 	std::string res;

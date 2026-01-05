@@ -27,7 +27,7 @@ class Test_SortCache : public ::testing::Test {};
 TEST_F(Test_SortCache, select_sortedPosition) {
 	// Open the test database
 	scidBaseT dbase;
-	static const char* database = SCID_TESTDIR "res_database";
+	static const char* database = SCIDUP_TEST_RESOURCES_DIR "res_database";
 	ASSERT_EQ(OK, dbase.open("SCID4", FMODE_ReadOnly, database));
 	ASSERT_NE(0U, dbase.numGames());
 	const NameBase* nb = dbase.getNameBase();
