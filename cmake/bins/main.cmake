@@ -12,6 +12,10 @@ if(MSVC)
     "${CMAKE_SOURCE_DIR}/resources/win/scid.manifest"
   )
   target_link_options(scidup_main PRIVATE /ENTRY:mainCRTStartup)
+  target_compile_definitions(scidup_main PRIVATE _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS)
+  # To run/debug using Visual Studio set "scidup_main" as startup project and add:
+  # Command Arguments: ../tcl/start.tcl
+  # Environment:       PATH=C:\tcl\bin
 else()
   add_executable(scidup_main ${SCIDUP_MAIN_SOURCES})
 endif()
@@ -38,4 +42,3 @@ install(DIRECTORY "${CMAKE_SOURCE_DIR}/img" DESTINATION scid-up)
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/scripts" DESTINATION scid-up)
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/sounds" DESTINATION scid-up)
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/tcl" DESTINATION scid-up)
-

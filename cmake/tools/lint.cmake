@@ -1,5 +1,5 @@
 if(NOT DEFINED CMAKE_SCRIPT_MODE_FILE)
-  option(SCIDUP_BUILD_LINTING "Build-time linting targets" OFF)
+  option(SCIDUP_BUILD_LINTING "Build developer lint targets" OFF)
   if(NOT SCIDUP_BUILD_LINTING)
     return()
   endif()
@@ -17,7 +17,7 @@ endif()
 
 find_program(UVX_EXECUTABLE uvx REQUIRED)
 
-get_filename_component(_tcl_dir "${CMAKE_CURRENT_LIST_DIR}/../tcl" ABSOLUTE)
+	get_filename_component(_tcl_dir "${CMAKE_CURRENT_LIST_DIR}/../../tcl" ABSOLUTE)
 file(GLOB_RECURSE _tcl_files
         LIST_DIRECTORIES false
         "${_tcl_dir}/*.tcl"

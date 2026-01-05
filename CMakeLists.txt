@@ -14,31 +14,17 @@
 # along with Scid. If not, see <http://www.gnu.org/licenses/>.
 
 cmake_minimum_required(VERSION 3.30)
-project(scidup)
-set(CPACK_PACKAGE_VERSION 5.1.0)
-set(
-  CPACK_PACKAGE_DESCRIPTION_SUMMARY
-  "chess database application with play and training functionality"
-)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "tk9 (>= 9)")
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-include(CPack)
+project(scidup VERSION 5.1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_STANDARD 20 CACHE STRING "")
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-if(MSVC)
-  add_definitions(/D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS)
-  # To run/debug using Visual Studio set "scidup_main" as startup project and add:
-  # Command Arguments: ../tcl/start.tcl
-  # Environment:       PATH=C:\tcl\bin
-endif()
+include(cmake/general.cmake)
 
 include(cmake/libs/threads.cmake)
 include(cmake/libs/tcl.cmake)
 include(cmake/libs/polyglot.cmake)
+
 include(cmake/bins/main.cmake)
 
-include(cmake/tests.cmake)
-include(cmake/lint.cmake)
+include(cmake/tests/all.cmake)
+include(cmake/tools/lint.cmake)
+
+include(cmake/packaging.cmake)
