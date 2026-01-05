@@ -11,9 +11,22 @@ set helpWin(Stack) {}
 set helpWin(yStack) {}
 set helpWin(Indent) 0
 
-# help_PushStack and help_PopStack:
-#   Implements the stack of help windows for the "Back" button.
-#
+################################################################################
+# help_PushStack
+#   Pushes a help page name onto the back-stack.
+# Visibility:
+#   Private.
+# Inputs:
+#   - name: Help page identifier (key into `helpText` / `helpTitle`).
+#   - heading: Optional section heading to navigate to (currently unused here; the
+#     caller passes it to `updateHelpWindow`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Appends to `helpWin(Stack)` and prunes it to a maximum of 10 entries.
+#   - When `.helpWin` exists, captures the current scroll position from
+#     `.helpWin.text yview` into `helpWin(yStack)` (also pruned to 10).
+################################################################################
 proc help_PushStack {name {heading ""}} {
   global helpWin
   lappend helpWin(Stack) $name
@@ -32,6 +45,23 @@ proc help_PushStack {name {heading ""}} {
 set ::htext::headingColor "\#990000"
 array set ::htext:updates {}
 
+################################################################################
+# help_PopStack
+#   Pops the most recent help page from the back-stack and displays the previous
+#   page.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates `helpWin(Stack)` and `helpWin(yStack)`.
+#   - Calls `updateHelpWindow` to redraw the help content.
+#   - Moves the help text widget's yview via `.helpWin.text yview moveto ...`.
+# Preconditions:
+#   - Expects `.helpWin.text` to exist when the stack is non-empty.
+################################################################################
 proc help_PopStack {} {
   global helpWin helpText
   set len [llength $helpWin(Stack)]
@@ -50,8 +80,20 @@ proc help_PopStack {} {
   .helpWin.text yview moveto $yview
 }
 
-# Given a window name (usually the focused widget)
-# opens the help window trying to select a pertinent page
+################################################################################
+# helpWindowPertinent
+#   Opens the help window and attempts to select a page relevant to the provided
+#   widget path.
+# Visibility:
+#   Public.
+# Inputs:
+#   - win: Widget path (typically the currently focused widget).
+# Returns:
+#   - None.
+# Side effects:
+#   - May open or update the help window via `helpWindow`.
+#   - Reads from `::helpTitle` to find available help page titles.
+################################################################################
 proc helpWindowPertinent {win} {
   set availTitles [array names ::helpTitle]
   regexp {[.]\w*} $win topWin
@@ -68,11 +110,40 @@ proc helpWindowPertinent {win} {
   return [helpWindow "Contents"]
 }
 
+################################################################################
+# helpWindow
+#   Pushes the given help page onto the back-stack and renders it.
+# Visibility:
+#   Public.
+# Inputs:
+#   - name: Help page identifier.
+#   - heading: Optional section heading to navigate to.
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates the help back-stack via `help_PushStack`.
+#   - Updates the help window via `updateHelpWindow`.
+################################################################################
 proc helpWindow {name {heading ""}} {
   help_PushStack $name
   updateHelpWindow $name $heading
 }
 
+################################################################################
+# updateHelpWindow
+#   Creates (if necessary) and updates the help window content for a help page.
+# Visibility:
+#   Private.
+# Inputs:
+#   - name: Help page identifier.
+#   - heading: Optional section heading to navigate to.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures the `.helpWin` toplevel and its child widgets.
+#   - Configures bindings for navigation keys.
+#   - Renders formatted help content into `.helpWin.text` via `::htext::display`.
+################################################################################
 proc updateHelpWindow {name {heading ""}} {
   global helpWin helpText helpTitle windowsOS language
   set w .helpWin
@@ -156,10 +227,38 @@ proc updateHelpWindow {name {heading ""}} {
   focus $w
 }
 
+################################################################################
+# ::htext::updateRate
+#   Sets the update frequency (in tags-per-cycle) for incremental rendering.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Text widget path.
+#   - rate: Integer number of processed tags between `update idletasks` calls.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::htext::updates($w)`.
+################################################################################
 proc ::htext::updateRate {w rate} {
   set ::htext::updates($w) $rate
 }
 
+################################################################################
+# ::htext::init
+#   Initialises a text widget for use with `::htext::display` by configuring the
+#   expected tags.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Text widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets `::htext::updates($w)` to a default of 100.
+#   - Configures a large set of text tags (colours, margins, headings, PGN tags).
+#   - Reads `::pgnColor(Var)` and `::pgnColor(Nag)` to configure PGN colouring.
+################################################################################
 proc ::htext::init {w} {
   set cyan "\#007000"
   set maroon "\#990000"
@@ -226,18 +325,63 @@ proc ::htext::init {w} {
   }
 }
 
+################################################################################
+# ::htext::isStartTag
+# Visibility:
+#   Private.
+# Inputs:
+#   - tagName: Tag name string without angle brackets.
+# Returns:
+#   - Boolean: 1 when the tag is a start tag; 0 when it is an end tag.
+# Side effects:
+#   - None.
+################################################################################
 proc ::htext::isStartTag {tagName} {
   return [expr {![strIsPrefix "/" $tagName]} ]
 }
 
+################################################################################
+# ::htext::isEndTag
+# Visibility:
+#   Private.
+# Inputs:
+#   - tagName: Tag name string without angle brackets.
+# Returns:
+#   - Boolean: 1 when the tag is an end tag; 0 otherwise.
+# Side effects:
+#   - None.
+################################################################################
 proc ::htext::isEndTag {tagName} {
   return [strIsPrefix "/" $tagName]
 }
 
+################################################################################
+# ::htext::isLinkTag
+# Visibility:
+#   Private.
+# Inputs:
+#   - tagName: Tag name string without angle brackets.
+# Returns:
+#   - Boolean: 1 when the tag is a help link tag (`a ...`); 0 otherwise.
+# Side effects:
+#   - None.
+################################################################################
 proc ::htext::isLinkTag {tagName} {
   return [strIsPrefix "a " $tagName]
 }
 
+################################################################################
+# ::htext::extractLinkName
+# Visibility:
+#   Private.
+# Inputs:
+#   - tagName: Tag name string without angle brackets.
+# Returns:
+#   - The help page name for an `a ...` link tag.
+#   - Empty string when the tag is not a link tag.
+# Side effects:
+#   - None.
+################################################################################
 proc ::htext::extractLinkName {tagName} {
   if {[::htext::isLinkTag $tagName]} {
     return [lindex [split [string range $tagName 2 end] " "] 0]
@@ -245,6 +389,19 @@ proc ::htext::extractLinkName {tagName} {
   return ""
 }
 
+################################################################################
+# ::htext::extractSectionName
+# Visibility:
+#   Private.
+# Inputs:
+#   - tagName: Tag name string without angle brackets.
+# Returns:
+#   - The section token for an `a ...` link tag (the second whitespace-delimited
+#     token after the page name).
+#   - Empty string when the tag is not a link tag or no section token is present.
+# Side effects:
+#   - None.
+################################################################################
 proc ::htext::extractSectionName {tagName} {
   if {[::htext::isLinkTag $tagName]} {
     return [lindex [split [string range $tagName 2 end] " "] 1]
@@ -254,6 +411,27 @@ proc ::htext::extractSectionName {tagName} {
 
 set ::htext::interrupt 0
 
+################################################################################
+# ::htext::display
+#   Renders a small HTML-like markup language into a Tk text widget.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Text widget path.
+#   - helptext: String containing markup (e.g. <b>, <a ...>, <img ...>, <p>).
+#   - section: Optional anchor name to scroll to (used by <a ...> links and
+#     matched against `<name ...>` tags).
+#   - fixed: Boolean. When true, normalises newlines to support simple paragraph
+#     formatting.
+# Returns:
+#   - None.
+# Side effects:
+#   - Mutates the text widget contents and tag state.
+#   - Creates embedded widgets for <img>, <button>, and <window> tags.
+#   - Adds tag bindings for links and actions (help links, URLs, Tcl commands).
+#   - May call `update idletasks` during long renders.
+#   - May return early when `::htext::interrupt` is set.
+################################################################################
 proc ::htext::display {w helptext {section ""} {fixed 1}} {
   global helpWin
   # set start [clock clicks -milli]
@@ -559,10 +737,19 @@ proc ::htext::display {w helptext {section ""} {fixed 1}} {
 }
 
 
-# openURL:
-#    Sends a command to the user's web browser to view a webpage given
-#    its URL.
-#
+################################################################################
+# openURL
+#   Opens a URL in the user's web browser.
+# Visibility:
+#   Public.
+# Inputs:
+#   - url: URL string.
+# Returns:
+#   - None.
+# Side effects:
+#   - Executes OS commands to launch a browser (platform-dependent).
+#   - Calls `busyCursor .` / `unbusyCursor .` during the attempt.
+################################################################################
 proc openURL {url} {
   global windowsOS
   busyCursor .

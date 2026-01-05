@@ -1,0 +1,369 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] htext.tcl]
+
+namespace eval ::htext_test {
+    variable stubbedCommands {}
+    variable helpWindowCalls {}
+    variable openURLCalls {}
+    variable ttkLabelCalls {}
+    variable ttkButtonCalls {}
+}
+
+proc ::htext_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::htext_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::htext_test::setup {} {
+    ::htext_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::htext_test::helpWindowCalls {}
+    set ::htext_test::openURLCalls {}
+    set ::htext_test::ttkLabelCalls {}
+    set ::htext_test::ttkButtonCalls {}
+
+    # htext.tcl expects this array to exist for `::htext::init`.
+    if {![info exists ::pgnColor]} { array set ::pgnColor {} }
+    set ::pgnColor(Var) ""
+    set ::pgnColor(Nag) "purple"
+
+    # Reset help window state.
+    set ::helpWin(Stack) {}
+    set ::helpWin(yStack) {}
+    set ::helpWin(Indent) 0
+}
+
+proc ::htext_test::cleanup {} {
+    ::htext_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    catch {unset ::pgnColor}
+    unset -nocomplain ::helpWin(Stack)
+    unset -nocomplain ::helpWin(yStack)
+    unset -nocomplain ::helpWin(Indent)
+}
+
+# ---- Tests ----
+
+test htext-help_PushStack-trims-to-last-10-1.0 {help_PushStack retains only the last 10 entries} -setup {
+    ::htext_test::setup
+} -body {
+    # Act
+    for {set i 1} {$i <= 12} {incr i} {
+        help_PushStack "p$i"
+    }
+
+    # Assert
+    set ::helpWin(Stack)
+} -cleanup {
+    ::htext_test::cleanup
+} -result {p3 p4 p5 p6 p7 p8 p9 p10 p11 p12}
+
+test htext-tag-helpers-1.0 {Tag helper procs detect tag shapes} -setup {
+    ::htext_test::setup
+} -body {
+    # Act / Assert
+    list \
+        [::htext::isStartTag b] \
+        [::htext::isStartTag /b] \
+        [::htext::isEndTag b] \
+        [::htext::isEndTag /b] \
+        [::htext::isLinkTag "a Contents Section"] \
+        [::htext::isLinkTag "url http://example.com"]
+} -cleanup {
+    ::htext_test::cleanup
+} -result {1 0 0 1 1 0}
+
+test htext-extractLinkName-extractSectionName-1.0 {Link extraction returns link and section names} -setup {
+    ::htext_test::setup
+} -body {
+    # Act / Assert
+    list \
+        [::htext::extractLinkName "a Contents Heading"] \
+        [::htext::extractSectionName "a Contents Heading"] \
+        [::htext::extractLinkName "b"] \
+        [::htext::extractSectionName "b"]
+} -cleanup {
+    ::htext_test::cleanup
+} -result {Contents Heading {} {}}
+
+test htext-init-font-small-configures-small-bold-italic-1.0 {::htext::init selects SmallBold/SmallItalic when widget font is font_Small} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    set w [::scid_test::widgets::defineTextWidget .htext]
+    ::scid_test::widgets::setState $w -font font_Small
+
+    # Act
+    ::htext::init $w
+
+    # Assert
+    set calls [::scid_test::widgets::getTagConfigureCalls $w]
+    list \
+        [set ::htext::updates($w)] \
+        [expr {[lsearch -exact $calls {b -font font_SmallBold}] != -1}] \
+        [expr {[lsearch -exact $calls {i -font font_SmallItalic}] != -1}] \
+        [expr {[lsearch -exact $calls {ip19 -lmargin1 475 -lmargin2 475}] != -1}]
+} -cleanup {
+    ::htext_test::cleanup
+} -result {100 1 1 1}
+
+test htext-init-font-regular-configures-bold-italic-1.0 {::htext::init selects Bold/Italic when widget font is not font_Small} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    set w [::scid_test::widgets::defineTextWidget .htext]
+    ::scid_test::widgets::setState $w -font font_Regular
+
+    # Act
+    ::htext::init $w
+
+    # Assert
+    set calls [::scid_test::widgets::getTagConfigureCalls $w]
+    list \
+        [expr {[lsearch -exact $calls {b -font font_Bold}] != -1}] \
+        [expr {[lsearch -exact $calls {i -font font_Italic}] != -1}]
+} -cleanup {
+    ::htext_test::cleanup
+} -result {1 1}
+
+test htext-display-fixed-converts-blank-line-to-paragraph-1.0 {::htext::display treats blank lines as <p> when fixed==1} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    set w [::scid_test::widgets::defineTextWidget .htext]
+
+    # Act
+    ::htext::display $w "A\n\nB" "" 1
+
+    # Assert
+    list \
+        [::scid_test::widgets::getText $w] \
+        [::scid_test::widgets::getState $w -state] \
+        [::scid_test::widgets::getMarkSetCalls $w]
+} -cleanup {
+    ::htext_test::cleanup
+} -result {{A
+B} disabled {{insert 0.0}}}
+
+test htext-display-link-tags-are-configured-and-bound-1.0 {::htext::display configures link tags and binds navigation} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    set w [::scid_test::widgets::defineTextWidget .htext]
+
+    # Act
+    ::htext::display $w "See <a Contents Heading>contents</a>." "" 1
+
+    # Assert
+    set text [::scid_test::widgets::getText $w]
+    set cfg [::scid_test::widgets::getTagConfigureCalls $w]
+    set binds [::scid_test::widgets::getTagBindCalls $w]
+    set adds [::scid_test::widgets::getTagAddCalls $w]
+    list \
+        $text \
+        [expr {[lsearch -exact $cfg {{link Contents Heading} -foreground blue -underline 1}] != -1}] \
+        [expr {[lsearch -exact $binds {{link Contents Heading} <ButtonRelease-1> {helpWindow Contents Heading}}] != -1}] \
+        [expr {[lsearch -exact $adds {{link Contents Heading} insert insert}] != -1}]
+} -cleanup {
+    ::htext_test::cleanup
+} -result {{See contents.} 1 1 1}
+
+test htext-display-url-tags-are-configured-and-bound-1.0 {::htext::display configures URL tags and binds openURL} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    set w [::scid_test::widgets::defineTextWidget .htext]
+
+    # Act
+    ::htext::display $w "<url http://example.com>here</url>" "" 1
+
+    # Assert
+    set cfg [::scid_test::widgets::getTagConfigureCalls $w]
+    set binds [::scid_test::widgets::getTagBindCalls $w]
+    set adds [::scid_test::widgets::getTagAddCalls $w]
+    list \
+        [::scid_test::widgets::getText $w] \
+        [expr {[lsearch -exact $cfg {{url http://example.com} -foreground red -underline 1}] != -1}] \
+        [expr {[lsearch -exact $binds {{url http://example.com} <ButtonRelease-1> {openURL http://example.com}}] != -1}] \
+        [expr {[lsearch -exact $adds {{url http://example.com} insert insert}] != -1}]
+} -cleanup {
+    ::htext_test::cleanup
+} -result {here 1 1 1}
+
+test htext-display-link-click-invokes-helpWindow-1.0 {Clicking a link tag invokes helpWindow} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    ::htext_test::stubCommand helpWindow {name {heading ""}} {
+        lappend ::htext_test::helpWindowCalls [list $name $heading]
+        return
+    }
+
+    set w [::scid_test::widgets::defineTextWidget .htext]
+
+    # Act
+    ::htext::display $w "See <a Contents Heading>contents</a>." "" 1
+
+    set binds [::scid_test::widgets::getTagBindCalls $w]
+    set clickScript ""
+    foreach bind $binds {
+        lassign $bind tag sequence script
+        if {$tag eq {link Contents Heading} && $sequence eq "<ButtonRelease-1>"} {
+            set clickScript $script
+            break
+        }
+    }
+    if {$clickScript eq ""} {
+        error "Expected link click binding not found"
+    }
+    uplevel #0 $clickScript
+
+    # Assert
+    set ::htext_test::helpWindowCalls
+} -cleanup {
+    ::htext_test::cleanup
+} -result {{Contents Heading}}
+
+test htext-display-url-click-invokes-openURL-1.0 {Clicking a URL tag invokes openURL} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    ::htext_test::stubCommand openURL {url} {
+        lappend ::htext_test::openURLCalls $url
+        return
+    }
+
+    set w [::scid_test::widgets::defineTextWidget .htext]
+
+    # Act
+    ::htext::display $w "<url http://example.com>here</url>" "" 1
+
+    set binds [::scid_test::widgets::getTagBindCalls $w]
+    set clickScript ""
+    foreach bind $binds {
+        lassign $bind tag sequence script
+        if {$tag eq {url http://example.com} && $sequence eq "<ButtonRelease-1>"} {
+            set clickScript $script
+            break
+        }
+    }
+    if {$clickScript eq ""} {
+        error "Expected URL click binding not found"
+    }
+    uplevel #0 $clickScript
+
+    # Assert
+    set ::htext_test::openURLCalls
+} -cleanup {
+    ::htext_test::cleanup
+} -result {http://example.com}
+
+test htext-display-img-window-create-1.0 {::htext::display creates an embedded label for <img ...>} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    namespace eval ::ttk {}
+    ::htext_test::stubCommand ::ttk::label {path args} {
+        lappend ::htext_test::ttkLabelCalls [list $path $args]
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        return $path
+    }
+
+    set w [::scid_test::widgets::defineTextWidget .htext]
+
+    # Act
+    ::htext::display $w "<img myImage>" "" 1
+
+    # Assert
+    set windowCalls [::scid_test::widgets::getWindowCreateCalls $w]
+    set hasLabelCall 0
+    foreach call $::htext_test::ttkLabelCalls {
+        lassign $call path args
+        if {$path ne ".htext.myImage"} { continue }
+        set imageIdx [lsearch -exact $args "-image"]
+        if {$imageIdx != -1 && ($imageIdx + 1) < [llength $args] && [lindex $args [expr {$imageIdx + 1}]] eq "myImage"} {
+            set hasLabelCall 1
+            break
+        }
+    }
+    list \
+        [expr {[lsearch -exact $windowCalls {create end -window .htext.myImage}] != -1}] \
+        $hasLabelCall
+} -cleanup {
+    ::htext_test::cleanup
+} -result {1 1}
+
+test htext-display-button-window-create-1.0 {::htext::display creates an embedded button for <button ...>} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    namespace eval ::ttk {}
+    ::htext_test::stubCommand ::ttk::button {path args} {
+        lappend ::htext_test::ttkButtonCalls [list $path $args]
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        return $path
+    }
+
+    set w [::scid_test::widgets::defineTextWidget .htext]
+
+    # Act
+    ::htext::display $w "<button btnIcon -command {set ::htext_test::clicked 1}>" "" 1
+
+    # Assert
+    set windowCalls [::scid_test::widgets::getWindowCreateCalls $w]
+    set hasButtonImage 0
+    set hasButtonCommand 0
+    foreach call $::htext_test::ttkButtonCalls {
+        lassign $call path args
+        if {$path ne ".htext.btnIcon"} { continue }
+        set imageIdx [lsearch -exact $args "-image"]
+        if {$imageIdx != -1 && ($imageIdx + 1) < [llength $args] && [lindex $args [expr {$imageIdx + 1}]] eq "btnIcon"} {
+            set hasButtonImage 1
+        }
+        if {[lsearch -exact $args "-command"] != -1} {
+            set hasButtonCommand 1
+        }
+    }
+    list \
+        [expr {[lsearch -exact $windowCalls {create end -window .htext.btnIcon}] != -1}] \
+        $hasButtonImage \
+        $hasButtonCommand
+} -cleanup {
+    ::htext_test::cleanup
+} -result {1 1 1}
+
+test htext-display-window-tag-window-create-1.0 {::htext::display embeds a provided widget for <window ...>} -setup {
+    ::htext_test::setup
+} -body {
+    # Arrange
+    set w [::scid_test::widgets::defineTextWidget .htext]
+    ::scid_test::widgets::defineWidget .someWidget
+
+    # Act
+    ::htext::display $w "<window .someWidget>" "" 1
+
+    # Assert
+    set windowCalls [::scid_test::widgets::getWindowCreateCalls $w]
+    list \
+        [expr {[lsearch -exact $windowCalls {create end -window .someWidget}] != -1}] \
+        $windowCalls
+} -cleanup {
+    ::htext_test::cleanup
+} -result {1 {{create end -window .someWidget}}}
+
+cleanupTests

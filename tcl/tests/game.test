@@ -1,0 +1,531 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+namespace eval ::game {}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] game.tcl]
+
+namespace eval ::game_test {
+    variable stubbedCommands {}
+
+    variable notifyCalls {}
+    variable scBaseCalls {}
+    variable scFilterCalls {}
+    variable scGameCalls {}
+    variable uiCalls {}
+    variable gameCalls {}
+    variable fileCalls {}
+}
+
+proc ::game_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::game_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::game_test::setup {} {
+    ::game_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    set ::game_test::notifyCalls {}
+    set ::game_test::scBaseCalls {}
+    set ::game_test::scFilterCalls {}
+    set ::game_test::scGameCalls {}
+    set ::game_test::uiCalls {}
+    set ::game_test::gameCalls {}
+    set ::game_test::fileCalls {}
+
+    if {![info exists ::tr]} { array set ::tr {} }
+    set ::curr_db 1
+    set ::clipbase_db 9
+
+    # Notifications.
+    namespace eval ::notify {}
+    ::game_test::stubCommand ::notify::DatabaseModified {args} {
+        lappend ::game_test::notifyCalls [list DatabaseModified $args]
+        return
+    }
+    ::game_test::stubCommand ::notify::DatabaseChanged {args} {
+        lappend ::game_test::notifyCalls [list DatabaseChanged $args]
+        return
+    }
+    ::game_test::stubCommand ::notify::GameChanged {args} {
+        lappend ::game_test::notifyCalls [list GameChanged $args]
+        return
+    }
+
+    # Error box.
+    namespace eval ::ERROR {}
+    ::game_test::stubCommand ::ERROR::MessageBox {args} {
+        lappend ::game_test::uiCalls [list ERROR::MessageBox $args]
+        return
+    }
+
+    # UI hooks.
+    ::game_test::stubCommand tk_messageBox {args} {
+        lappend ::game_test::uiCalls [list tk_messageBox $args]
+        if {[info exists ::scid_test::tk_messageBox_answer]} {
+            return $::scid_test::tk_messageBox_answer
+        }
+        set typeIdx [lsearch -exact $args "-type"]
+        if {$typeIdx != -1 && ($typeIdx + 1) < [llength $args]} {
+            set type [lindex $args [expr {$typeIdx + 1}]]
+            if {$type eq "yesno"} {
+                error "tk_messageBox -type yesno called without ::scid_test::tk_messageBox_answer"
+            }
+        }
+        return ok
+    }
+    ::game_test::stubCommand undoFeature {subcmd args} {
+        lappend ::game_test::uiCalls [list undoFeature $subcmd $args]
+        return
+    }
+    ::game_test::stubCommand updateBoard {args} {
+        lappend ::game_test::uiCalls [list updateBoard $args]
+        return
+    }
+    ::game_test::stubCommand updateTitle {args} {
+        lappend ::game_test::uiCalls [list updateTitle $args]
+        return
+    }
+
+    # game::ConfirmDiscard is used by many procs; default to "discard into current db".
+    ::game_test::stubCommand ::game::ConfirmDiscard {} { return 1 }
+
+    # file/merge helpers.
+    namespace eval ::file {}
+    ::game_test::stubCommand ::file::SwitchToBase {base {saveHistory 1}} {
+        lappend ::game_test::fileCalls [list SwitchToBase $base $saveHistory]
+        return 0
+    }
+    ::game_test::stubCommand mergeGame {srcBase gnum} {
+        lappend ::game_test::fileCalls [list mergeGame $srcBase $gnum]
+        return
+    }
+
+    # Core bridge stubs.
+    ::game_test::stubCommand sc_base {subcmd args} {
+        lappend ::game_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            inUse { return 1 }
+            current { return 1 }
+            gameslist { return {1} }
+            default { error "sc_base $subcmd not stubbed in tests" }
+        }
+    }
+
+    ::game_test::stubCommand sc_filter {subcmd args} {
+        lappend ::game_test::scFilterCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            count { return 0 }
+            default { error "sc_filter $subcmd not stubbed in tests" }
+        }
+    }
+
+    ::game_test::stubCommand sc_game {subcmd args} {
+        lappend ::game_test::scGameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            new { return }
+            load { return }
+            strip { return }
+            truncate { return }
+            number { return 1 }
+            default { error "sc_game $subcmd not stubbed in tests" }
+        }
+    }
+}
+
+proc ::game_test::cleanup {} {
+    ::game_test::restoreStubs
+    ::scid_test::widgets::reset
+
+    unset -nocomplain ::curr_db
+    unset -nocomplain ::clipbase_db
+    catch {unset ::tr}
+    unset -nocomplain ::scid_test::tk_messageBox_answer
+}
+
+# ---- Tests ----
+
+test game-Clear-confirm-cancel-1.0 {::game::Clear returns "cancel" when discard is cancelled} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand ::game::ConfirmDiscard {} { return 0 }
+
+    # Act
+    set res [::game::Clear]
+
+    # Assert
+    list $res $::game_test::notifyCalls $::game_test::scGameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {cancel {} {}}
+
+test game-Clear-confirm-discard-current-1.0 {::game::Clear marks current db modified then clears game} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 3
+    ::game_test::stubCommand ::game::ConfirmDiscard {} { return 1 }
+
+    # Act
+    ::game::Clear
+
+    # Assert
+    list $::game_test::notifyCalls $::game_test::scGameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{{DatabaseModified 3} {GameChanged {}}} new}
+
+test game-Clear-confirm-discard-clipbase-1.0 {::game::Clear marks clipbase modified when discarding into clipbase} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    set ::clipbase_db 9
+    ::game_test::stubCommand ::game::ConfirmDiscard {} { return 2 }
+
+    # Act
+    ::game::Clear
+
+    # Assert
+    list $::game_test::notifyCalls $::game_test::scGameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{{DatabaseModified 9} {GameChanged {}}} new}
+
+test game-Strip-success-updates-board-and-title-1.0 {::game::Strip updates board/title on success} -setup {
+    ::game_test::setup
+} -body {
+    # Act
+    ::game::Strip comments
+
+    # Assert
+    set ::game_test::uiCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{undoFeature save {}} {updateBoard -pgn} {updateTitle {}}}
+
+test game-Strip-error-shows-messagebox-1.0 {::game::Strip shows an info message on error and does not update board/title} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_game {subcmd args} {
+        lappend ::game_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd ne "strip"} { error "sc_game $subcmd not stubbed in tests" }
+        error "boom"
+    }
+
+    # Act
+    ::game::Strip comments
+
+    # Assert
+    list $::game_test::uiCalls $::game_test::scGameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{{undoFeature save {}} {tk_messageBox {-parent . -type ok -icon info -title Scid -message boom}}} {{strip comments}}}
+
+test game-TruncateBegin-success-updates-board-and-title-1.0 {::game::TruncateBegin updates board/title on success} -setup {
+    ::game_test::setup
+} -body {
+    # Act
+    ::game::TruncateBegin
+
+    # Assert
+    list $::game_test::scGameCalls $::game_test::uiCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{{truncate -start}} {{undoFeature save {}} {updateBoard -pgn} {updateTitle {}}}}
+
+test game-Truncate-success-updates-board-and-title-1.0 {::game::Truncate updates board/title on success} -setup {
+    ::game_test::setup
+} -body {
+    # Act
+    ::game::Truncate
+
+    # Assert
+    list $::game_test::scGameCalls $::game_test::uiCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {truncate {{undoFeature save {}} {updateBoard -pgn} {updateTitle {}}}}
+
+test game-LoadNextPrev-previous-noop-on-zero-1.0 {::game::LoadNextPrev does nothing when the filter returns 0} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_filter {subcmd args} {
+        lappend ::game_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "previous"} { error "sc_filter $subcmd not stubbed in tests" }
+        return 0
+    }
+    ::game_test::stubCommand ::game::Load {selection {ply ""}} {
+        error "::game::Load should not be called"
+    }
+
+    # Act
+    ::game::LoadNextPrev previous
+
+    # Assert
+    set ::game_test::scFilterCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {previous}
+
+test game-LoadNextPrev-next-loads-game-1.0 {::game::LoadNextPrev loads when the filter returns a game number} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_filter {subcmd args} {
+        lappend ::game_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "next"} { error "sc_filter $subcmd not stubbed in tests" }
+        return 7
+    }
+    ::game_test::stubCommand ::game::Load {selection {ply ""}} {
+        lappend ::game_test::gameCalls [list Load $selection $ply]
+        return
+    }
+
+    # Act
+    ::game::LoadNextPrev next
+
+    # Assert
+    list $::game_test::scFilterCalls $::game_test::gameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {next {{Load 7 {}}}}
+
+test game-Reload-noop-when-no-base-1.0 {::game::Reload returns when no base is in use} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "inUse"} { error "sc_base $subcmd not stubbed in tests" }
+        return 0
+    }
+    ::game_test::stubCommand ::game::Load {selection {ply ""}} {
+        error "::game::Load should not be called"
+    }
+
+    # Act
+    ::game::Reload
+
+    # Assert
+    return ok
+} -cleanup {
+    ::game_test::cleanup
+} -result {ok}
+
+test game-Reload-noop-when-no-current-game-1.0 {::game::Reload returns when there is no current game number} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "inUse"} { error "sc_base $subcmd not stubbed in tests" }
+        return 1
+    }
+    ::game_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "number"} { error "sc_game $subcmd not stubbed in tests" }
+        return 0
+    }
+    ::game_test::stubCommand ::game::Load {selection {ply ""}} {
+        error "::game::Load should not be called"
+    }
+
+    # Act
+    ::game::Reload
+
+    # Assert
+    return ok
+} -cleanup {
+    ::game_test::cleanup
+} -result {ok}
+
+test game-Reload-loads-current-game-1.0 {::game::Reload loads the current game when possible} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_base {subcmd args} {
+        if {$subcmd ne "inUse"} { error "sc_base $subcmd not stubbed in tests" }
+        return 1
+    }
+    ::game_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "number"} { error "sc_game $subcmd not stubbed in tests" }
+        return 12
+    }
+    ::game_test::stubCommand ::game::Load {selection {ply ""}} {
+        lappend ::game_test::gameCalls [list Load $selection $ply]
+        return
+    }
+
+    # Act
+    ::game::Reload
+
+    # Assert
+    set ::game_test::gameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{Load 12 {}}}
+
+test game-LoadRandom-noop-on-empty-filter-1.0 {::game::LoadRandom returns when the filter is empty} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_base {subcmd args} {
+        lappend ::game_test::scBaseCalls [list $subcmd {*}$args]
+        if {$subcmd ne "current"} { error "sc_base $subcmd not stubbed in tests" }
+        return 2
+    }
+    ::game_test::stubCommand sc_filter {subcmd args} {
+        lappend ::game_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in tests" }
+        return 0
+    }
+    ::game_test::stubCommand ::game::Load {selection {ply ""}} {
+        error "::game::Load should not be called"
+    }
+
+    # Act
+    ::game::LoadRandom
+
+    # Assert
+    list $::game_test::scBaseCalls $::game_test::scFilterCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {current {{count 2 dbfilter}}}
+
+test game-LoadRandom-loads-selected-game-1.0 {::game::LoadRandom selects and loads a random game (deterministic when ngames==1)} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand sc_base {subcmd args} {
+        lappend ::game_test::scBaseCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            current { return 2 }
+            gameslist {
+                # args: base start count filter sort
+                lassign $args base start count filter sort
+                if {$base != 2 || $start != 0 || $count != 1 || $filter ne "dbfilter" || $sort ne "N+"} {
+                    error "Unexpected sc_base gameslist args: $args"
+                }
+                return {7}
+            }
+            default { error "sc_base $subcmd not stubbed in tests" }
+        }
+    }
+    ::game_test::stubCommand sc_filter {subcmd args} {
+        lappend ::game_test::scFilterCalls [list $subcmd {*}$args]
+        if {$subcmd ne "count"} { error "sc_filter $subcmd not stubbed in tests" }
+        return 1
+    }
+    ::game_test::stubCommand ::game::Load {selection {ply ""}} {
+        lappend ::game_test::gameCalls [list Load $selection $ply]
+        return
+    }
+
+    # Act
+    ::game::LoadRandom
+
+    # Assert
+    list $::game_test::scFilterCalls $::game_test::scBaseCalls $::game_test::gameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{{count 2 dbfilter}} {current {gameslist 2 0 1 dbfilter N+}} {{Load 7 {}}}}
+
+test game-mergeInBase-switches-and-merges-1.0 {::game::mergeInBase switches to dest base then merges the selected game} -setup {
+    ::game_test::setup
+} -body {
+    # Act
+    ::game::mergeInBase 4 2 11
+
+    # Assert
+    set ::game_test::fileCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{SwitchToBase 2 1} {mergeGame 4 11}}
+
+test game-Load-cancelled-returns-0-1.0 {::game::Load returns 0 when discard is cancelled} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand ::game::ConfirmDiscard {} { return 0 }
+    ::game_test::stubCommand sc_game {subcmd args} {
+        error "sc_game should not be called"
+    }
+
+    # Act / Assert
+    set res [::game::Load 7]
+} -cleanup {
+    ::game_test::cleanup
+} -result {0}
+
+test game-Load-load-error-notifies-1.0 {::game::Load reports a load error and triggers GameChanged} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    set ::curr_db 3
+    ::game_test::stubCommand ::game::ConfirmDiscard {} { return 1 }
+    ::game_test::stubCommand sc_game {subcmd args} {
+        lappend ::game_test::scGameCalls [list $subcmd {*}$args]
+        if {$subcmd ne "load"} { error "sc_game $subcmd not stubbed in tests" }
+        error "boom"
+    }
+
+    # Act
+    set res [::game::Load 7]
+
+    # Assert
+    list $res $::game_test::notifyCalls $::game_test::uiCalls $::game_test::scGameCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {0 {{DatabaseModified 3} {GameChanged {}}} {{ERROR::MessageBox {}}} {{load 7}}}
+
+test game-Load-success-plies-and-board-flip-1.0 {::game::Load applies ply and FlipB tag via ::board::flipAuto} -setup {
+    ::game_test::setup
+} -body {
+    # Arrange
+    ::game_test::stubCommand ::game::ConfirmDiscard {} { return 3 }
+
+    namespace eval ::board {}
+    ::game_test::stubCommand ::board::flipAuto {w flipB} {
+        lappend ::game_test::uiCalls [list ::board::flipAuto $w $flipB]
+        return
+    }
+
+    ::game_test::stubCommand sc_move {subcmd args} {
+        lappend ::game_test::uiCalls [list sc_move $subcmd {*}$args]
+        switch -- $subcmd {
+            ply { return }
+            default { error "sc_move $subcmd not stubbed in tests" }
+        }
+    }
+
+    ::game_test::stubCommand sc_game {subcmd args} {
+        lappend ::game_test::scGameCalls [list $subcmd {*}$args]
+        switch -- $subcmd {
+            load { return }
+            tag {
+                if {[lindex $args 0] ne "get" || [lindex $args 1] ne "Extra"} {
+                    error "sc_game tag get form not stubbed in tests: $args"
+                }
+                return "FlipB \"1\"\n"
+            }
+            default { error "sc_game $subcmd not stubbed in tests" }
+        }
+    }
+
+    # Act
+    set res [::game::Load 7 8]
+
+    # Assert
+    list $res $::game_test::scGameCalls $::game_test::uiCalls $::game_test::notifyCalls
+} -cleanup {
+    ::game_test::cleanup
+} -result {{} {{load 7} {tag get Extra}} {{sc_move ply 8} {::board::flipAuto .main.board 1}} {{GameChanged {}}}}
+
+cleanupTests

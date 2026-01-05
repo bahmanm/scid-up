@@ -52,6 +52,18 @@ if {[string compare $::scidVersion $::scidVersionExpected]} {
 # Helper function for issuing debug messages:
 # trace add execution some_fn {enter leave} trace_log
 # trace add variable some_var {read write array unset} trace_log
+################################################################################
+# trace_log
+#   Emits trace diagnostics for commands and variables.
+# Visibility:
+#   Public.
+# Inputs:
+#   - args: Arguments supplied by Tcl's trace subsystem.
+# Returns:
+#   - None.
+# Side effects:
+#   - Writes a formatted message to stderr.
+################################################################################
 proc trace_log {args} {
   set bt "::"
   catch {set bt [info level -1]}
@@ -83,6 +95,19 @@ if {[tk windowingsystem] == "aqua"} {
   set windowsOS 1
 }
 
+################################################################################
+# InitDirs
+#   Initialises global directory paths and ensures required directories exist.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets directory globals (e.g. scidExeDir/scidConfigDir/scidShareDir).
+#   - Creates user config/data/log directories when missing.
+################################################################################
 proc InitDirs {} {
   global scidExeDir scidUserDir scidConfigDir scidDataDir scidLogDir scidShareDir scidImgDir scidTclDir
   global scidBooksDir scidBasesDir ecoFile
@@ -139,6 +164,18 @@ proc InitDirs {} {
   }
 
   # Create the config, data and log directories if they do not exist:
+
+  ################################################################################
+  # makeScidDir
+  # Visibility:
+  #   Private.
+  # Inputs:
+  #   - dir: Directory path to ensure exists.
+  # Returns:
+  #   - None.
+  # Side effects:
+  #   - Creates the directory when it does not already exist.
+  ################################################################################
   proc makeScidDir {dir} {
     if {! [file isdirectory $dir]} {
       file mkdir $dir
@@ -152,6 +189,19 @@ proc InitDirs {} {
 InitDirs
 
 
+################################################################################
+# InitImg
+#   Loads application images (icons, buttons, textures, and piece sets).
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates Tk images and sets related globals (e.g. boardStyles/textureSquare).
+#   - May set the application icon via `wm iconphoto`.
+################################################################################
 proc InitImg {} {
   global scidImgDir boardStyle boardStyles textureSquare
 
@@ -201,11 +251,37 @@ if {[catch {InitImg}]} {
   exit
 }
 
+################################################################################
+# InitTooltip
+#   Initialises the tooltip implementation and its compatibility wrapper.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - May source Scid's local tooltip implementation.
+#   - Defines ::utils::tooltip::Set as a wrapper around tooltip::tooltip.
+################################################################################
 proc InitTooltip {} {
   if {$::useLocalTooltip} {
     source [file nativename [file join $::scidTclDir "utils/tklib_tooltip.tcl"]]
   }
   namespace eval ::utils::tooltip {
+
+    ################################################################################
+    # ::utils::tooltip::Set
+    #   Registers or updates a tooltip for a widget.
+    # Visibility:
+    #   Public.
+    # Inputs:
+    #   - args: Arguments forwarded to `tooltip::tooltip`.
+    # Returns:
+    #   - None.
+    # Side effects:
+    #   - Delegates to `tooltip::tooltip`.
+    ################################################################################
     proc Set {args} { tooltip::tooltip {*}$args }
   }
 }
@@ -251,6 +327,17 @@ foreach ns {
   namespace eval $ns {}
 }
 
+################################################################################
+# ::splash::add
+# Visibility:
+#   Private.
+# Inputs:
+#   - text: Status text to display.
+# Returns:
+#   - None.
+# Side effects:
+#   - Intended to update the splash screen (currently a no-op).
+################################################################################
 proc ::splash::add {text} {
 #TODO: decide what to do with all the splash messages (delete?)
 }
@@ -289,6 +376,20 @@ if { $macOS } {
 # eval $::unsafe::badcode
 # after idle $::unsafe::badcode
 
+################################################################################
+# safeSource
+#   Sources a file within a safe interpreter and imports assigned variables.
+# Visibility:
+#   Public.
+# Inputs:
+#   - filename: Absolute path of the file to source.
+#   - args: Pairs of varName/value to expose to the sourced script.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and caches ::safeInterp (a safe interpreter).
+#   - Imports variables assigned by the script into ::unsafe::*.
+################################################################################
 proc safeSource {filename args} {
   if {![info exists ::safeInterp]} {
     set ::safeInterp [::safe::interpCreate]
@@ -309,6 +410,19 @@ proc safeSource {filename args} {
     $::safeInterp eval [list unset $varname]
   }
 }
+################################################################################
+# safeSet
+#   Implements the safe-interpreter `set` command and mirrors values into ::unsafe::.
+# Visibility:
+#   Private.
+# Inputs:
+#   - i: Interpreter handle.
+#   - args: `set` argument list (name/value pairs).
+# Returns:
+#   - Result of the underlying `set` operation.
+# Side effects:
+#   - Writes variables into the ::unsafe namespace.
+################################################################################
 proc safeSet {i args} {
   #TODO: do not import local variables
   #if {[$::safeInterp eval info level] == 0}
@@ -323,6 +437,19 @@ proc safeSet {i args} {
 # @param filename:  the absolute path to the file
 
 # recursiv identify all subdirs
+################################################################################
+# safeAddSubDirsToAccessPath
+#   Recursively adds subdirectories to a safe interpreter's access path.
+# Visibility:
+#   Private.
+# Inputs:
+#   - safeInterp: Safe interpreter handle.
+#   - dir: Root directory whose subdirectories will be added.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls ::safe::interpAddToAccessPath for each discovered subdirectory.
+################################################################################
 proc safeAddSubDirsToAccessPath { safeInterp dir } {
   foreach subdir [glob -nocomplain -directory $dir -type d *] {
     ::safe::interpAddToAccessPath $safeInterp $subdir
@@ -330,6 +457,19 @@ proc safeAddSubDirsToAccessPath { safeInterp dir } {
   }
 }
 
+################################################################################
+# safeSourceStyle
+#   Loads a style/theme script in a safe interpreter.
+# Visibility:
+#   Public.
+# Inputs:
+#   - filename: Absolute path to the theme/style script.
+# Returns:
+#   - None.
+# Side effects:
+#   - Executes the style script in a safe interpreter with restricted file access.
+#   - Applies any resulting ttk::style/image changes to the current UI.
+################################################################################
 proc safeSourceStyle {filename} {
   set filename [file nativename "$filename"]
   set dir [file dirname $filename]
@@ -350,8 +490,31 @@ proc safeSourceStyle {filename} {
   ::safe::interpDelete $safeInterp
 }
 
+################################################################################
+# safePwd
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - None.
+################################################################################
 proc safePwd {} {}
-
+################################################################################
+# safePackage
+#   Restricts `package` operations invoked by safe style scripts.
+# Visibility:
+#   Private.
+# Inputs:
+#   - interp: Safe interpreter handle.
+#   - args: Arguments forwarded from the safe interpreter.
+# Returns:
+#   - None.
+# Side effects:
+#   - May call `package require/provide/vsatisfies` in the main interpreter.
+################################################################################
 proc safePackage { interp args } {
   set args [lassign $args command]
   catch {
@@ -363,6 +526,20 @@ proc safePackage { interp args } {
   }
 }
 
+################################################################################
+# safeImage
+#   Maps image -file arguments from safe to real paths and delegates to `image`.
+# Visibility:
+#   Private.
+# Inputs:
+#   - interp: Safe interpreter handle.
+#   - dir_map: Mapping list used for rewriting safe paths.
+#   - args: Arguments forwarded to `image`.
+# Returns:
+#   - Result of the delegated `image` command.
+# Side effects:
+#   - Creates or modifies Tk images.
+################################################################################
 proc safeImage {interp dir_map args} {
   set filename [lsearch -exact $args -file]
   if {$filename != -1} {
@@ -373,6 +550,19 @@ proc safeImage {interp dir_map args} {
   return [image {*}$args]
 }
 
+################################################################################
+# safeStyleOption
+#   Evaluates a styleOption request from a safe style script.
+# Visibility:
+#   Private.
+# Inputs:
+#   - interp: Safe interpreter handle.
+#   - args: Arguments forwarded from the safe interpreter.
+# Returns:
+#   - None.
+# Side effects:
+#   - Delegates to ::styleOption.
+################################################################################
 proc safeStyleOption {interp args} {
     styleOption {*}$args
 }
@@ -380,6 +570,19 @@ proc safeStyleOption {interp args} {
 # Evaluate ttk::style commands invoked inside the restricted script.
 # If the command includes a script (ttk::style theme settings or ttk::style theme create)
 # it is evaluated using the safe interpreter.
+################################################################################
+# safeStyle
+#   Evaluates ttk::style commands invoked from a safe style script.
+# Visibility:
+#   Private.
+# Inputs:
+#   - interp: Safe interpreter handle.
+#   - args: Arguments forwarded from the safe interpreter.
+# Returns:
+#   - Result of the delegated ttk::style command.
+# Side effects:
+#   - May configure ttk styles and/or evaluate theme scripts.
+################################################################################
 proc safeStyle {interp args} {
   lassign $args theme settings themeName script
   if {$theme eq "theme"} {
@@ -407,6 +610,19 @@ proc safeStyle {interp args} {
 # Load default/saved values
 source [file nativename [file join $::scidTclDir "options.tcl"]]
 
+################################################################################
+# calculateTreeviewRowHeight
+#   Computes and applies row heights for Treeview widgets based on current fonts.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures ttk::style row heights.
+#   - Updates ::glistRowHeight.
+################################################################################
 proc calculateTreeviewRowHeight { } {
   set row_height [expr { round(1.1 * [font metrics font_Regular -linespace]) }]
   ttk::style configure Treeview -rowheight $row_height
@@ -415,6 +631,19 @@ proc calculateTreeviewRowHeight { } {
   ttk::style configure Gamelist.Treeview -rowheight $::glistRowHeight
 }
 
+################################################################################
+# updateFonts
+#   Updates derived fonts (bold/italic/headers) when a base font changes.
+# Visibility:
+#   Private.
+# Inputs:
+#   - font_name: Base font name that has changed (e.g. font_Regular).
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures derived fonts.
+#   - Recalculates Treeview row heights.
+################################################################################
 proc updateFonts {font_name} {
   switch $font_name {
     {font_Regular} {
@@ -439,6 +668,19 @@ proc updateFonts {font_name} {
   calculateTreeviewRowHeight
 }
 
+################################################################################
+# createFonts
+#   Creates Scid's named fonts and initialises them from ::fontOptions.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and configures Tk fonts (e.g. font_Regular, font_Bold).
+#   - Updates ::utils::tooltip::font.
+################################################################################
 proc createFonts {} {
   font create font_Bold
   font create font_BoldItalic
@@ -473,6 +715,20 @@ createFonts
 
 # Workaround: set the options of ttkEntry.c widgets that don't work with ttk::style
 set ::themeOptions {}
+################################################################################
+# styleOption
+#   Records theme-specific option overrides for later application.
+# Visibility:
+#   Public.
+# Inputs:
+#   - themeName: Theme identifier.
+#   - pattern: Option database pattern.
+#   - value: Value to apply.
+# Returns:
+#   - None.
+# Side effects:
+#   - Appends an entry to ::themeOptions.
+################################################################################
 proc styleOption {themeName pattern value} {
   lappend ::themeOptions [list $themeName $pattern $value]
 }
@@ -492,6 +748,18 @@ option add *TSpinbox.font font_Regular
 # Set the menu options
 # This options are used only when a menu is created. If the theme is changed,
 # it is necessary to restart the program to show the new colors.
+################################################################################
+# configure_menus
+#   Configures menu option database entries for the current theme.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Adds option database entries affecting menu appearance.
+################################################################################
 proc configure_menus {} {
   option add *Menu*TearOff 0
   if {[llength $::fontOptions(Menu)] == 4} { option add *Menu*Font font_Menu }
@@ -507,6 +775,20 @@ proc configure_menus {} {
   }
 }
 
+################################################################################
+# configure_style
+#   Configures ttk styles and applies theme-specific option overrides.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates ttk::style configuration.
+#   - Configures tooltip appearance.
+#   - Adds option database entries for combobox popdown listboxes.
+################################################################################
 proc configure_style {} {
   # Use default font everywhere
   ttk::style configure . -font font_Regular
@@ -583,6 +865,20 @@ configure_menus
 #         -command [list ::update_switch_btn widget_name]
 #     ::update_switch_btn widget_name initial_value
 # Return the value of the variable associated with the widget.
+################################################################################
+# ::update_switch_btn
+#   Updates a ttk::checkbutton to render as a switch (filled/empty circle).
+# Visibility:
+#   Public.
+# Inputs:
+#   - widget: Widget path of the ttk::checkbutton.
+#   - set_value: Optional initial value to assign to the widget variable.
+# Returns:
+#   - Current value of the widget's associated variable.
+# Side effects:
+#   - May assign the associated variable.
+#   - Configures the widget's -text.
+################################################################################
 proc ::update_switch_btn {widget {set_value ""}} {
   set varname [$widget cget -variable]
   if {$set_value ne ""} {
@@ -597,6 +893,22 @@ proc ::update_switch_btn {widget {set_value ""}} {
   return [set ::$varname]
 }
 
+################################################################################
+# autoscrollText
+#   Creates a text widget with themed styling and autoscroll bars.
+# Visibility:
+#   Public.
+# Inputs:
+#   - bars: Autoscroll bar configuration.
+#   - frame: Frame path to create.
+#   - widget: Text widget path to create.
+#   - style: ttk style name used for applying theme colours.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a ttk::frame and text widget.
+#   - Configures tags and applies theme styles.
+################################################################################
 proc autoscrollText {bars frame widget style} {
   ttk::frame $frame
   text $widget -cursor arrow -state disabled -highlightthickness 0 -font font_Regular
@@ -607,6 +919,20 @@ proc autoscrollText {bars frame widget style} {
 
 # Create a text widget and apply to it the current ttk style.
 # It also creates a tag "header" in the text widget.
+################################################################################
+# ttk_text
+#   Creates a text widget and applies the current ttk theme style.
+# Visibility:
+#   Public.
+# Inputs:
+#   - pathName: Widget path.
+#   - args: Optional text widget configuration arguments.
+# Returns:
+#   - The created text widget path.
+# Side effects:
+#   - Creates and configures a Tk text widget.
+#   - Applies theme styles and creates a "header" tag.
+################################################################################
 proc ttk_text {pathName {args ""}} {
   set style Treeview
   if {[set idx [lsearch $args "-style"]] >=0} {
@@ -623,6 +949,19 @@ proc ttk_text {pathName {args ""}} {
 }
 
 # Create a canvas and apply to it the current ttk style.
+################################################################################
+# ttk_canvas
+#   Creates a canvas widget and applies the current ttk theme style.
+# Visibility:
+#   Public.
+# Inputs:
+#   - pathName: Widget path.
+#   - args: Canvas configuration arguments.
+# Returns:
+#   - The created canvas widget path.
+# Side effects:
+#   - Creates and configures a Tk canvas widget.
+################################################################################
 proc ttk_canvas {pathName args} {
   set res [canvas $pathName {*}$args]
   ::applyThemeStyle Treeview $pathName
@@ -631,6 +970,22 @@ proc ttk_canvas {pathName args} {
 
 # Create an item into a widget (i.e. a canvas) and apply to it the current ttk style.
 # TODO: find a better way to do this and re-apply when <<ThemeChanged>>
+################################################################################
+# ttk_create
+#   Creates an item in a widget and applies theme-derived defaults.
+# Visibility:
+#   Public.
+# Inputs:
+#   - pathName: Widget path (typically a canvas).
+#   - type: Item type (e.g. rectangle, text).
+#   - x: X coordinate.
+#   - y: Y coordinate.
+#   - args: Item creation arguments.
+# Returns:
+#   - The created item identifier.
+# Side effects:
+#   - Creates a widget item and may set default -fill colour.
+################################################################################
 proc ttk_create {pathName type x y args} {
   if {"-fill" ni $args} {
     lappend args "-fill"
@@ -640,6 +995,19 @@ proc ttk_create {pathName type x y args} {
 }
 
 # Apply the theme's background color to a widget
+################################################################################
+# applyThemeColor_background
+#   Applies the theme background colour to a widget and re-applies on theme change.
+# Visibility:
+#   Public.
+# Inputs:
+#   - widget: Widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures the widget background.
+#   - Adds a <<ThemeChanged>> binding.
+################################################################################
 proc applyThemeColor_background { widget } {
   set bgcolor [ttk::style lookup . -background "" #d9d9d9]
   $widget configure -background $bgcolor
@@ -647,6 +1015,20 @@ proc applyThemeColor_background { widget } {
 }
 
 # Apply a ttk style to a tk widget
+################################################################################
+# applyThemeStyle
+#   Applies a ttk style's colours to a Tk widget and re-applies on theme change.
+# Visibility:
+#   Public.
+# Inputs:
+#   - style: ttk style name.
+#   - widget: Tk widget path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures widget options derived from ttk style.
+#   - Adds a <<ThemeChanged>> binding.
+################################################################################
 proc applyThemeStyle {style widget} {
   set exclude [list "-font"]
   set options [ttk::style configure .]
@@ -664,6 +1046,19 @@ image create photo flag_unknown -data {
       F4pT92AAAAB3RJTUUH4wQHCTMzcDliXAAAABJJREFUOMtjYBgFo2AUjIKBBwAEjAABIobxpQAAAABJRU5ErkJggg==
 }
 
+################################################################################
+# getFlagImage
+#   Returns an image handle for a country's flag.
+# Visibility:
+#   Public.
+# Inputs:
+#   - countryID: Country identifier.
+#   - returnUnknowFlag: When "no", returns empty string if no flag is available.
+# Returns:
+#   - Image name to use for the flag (or empty string).
+# Side effects:
+#   - May load an image from disk and create it.
+################################################################################
 proc getFlagImage { countryID { returnUnknowFlag no } } {
   set cflag "flag_[string tolower [string range $countryID 0 2]]"
   # preset unkown flag (empty transparent image 24x12)

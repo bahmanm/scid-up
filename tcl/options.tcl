@@ -14,8 +14,20 @@
 # Set default values
 
 
-# Initialize a variable whose value will be restored when the program starts.
-# default_value: set the variable to this value if it does not exists.
+################################################################################
+# options.store
+#   Registers a variable for persistence and initialises it to a default value.
+# Visibility:
+#   Public.
+# Inputs:
+#   - varname: Name of the variable to persist (may be fully-qualified).
+#   - default_value: Default value used when the variable does not yet exist.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets the variable named by varname when it does not exist.
+#   - Appends varname to ::autosave_opt (creating it if needed).
+################################################################################
 proc options.store {varname {default_value ""}} {
   if {![info exists $varname]} {
     set $varname $default_value
@@ -25,6 +37,18 @@ proc options.store {varname {default_value ""}} {
   }
 }
 
+################################################################################
+# InitDefaultToolbar
+#   Initialises the default toolbar button visibility settings.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets ::toolbar_state(<icon>) for each toolbar icon.
+################################################################################
 proc InitDefaultToolbar {} {
   foreach {tbicon status}  {
     newdb 0 open 0 save 0 closedb 0
@@ -37,6 +61,19 @@ proc InitDefaultToolbar {} {
   }
 }
 
+################################################################################
+# InitWinsDefaultGeometry
+#   Initialises default window geometry settings and saved docking layouts.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets winWidth(*) and winHeight(*) defaults.
+#   - Sets ::docking::layout_list(<slot>) defaults.
+################################################################################
 proc InitWinsDefaultGeometry {} {
   global winWidth winHeight
 
@@ -63,6 +100,19 @@ proc InitWinsDefaultGeometry {} {
   set ::docking::layout_list(auto) {{MainWindowGeometry 1280x670+0+0} {{.pw vertical {}} {TPanedwindow {{.pw.pw0 horizontal 487} {TPanedwindow {{.pw.pw0.pw0 vertical 82} {TNotebook .pw.pw0.pw0.tb0 .baseWin} {TNotebook .nb .main}}} {TPanedwindow {{.pw.pw0.pw1 vertical 337} {TNotebook .pw.pw0.tb0 .glistWin1} {TPanedwindow {{.pw.pw0.pw1.pw0 horizontal 346} {TNotebook .pw.pw0.pw1.tb0 {.commentWin .pgnWin}} {TNotebook .pw.pw0.pw1.pw0.tb0 .engineWin1}}}}}}}}}
 }
 
+################################################################################
+# InitDefaultStats
+#   Initialises default statistics window display settings.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets ::windows::stats::display(*) defaults.
+#   - Enables display flags for recent years up to the current year.
+################################################################################
 proc InitDefaultStats {} {
   # Default stats window lines:
   array set ::windows::stats::display {
@@ -96,6 +146,19 @@ proc InitDefaultStats {} {
   }
 }
 
+################################################################################
+# InitDefaultFonts
+#   Initialises the default UI font configuration for the current platform.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets fontOptions(<style>) for Regular/Menu/Small/Tiny/Fixed.
+#   - May query the Tk font system via `font families` and `font actual`.
+################################################################################
 proc InitDefaultFonts {} {
   global fontOptions
   if {$::windowsOS} {
@@ -124,6 +187,18 @@ proc InitDefaultFonts {} {
   }
 }
 
+################################################################################
+# InitDefaultAnnotate
+#   Initialises defaults for batch opening/annotation behaviour.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets various annotation-related global variables (e.g. ::blunderThreshold).
+################################################################################
 proc InitDefaultAnnotate {} {
   set ::isBatchOpening 0
   set ::isBatchOpeningMoves 12
@@ -455,6 +530,18 @@ foreach type {PGN HTML LaTeX} {
 
 set autoRaise 1
 
+################################################################################
+# raiseWin
+#   Raises a window unless auto-raise is disabled.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Window path to raise.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `raise` when ::autoRaise is truthy.
+################################################################################
 proc raiseWin {w} {
   global autoRaise
   if {$autoRaise} { raise $w }
@@ -483,10 +570,19 @@ set engines(sort) Time
 
 
 
-# scidConfigFile:
-#   Returns the full path and name of a Scid configuration file,
-#   given its configuration type.
-#
+################################################################################
+# scidConfigFile
+#   Resolves the full path of a Scid configuration file by type.
+# Visibility:
+#   Public.
+# Inputs:
+#   - type: Configuration type key (e.g. options, engines, history).
+# Returns:
+#   - Full path (native form) to the configuration file.
+#   - Raises an error for unknown types.
+# Side effects:
+#   - None.
+################################################################################
 proc scidConfigFile {type} {
   global scidConfigDir
 
@@ -524,6 +620,20 @@ if {[file exists $optionsFile] && [catch {source $optionsFile}]} {
 # yucky variable names in the global namespace. So convert them to the new
 # namespace variables:
 #
+################################################################################
+# ConvertOldOptionVariables
+#   Copies legacy option variables from the global namespace into ::pgn::.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Sets ::pgn::* variables when corresponding legacy globals (e.g. ::doColorPgn)
+#     exist.
+#   - Does not unset legacy globals.
+################################################################################
 proc ConvertOldOptionVariables {} {
   set oldNewNames {
     doColorPgn ::pgn::showColor
@@ -545,6 +655,21 @@ proc ConvertOldOptionVariables {} {
 }
 ConvertOldOptionVariables
 
+################################################################################
+# options.write
+#   Writes the current options state to `[scidConfigFile options]`.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None (reads a large set of option globals/arrays).
+# Returns:
+#   - None.
+# Side effects:
+#   - Overwrites the options file.
+#   - May show a `tk_messageBox` on write/open failure.
+#   - Updates ::statusBar on success.
+#   - Calls ::docking::layout_save and may call ::win::saveWinGeometry.
+################################################################################
 proc options.write {} {
  uplevel #0 {
   set optionF ""
@@ -698,6 +823,19 @@ proc options.write {} {
  }
 }
 
+################################################################################
+# options.autoSaveHack
+#   Appends the current ::optionsAutoSave setting to the options file.
+# Visibility:
+#   Public.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Appends a `set ::optionsAutoSave ...` line to `[scidConfigFile options]`.
+#   - Silently ignores I/O failures (wrapped in `catch`).
+################################################################################
 proc options.autoSaveHack {} {
   catch {
     set optionF [open [scidConfigFile options] "a"]
