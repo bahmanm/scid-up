@@ -1,0 +1,357 @@
+package require tcltest 2.5
+
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# `tcl/start.tcl` uses the `safe` package, but it is not always available in the
+# test interpreter. Provide a minimal stub that is sufficient for unit-testing
+# the wrapper logic.
+#
+# Note: This is not a security boundary; it is only a test double.
+namespace eval ::safe {}
+if {![llength [info commands ::safe::interpCreate]]} {
+    proc ::safe::interpCreate {} {
+        return [interp create]
+    }
+    proc ::safe::interpAddToAccessPath {interp dir} {
+        return $dir
+    }
+    proc ::safe::interpDelete {interp} {
+        interp delete $interp
+        return
+    }
+}
+
+namespace eval ::start_test {
+    variable stubbedCommands {}
+    variable createdCommands {}
+
+    variable loadedProcs 0
+
+    # Used by update_switch_btn widget doubles.
+    array set widgetState {}
+    array set widgetConfigureCalls {}
+}
+
+proc ::start_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::start_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::start_test::cleanupCommands {} {
+    variable createdCommands
+    foreach cmd $createdCommands {
+        catch {rename $cmd ""}
+    }
+    set createdCommands {}
+}
+
+# Loads only `proc` definitions from `tcl/start.tcl`.
+#
+# This intentionally does *not* model the file-scope side effects of `start.tcl`
+# (Tk initialisation, directory creation, theme/font setup, module sourcing, and
+# C++ bridge calls). Those behaviours are better covered by higher-level
+# integration tests.
+#
+# The goal here is to unit-test the more self-contained helper procedures.
+proc ::start_test::loadStartProcs {} {
+    if {$::start_test::loadedProcs} {
+        return
+    }
+
+    namespace eval ::splash {}
+    namespace eval ::unsafe {}
+
+    set filename [file join [::scid_test::tclDir] start.tcl]
+    set ch [open $filename r]
+
+    set inProc 0
+    set buf ""
+
+    while {[gets $ch line] >= 0} {
+        if {!$inProc} {
+            if {[regexp {^\s*proc\s+} $line]} {
+                set buf "$line\n"
+                set inProc 1
+                if {[info complete $buf]} {
+                    uplevel #0 $buf
+                    set buf ""
+                    set inProc 0
+                }
+            }
+        } else {
+            append buf $line "\n"
+            if {[info complete $buf]} {
+                uplevel #0 $buf
+                set buf ""
+                set inProc 0
+            }
+        }
+    }
+
+    close $ch
+
+    if {$inProc} {
+        error "Incomplete proc definition while loading $filename"
+    }
+
+    set ::start_test::loadedProcs 1
+}
+
+proc ::start_test::defineCheckbuttonWidget {path varName selected} {
+    variable createdCommands
+    variable widgetState
+
+    if {[llength [info commands $path]]} {
+        error "Widget already exists: $path"
+    }
+
+    set widgetState($path,varName) $varName
+    set widgetState($path,selected) $selected
+
+    interp alias {} $path {} ::start_test::dispatchCheckbutton $path
+    lappend createdCommands $path
+    return $path
+}
+
+proc ::start_test::dispatchCheckbutton {path subcmd args} {
+    variable widgetState
+    variable widgetConfigureCalls
+
+    switch -- $subcmd {
+        cget {
+            set opt [lindex $args 0]
+            if {$opt ne "-variable"} {
+                error "checkbutton $path cget $opt not stubbed"
+            }
+            return $widgetState($path,varName)
+        }
+        instate {
+            set state [lindex $args 0]
+            if {$state ne "selected"} {
+                error "checkbutton $path instate $state not stubbed"
+            }
+            return $widgetState($path,selected)
+        }
+        configure {
+            if {[llength $args] % 2 != 0} {
+                error "checkbutton $path configure expects option/value pairs, got: $args"
+            }
+            lappend widgetConfigureCalls($path) [list {*}$args]
+            return
+        }
+        default {
+            error "checkbutton $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::start_test::setup {} {
+    ::start_test::restoreStubs
+    ::start_test::cleanupCommands
+
+    catch {unset ::start_test::widgetState}
+    catch {unset ::start_test::widgetConfigureCalls}
+    array set ::start_test::widgetState {}
+    array set ::start_test::widgetConfigureCalls {}
+
+    # Ensure we start with a clean unsafe namespace.
+    namespace eval ::unsafe {}
+    foreach v [info vars ::unsafe::*] {
+        unset -nocomplain $v
+    }
+
+    if {[info exists ::safeInterp]} {
+        catch {::safe::interpDelete $::safeInterp}
+        unset -nocomplain ::safeInterp
+    }
+
+    set ::windowsOS 0
+    set ::scidImgDir [file join [::scid_test::tempDir] start_test_img]
+    file mkdir $::scidImgDir
+}
+
+proc ::start_test::cleanup {} {
+    ::start_test::restoreStubs
+    ::start_test::cleanupCommands
+
+    if {[info exists ::safeInterp]} {
+        catch {::safe::interpDelete $::safeInterp}
+        unset -nocomplain ::safeInterp
+    }
+
+    foreach v [info vars ::unsafe::*] {
+        unset -nocomplain $v
+    }
+}
+
+::start_test::loadStartProcs
+
+
+test start-safeSet-imports-into-unsafe-1.0 {safeSet mirrors set values into ::unsafe:: and still sets in the interpreter} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    namespace eval ::unsafe {}
+
+    set i [interp create]
+    interp hide $i set
+
+    # Act
+    set res [safeSet $i foo 123]
+
+    # Assert
+    list $res $::unsafe::foo [interp invokehidden $i set foo]
+} -cleanup {
+    catch {interp delete $i}
+    ::start_test::cleanup
+} -result {123 123 123}
+
+
+test start-safeSource-sources-and-imports-vars-1.0 {safeSource sources a file and imports variables set by the script into ::unsafe::} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    set dir [file join [::scid_test::tempDir] start_test_safe]
+    file mkdir $dir
+
+    set f [file join $dir script.tcl]
+    set ch [open $f w]
+    puts $ch {set y [expr {$x + 1}]}
+    puts $ch {set z "ok"}
+    close $ch
+
+    # Act
+    safeSource $f x 5
+
+    # Assert
+    list $::unsafe::x $::unsafe::y $::unsafe::z
+} -cleanup {
+    ::start_test::cleanup
+} -result {5 6 ok}
+
+
+test start-safeAddSubDirsToAccessPath-recurses-1.0 {safeAddSubDirsToAccessPath adds nested subdirectories recursively} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    set root [file join [::scid_test::tempDir] start_test_access]
+    file mkdir [file join $root a b]
+    file mkdir [file join $root c]
+
+    set calls {}
+    ::start_test::stubCommand ::safe::interpAddToAccessPath {interp dir} {
+        lappend ::calls $dir
+        return "V$dir"
+    }
+
+    # Act
+    safeAddSubDirsToAccessPath dummy $root
+
+    # Assert
+    lsort -dictionary $calls
+} -cleanup {
+    ::start_test::cleanup
+} -result [lsort -dictionary [list \
+    [file join [::scid_test::tempDir] start_test_access a] \
+    [file join [::scid_test::tempDir] start_test_access a b] \
+    [file join [::scid_test::tempDir] start_test_access c] \
+]]
+
+
+test start-safeImage-maps-virtual-file-path-1.0 {safeImage maps a safe-interpreter -file path to the real path via dir_map} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    set calls {}
+    ::start_test::stubCommand image {args} {
+        lappend ::calls $args
+        return $args
+    }
+
+    set mapped [safeImage dummy [list VDIR RDIR] create photo foo -file VDIR/sub/img.png]
+
+    # Assert
+    list $mapped $calls
+} -cleanup {
+    ::start_test::cleanup
+} -result {{create photo foo -file RDIR/sub/img.png} {{create photo foo -file RDIR/sub/img.png}}}
+
+
+test start-update_switch_btn-selected-sets-text-and-returns-var-1.0 {update_switch_btn sets checkbutton text based on selection state and returns variable value} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    set ::windowsOS 0
+    set ::start_test::widgetConfigureCalls(.sw) {}
+
+    ::start_test::defineCheckbuttonWidget .sw switchVar 1
+
+    # Act
+    set value [::update_switch_btn .sw 1]
+
+    # Assert
+    list $value $::switchVar $::start_test::widgetConfigureCalls(.sw)
+} -cleanup {
+    ::start_test::cleanup
+} -result {1 1 {{-text {       ●}}}}
+
+
+test start-update_switch_btn-unselected-uses-empty-circle-1.0 {update_switch_btn uses an empty circle when unselected} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    set ::windowsOS 0
+    set ::start_test::widgetConfigureCalls(.sw2) {}
+
+    ::start_test::defineCheckbuttonWidget .sw2 switchVar2 0
+    set ::switchVar2 0
+
+    # Act
+    set value [::update_switch_btn .sw2]
+
+    # Assert
+    list $value $::switchVar2 $::start_test::widgetConfigureCalls(.sw2)
+} -cleanup {
+    ::start_test::cleanup
+} -result {0 0 {{-text {◯       }}}}
+
+
+test start-getFlagImage-prefers-existing-command-1.0 {getFlagImage returns the preloaded flag image name when it exists as a command} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    proc flag_usa {args} { return }
+
+    # Act
+    set res [getFlagImage USA]
+
+    # Assert
+    set res
+} -cleanup {
+    catch {rename flag_usa ""}
+    ::start_test::cleanup
+} -result {flag_usa}
+
+
+test start-getFlagImage-missing-returns-empty-when-disallowed-1.0 {getFlagImage returns empty string when missing and unknown flags are disallowed} -setup {
+    ::start_test::setup
+} -body {
+    # Arrange
+    set ::scidImgDir [file join [::scid_test::tempDir] start_test_img_empty]
+    file mkdir [file join $::scidImgDir flags]
+
+    # Act
+    getFlagImage ZZZ no
+} -cleanup {
+    ::start_test::cleanup
+} -result {}
+
+
+cleanupTests
