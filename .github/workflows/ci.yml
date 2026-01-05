@@ -67,7 +67,10 @@ jobs:
 
     - name: Configure
       run: >
+        PREFIX=~/.local
+        
         cmake 
+        -S ${{ github.workspace }}
         -B ${{ steps.strings.outputs.build-output-dir }}
         
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
@@ -77,15 +80,13 @@ jobs:
         -DBUILD_TESTING=ON
         -DSCIDUP_BUILD_LINTING=ON
         
-        -DTCL_INCLUDE_PATH=~/.local/include/
-        -DTCL_LIBRARY=~/.local/lib/libtcl9.0.so
-        -DTCL_TCLSH=~/.local/bin/tclsh
+        -DTCL_INCLUDE_PATH=$PREFIX/include/
+        -DTCL_LIBRARY=$PREFIX/lib/libtcl9.0.so
+        -DTCL_TCLSH=$PREFIX/bin/tclsh
         
-        -DTK_INCLUDE_PATH=~/.local/include/
-        -DTK_LIBRARY=~/.local/lib/libtcl9tk9.0.so
-        -DTK_WISH=~/.local/bin/wish
-        
-        -S ${{ github.workspace }}
+        -DTK_INCLUDE_PATH=$PREFIX/include/
+        -DTK_LIBRARY=$PREFIX/lib/libtcl9tk9.0.so
+        -DTK_WISH=$PREFIX/bin/wish
 
     - name: Build
       run: >
