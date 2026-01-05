@@ -1,13 +1,18 @@
 
 
-# thousands, percentFormat:
-#   Functions to format integer numbers.
-#   thousands inserts the thousands separator (usually "," or ".") for
-#   every three digits before the decimal separator in the number.
-#   percentFormat does the same as thousands, but also adds a percentage.
-#   If "kilo" is true, numbers >= 100,000 are divided by 1000 and have
-#   the unit "K" appended while values over 1 million appear as "1.00M"
-#
+################################################################################
+# ::utils::thousands
+#   Formats an integer using the current locale thousands separator.
+# Visibility:
+#   Public.
+# Inputs:
+#   - n: Integer to format.
+#   - kilo: When true, abbreviates large values with K/M.
+# Returns:
+#   - Formatted string.
+# Side effects:
+#   - Reads ::locale(numeric).
+################################################################################
 proc ::utils::thousands {n {kilo 0}} {
   global locale
   set commaChar [string index $locale(numeric) 1]
@@ -28,6 +33,19 @@ proc ::utils::thousands {n {kilo 0}} {
   return "$n$unit"
 }
 
+################################################################################
+# ::utils::percentFormat
+#   Formats a numerator and percentage of a denominator.
+# Visibility:
+#   Public.
+# Inputs:
+#   - num: Numerator.
+#   - denom: Denominator (0 is treated as 1).
+# Returns:
+#   - Formatted string: "<num> (<percent>%)".
+# Side effects:
+#   - Reads ::locale(numeric) via ::utils::thousands.
+################################################################################
 proc ::utils::percentFormat {num denom} {
   # Ensure denominator is not zero:
   if {$denom == 0} {set denom 1}
