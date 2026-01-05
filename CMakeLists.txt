@@ -27,4 +27,5 @@ include(cmake/bins/main.cmake)
 include(cmake/tests/all.cmake)
 include(cmake/tools/lint.cmake)
 
+include(GNUInstallDirs)
 include(cmake/packaging.cmake)
