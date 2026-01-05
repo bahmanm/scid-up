@@ -12,16 +12,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Scid. If not, see <http://www.gnu.org/licenses/>.
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required( VERSION 3.30 )
 
-project(ScidUp VERSION 5.1.0 LANGUAGES CXX)
+project(
+    ScidUp
+    VERSION 5.1.0
+    LANGUAGES CXX )
 
-include(GNUInstallDirs)
-include(cmake/general.cmake)
-include(cmake/libs/threads.cmake)
-include(cmake/libs/tcl.cmake)
-include(cmake/libs/polyglot.cmake)
-include(cmake/bins/main.cmake)
-include(cmake/tests/all.cmake)
-include(cmake/tools/lint.cmake)
-include(cmake/packaging.cmake)
+include( GNUInstallDirs )
+include( cmake/general.cmake )
+include( cmake/libs/threads.cmake )
+include( cmake/libs/tcl.cmake )
+include( cmake/libs/polyglot.cmake )
+include( cmake/bins/main.cmake )
+include( cmake/install/main.cmake )
+include( cmake/tests/all.cmake )
+include( cmake/tools/lint.cmake )
+include( cmake/packaging.cmake )
