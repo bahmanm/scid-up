@@ -35,12 +35,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set reusable strings
-      id: strings
-      shell: bash
-      run: >
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       working-directory: ${{ runner.temp }}
@@ -70,25 +64,17 @@ jobs:
         PREFIX=~/.local
         
         cmake \
-        -S ${{ github.workspace }} \
-        -B ${{ steps.strings.outputs.build-output-dir }} \
+        --preset ci \
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-        -DBUILD_TESTING=ON \
-        -DSCIDUP_BUILD_LINTING=ON \
-        -DTCL_INCLUDE_PATH=$PREFIX/include/ \
-        -DTCL_LIBRARY=$PREFIX/lib/libtcl9.0.so \
-        -DTCL_TCLSH=$PREFIX/bin/tclsh \
-        -DTK_INCLUDE_PATH=$PREFIX/include/ \
-        -DTK_LIBRARY=$PREFIX/lib/libtcl9tk9.0.so \
-        -DTK_WISH=$PREFIX/bin/wish
+        -DCMAKE_PREFIX_PATH=$PREFIX
 
     - name: Build
       run: >
-        cmake 
-        --build ${{ steps.strings.outputs.build-output-dir }} 
-        --config ${{ matrix.build_type }}
+        cmake
+        --build
+        --preset ci
         --verbose
 
     - name: Lint
@@ -96,13 +82,13 @@ jobs:
         curl -LsSf https://astral.sh/uv/install.sh | sh;
         
         cmake
-        --build ${{ steps.strings.outputs.build-output-dir }} 
+        --build
+        --preset ci
         --target tcl_lint
         || echo "Ignored linter violations. For now."
 
     - name: Test
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: >
-        ctest 
-        --build-config ${{ matrix.build_type }}
+        ctest
+        --preset ci
         --verbose
