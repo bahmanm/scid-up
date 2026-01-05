@@ -35,9 +35,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up environment variables
+    - name: Set up the environment
       run: |
-        echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}" >> "$GITHUB_ENV"
+        mkdir -p ${{ runner.temp }}/
+        echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}/" >> "$GITHUB_ENV"
+        
+        mkdir -p ${{ runner.temp }}/tmp/
         echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/tmp/" >> "$GITHUB_ENV"
 
     - name: Install Tcl/Tk (Linux)
