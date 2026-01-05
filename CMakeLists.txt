@@ -35,8 +35,7 @@ if(MSVC)
   # Environment:       PATH=C:\tcl\bin
 endif()
 
-find_package(Threads REQUIRED)
-
+include(cmake/libs/threads.cmake)
 include(cmake/libs/tcl.cmake)
 include(cmake/libs/polyglot.cmake)
 include(cmake/bins/main.cmake)
