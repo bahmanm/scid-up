@@ -1,5 +1,3 @@
-# Main executable (ScidUp).
-
 file(GLOB SCIDUP_MAIN_SOURCES
   "${CMAKE_SOURCE_DIR}/src/*.h"
   "${CMAKE_SOURCE_DIR}/src/*.cpp"

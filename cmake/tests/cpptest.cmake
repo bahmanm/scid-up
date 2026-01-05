@@ -1,5 +1,3 @@
-# C++ tests (GoogleTest).
-
 include(cmake/libs/threads.cmake)
 
 include(FetchContent)
@@ -32,3 +30,12 @@ add_executable(ScidUp::Tests::Bins::CppTest ALIAS scidup_tests_bins_cpptest)
 target_compile_definitions(scidup_tests_bins_cpptest PRIVATE SCIDUP_TEST_RESOURCES_DIR=\"${CMAKE_SOURCE_DIR}/gtest/\")
 target_link_libraries(scidup_tests_bins_cpptest PRIVATE ScidUp::Tests::Libs::CppBase gtest_main)
 
+add_test(
+  NAME cpp_test
+  COMMAND $<TARGET_FILE:ScidUp::Tests::Bins::CppTest>
+)
+set_tests_properties(
+  cpp_test
+  PROPERTIES
+  LABELS "cpp"
+)
