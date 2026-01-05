@@ -1,0 +1,620 @@
+package require tcltest 2.5
+
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+namespace eval ::move_test {
+    variable stubbedCommands {}
+    variable calls {}
+    variable markCalls {}
+    variable interactionDecisions {}
+}
+
+proc ::move_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::move_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::move_test::setPosFlags {args} {
+    if {[llength $args] % 2 != 0} {
+        error "setPosFlags expects key/value pairs, got: $args"
+    }
+    foreach {k v} $args {
+        set ::move_test::sc_pos_at($k) $v
+    }
+}
+
+proc ::move_test::setInteractionHandler {args} {
+    if {[llength $args] % 2 != 0} {
+        error "setInteractionHandler expects key/value pairs, got: $args"
+    }
+
+    set ::move_test::interactionDecisions [dict create {*}$args]
+
+    ::move_test::stubCommand ::move_test::interactionHandler {subcmd args} {
+        if {![dict exists $::move_test::interactionDecisions $subcmd]} {
+            error "interactionHandler $subcmd not stubbed"
+        }
+        return [dict get $::move_test::interactionDecisions $subcmd]
+    }
+    set ::interactionHandler ::move_test::interactionHandler
+}
+
+proc ::move_test::getCalls {} { return $::move_test::calls }
+proc ::move_test::getMarkCalls {} { return $::move_test::markCalls }
+
+proc ::move_test::setup {} {
+    ::move_test::restoreStubs
+    set ::move_test::calls {}
+    set ::move_test::markCalls {}
+    set ::move_test::interactionDecisions {}
+
+    unset -nocomplain ::interactionHandler
+
+    set ::showVarArrows 0
+    set ::showVarPopup 0
+    set ::autoplayMode 0
+
+    namespace eval ::board {
+        variable _mark
+        array set _mark {}
+    }
+
+    namespace eval ::board::mark {}
+    namespace eval ::notify {}
+    namespace eval ::utils {}
+    namespace eval ::utils::sound {}
+
+    ::move_test::stubCommand ::board::sq {sq} { return $sq }
+    ::move_test::stubCommand ::board::mark::add {board type sq_start sq_end colour} {
+        lappend ::move_test::markCalls [list $board $type $sq_start $sq_end $colour]
+        return
+    }
+
+    ::move_test::stubCommand updateBoard {args} {
+        lappend ::move_test::calls updateBoard
+        return
+    }
+    ::move_test::stubCommand showVars {args} {
+        lappend ::move_test::calls showVars
+        return
+    }
+
+    ::move_test::stubCommand ::notify::PosChanged {args} {
+        lappend ::move_test::calls [list notify PosChanged {*}$args]
+        return
+    }
+
+    ::move_test::stubCommand ::utils::sound::AnnounceForward {move} {
+        lappend ::move_test::calls [list sound AnnounceForward $move]
+        return
+    }
+    ::move_test::stubCommand ::utils::sound::AnnounceBack {args} {
+        lappend ::move_test::calls [list sound AnnounceBack]
+        return
+    }
+
+    # Defaults for the Scid bridge commands.
+    set ::move_test::sc_var_list {}
+    set ::move_test::sc_var_level 0
+    set ::move_test::sc_var_count 0
+    set ::move_test::sc_pos_at(start) 0
+    set ::move_test::sc_pos_at(vstart) 0
+    set ::move_test::sc_pos_at(end) 0
+    set ::move_test::sc_pos_at(vend) 0
+    set ::move_test::sc_game_nextMoveUCI ""
+    set ::move_test::sc_game_previousMove ""
+
+    ::move_test::stubCommand sc_var {subcmd args} {
+        switch -- $subcmd {
+            list {
+                if {[lindex $args 0] ne "UCI"} { error "sc_var list format not stubbed" }
+                return $::move_test::sc_var_list
+            }
+            count { return $::move_test::sc_var_count }
+            level { return $::move_test::sc_var_level }
+            moveInto {
+                lappend ::move_test::calls [list sc_var moveInto [lindex $args 0]]
+                return
+            }
+            exit {
+                lappend ::move_test::calls {sc_var exit}
+                return
+            }
+            default { error "sc_var $subcmd not stubbed" }
+        }
+    }
+
+    ::move_test::stubCommand sc_game {subcmd args} {
+        if {$subcmd ne "info"} { error "sc_game $subcmd not stubbed" }
+        set key [lindex $args 0]
+        switch -- $key {
+            nextMoveUCI { return $::move_test::sc_game_nextMoveUCI }
+            previous { return $::move_test::sc_game_previousMove }
+            default { error "sc_game info $key not stubbed" }
+        }
+    }
+
+    ::move_test::stubCommand sc_pos {subcmd args} {
+        if {$subcmd ne "isAt"} { error "sc_pos $subcmd not stubbed" }
+        set where [lindex $args 0]
+        if {![info exists ::move_test::sc_pos_at($where)]} {
+            error "sc_pos isAt $where not stubbed"
+        }
+        return $::move_test::sc_pos_at($where)
+    }
+
+    ::move_test::stubCommand sc_move {subcmd args} {
+        lappend ::move_test::calls [list sc_move $subcmd {*}$args]
+        return
+    }
+}
+
+proc ::move_test::cleanup {} {
+    ::move_test::restoreStubs
+
+    unset -nocomplain ::interactionHandler
+
+    unset -nocomplain ::showVarArrows
+    unset -nocomplain ::showVarPopup
+    unset -nocomplain ::autoplayMode
+
+    unset -nocomplain ::move_test::sc_var_list
+    unset -nocomplain ::move_test::sc_var_level
+    unset -nocomplain ::move_test::sc_var_count
+    unset -nocomplain ::move_test::sc_game_nextMoveUCI
+    unset -nocomplain ::move_test::sc_game_previousMove
+
+    catch {unset ::move_test::sc_pos_at}
+    catch {unset ::board::_mark}
+}
+
+source [file join [::scid_test::tclDir] move.tcl]
+
+test move-drawVarArrows-disabled-when-setting-off-1.0 {drawVarArrows returns 0 when showVarArrows is false} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarArrows 0
+    set ::move_test::sc_var_list {e2e4}
+
+    # Act
+    ::move::drawVarArrows
+} -cleanup {
+    ::move_test::cleanup
+} -result {0}
+
+test move-drawVarArrows-disabled-when-autoplaying-1.0 {drawVarArrows returns 0 when autoplayMode is true} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarArrows 1
+    set ::autoplayMode 1
+    set ::move_test::sc_var_list {e2e4}
+
+    # Act
+    ::move::drawVarArrows
+} -cleanup {
+    ::move_test::cleanup
+} -result {0}
+
+test move-drawVarArrows-honours-interactionhandler-1.0 {drawVarArrows returns 0 when interaction handler vetoes} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarArrows 1
+    ::move_test::setInteractionHandler drawVarArrows 0
+
+    # Act
+    ::move::drawVarArrows
+} -cleanup {
+    ::move_test::cleanup
+} -result {0}
+
+test move-drawVarArrows-detects-missing-arrow-1.0 {drawVarArrows returns 1 when any next move/variation arrow is missing} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarArrows 1
+    set ::autoplayMode 0
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {g1f3}
+    set ::board::_mark(.main.board) {{arrow e2 e4}}
+
+    # Act
+    ::move::drawVarArrows
+} -cleanup {
+    ::move_test::cleanup
+} -result {1}
+
+test move-drawVarArrows-noop-when-all-arrows-present-1.0 {drawVarArrows returns 0 when all arrows are already drawn} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarArrows 1
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {g1f3}
+    set ::board::_mark(.main.board) {{arrow e2 e4} {arrow g1 f3}}
+
+    # Act
+    ::move::drawVarArrows
+} -cleanup {
+    ::move_test::cleanup
+} -result {0}
+
+test move-showVarArrows-adds-arrows-for-nextmove-and-variations-1.0 {showVarArrows adds a blue arrow for next move and light-blue arrows for variations} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {g1f3 b1c3}
+
+    # Act
+    ::move::showVarArrows
+
+    # Assert
+    ::move_test::getMarkCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{.main.board arrow e2 e4 #0000ff} {.main.board arrow g1 f3 #00aaff} {.main.board arrow b1 c3 #00aaff}}
+
+test move-start-honours-interactionhandler-1.0 {Start returns early when interaction handler vetoes} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setInteractionHandler moveStart 0
+
+    # Act
+    ::move::Start
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {}
+
+test move-start-moves-and-updates-board-1.0 {Start moves to start, updates board, and optionally draws arrows} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarArrows 1
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {}
+    set ::board::_mark(.main.board) {}
+
+    # Force drawVarArrows true so Start calls showVarArrows.
+    ::move_test::stubCommand ::move::drawVarArrows {} { return 1 }
+    ::move_test::stubCommand ::move::showVarArrows {} { lappend ::move_test::calls showVarArrows; return }
+
+    # Act
+    ::move::Start
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_move start} updateBoard showVarArrows}
+
+test move-EnterVar-enters-mainline-when-zero-1.0 {EnterVar(0) uses sc_move forward and announces} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_game_previousMove "e4"
+
+    # Act
+    ::move::EnterVar 0
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_move forward} {notify PosChanged {} -animate} {sound AnnounceForward e4}}
+
+test move-EnterVar-enters-variation-when-nonzero-1.0 {EnterVar(n) uses sc_var moveInto n-1 and announces} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_game_previousMove "e4"
+
+    # Act
+    ::move::EnterVar 2
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_var moveInto 1} {notify PosChanged {} -animate} {sound AnnounceForward e4}}
+
+test move-ExitVar-returns-0-when-not-in-variation-1.0 {ExitVar returns 0 when not in a variation} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_var_level 0
+
+    # Act
+    ::move::ExitVar
+} -cleanup {
+    ::move_test::cleanup
+} -result {0}
+
+test move-ExitVar-honours-interactionhandler-1.0 {ExitVar returns early when interaction handler vetoes} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_var_level 1
+    ::move_test::setInteractionHandler moveExitVar 0
+
+    # Act
+    ::move::ExitVar
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {}
+
+test move-ExitVar-exits-and-updates-1.0 {ExitVar exits variation, updates board, and optionally draws arrows} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_var_level 1
+    ::move_test::stubCommand ::move::drawVarArrows {} { return 1 }
+    ::move_test::stubCommand ::move::showVarArrows {} { lappend ::move_test::calls showVarArrows; return }
+
+    # Act
+    ::move::ExitVar
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_var exit} updateBoard showVarArrows}
+
+test move-ExitVarOrStart-starts-when-not-in-variation-1.0 {ExitVarOrStart calls Start when ExitVar returns 0} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::stubCommand ::move::ExitVar {} { return 0 }
+    ::move_test::stubCommand ::move::Start {} { lappend ::move_test::calls Start; return }
+
+    # Act
+    ::move::ExitVarOrStart
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {Start}
+
+test move-Back-noop-at-start-1.0 {Back returns immediately at game start} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setPosFlags start 1
+
+    # Act
+    ::move::Back
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {}
+
+test move-Back-exits-variation-at-vstart-1.0 {Back exits variation when at variation start} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setPosFlags vstart 1
+    ::move_test::stubCommand ::move::ExitVar {} { lappend ::move_test::calls ExitVar; return }
+
+    # Act
+    ::move::Back
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {ExitVar}
+
+test move-Back-exits-variation-after-back-to-vstart-1.0 {Back exits variation if moving back reaches vstart} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarArrows 0
+    ::move_test::setPosFlags start 0 vstart 0
+    ::move_test::stubCommand sc_move {subcmd args} {
+        lappend ::move_test::calls [list sc_move $subcmd {*}$args]
+        if {$subcmd eq "back"} { ::move_test::setPosFlags vstart 1 }
+        return
+    }
+
+    # Act
+    ::move::Back 1
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_move back 1} {sc_var exit} {notify PosChanged {} -animate} {sound AnnounceBack}}
+
+test move-Back-count-greater-than-one-updates-board-1.0 {Back(count>1) updates board instead of animating and announcing} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setPosFlags start 0 vstart 0
+
+    # Act
+    ::move::Back 2
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_move back 2} updateBoard}
+
+test move-Forward-noop-at-end-or-vend-1.0 {Forward returns immediately at end or vend} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setPosFlags end 1
+
+    # Act
+    ::move::Forward
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {}
+
+test move-Forward-shows-arrows-instead-of-moving-1.0 {Forward shows arrows (and does not move) when drawVarArrows is true} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setPosFlags end 0 vend 0
+    ::move_test::stubCommand ::move::drawVarArrows {} { return 1 }
+    ::move_test::stubCommand ::move::showVarArrows {} { lappend ::move_test::calls showVarArrows; return }
+
+    # Act
+    ::move::Forward
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {showVarArrows}
+
+test move-Forward-shows-variations-popup-1.0 {Forward shows variations popup when enabled and variations exist} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::showVarPopup 1
+    ::move_test::setPosFlags end 0 vend 0
+    set ::move_test::sc_var_count 2
+    ::move_test::stubCommand ::move::drawVarArrows {} { return 0 }
+
+    # Act
+    ::move::Forward
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {showVars}
+
+test move-Forward-moves-and-announces-1.0 {Forward moves forward and announces when not showing arrows/popup} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setPosFlags end 0 vend 0
+    set ::move_test::sc_game_previousMove "e4"
+    ::move_test::stubCommand ::move::drawVarArrows {} { return 0 }
+    set ::move_test::sc_var_count 0
+
+    # Act
+    ::move::Forward 1
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_move forward 1} {notify PosChanged {} -animate} {sound AnnounceForward e4}}
+
+test move-Forward-count-greater-than-one-does-not-announce-1.0 {Forward(count>1) does not announce forward} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::setPosFlags end 0 vend 0
+    set ::move_test::sc_game_previousMove "e4"
+    ::move_test::stubCommand ::move::drawVarArrows {} { return 0 }
+    set ::move_test::sc_var_count 0
+
+    # Act
+    ::move::Forward 2
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_move forward 2} {notify PosChanged {} -animate}}
+
+test move-Follow-matches-next-move-1.0 {Follow enters mainline when moveUCI matches nextMoveUCI} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {g1f3}
+    ::move_test::stubCommand ::move::EnterVar {i} { lappend ::move_test::calls [list EnterVar $i]; return }
+
+    # Act
+    list [::move::Follow e2e4] $::move_test::calls
+} -cleanup {
+    ::move_test::cleanup
+} -result {1 {{EnterVar 0}}}
+
+test move-Follow-matches-variation-1.0 {Follow enters variation when moveUCI matches a variation move} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {g1f3 b1c3}
+    ::move_test::stubCommand ::move::EnterVar {i} { lappend ::move_test::calls [list EnterVar $i]; return }
+
+    # Act
+    list [::move::Follow b1c3] $::move_test::calls
+} -cleanup {
+    ::move_test::cleanup
+} -result {1 {{EnterVar 2}}}
+
+test move-Follow-matches-swapped-uci-1.0 {Follow matches swapped coordinate form via moveUCI2} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {}
+    ::move_test::stubCommand ::move::EnterVar {i} { lappend ::move_test::calls [list EnterVar $i]; return }
+
+    # Act
+    list [::move::Follow e4e2] $::move_test::calls
+} -cleanup {
+    ::move_test::cleanup
+} -result {1 {{EnterVar 0}}}
+
+test move-Follow-returns-0-when-no-match-1.0 {Follow returns 0 when moveUCI is not a next move} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    set ::move_test::sc_game_nextMoveUCI "e2e4"
+    set ::move_test::sc_var_list {g1f3}
+    ::move_test::stubCommand ::move::EnterVar {i} { error "EnterVar should not be called" }
+
+    # Act
+    ::move::Follow a2a3
+} -cleanup {
+    ::move_test::cleanup
+} -result {0}
+
+test move-PGNOffset-moves-and-updates-board-1.0 {PGNOffset moves via sc_move pgn, updates board, and optionally draws arrows} -setup {
+    ::move_test::setup
+} -body {
+    # Arrange
+    ::move_test::stubCommand ::move::drawVarArrows {} { return 1 }
+    ::move_test::stubCommand ::move::showVarArrows {} { lappend ::move_test::calls showVarArrows; return }
+
+    # Act
+    ::move::PGNOffset +3
+
+    # Assert
+    ::move_test::getCalls
+} -cleanup {
+    ::move_test::cleanup
+} -result {{sc_move pgn +3} updateBoard showVarArrows}
+
+cleanupTests
