@@ -1,4 +1,9 @@
 if(NOT DEFINED CMAKE_SCRIPT_MODE_FILE)
+  option(SCIDUP_BUILD_LINTING "Build-time linting targets" OFF)
+  if(NOT SCIDUP_BUILD_LINTING)
+    return()
+  endif()
+
   add_custom_target(tcl_lint
           COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_LIST_FILE}"
           WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"

@@ -68,15 +68,22 @@ jobs:
       run: >
         cmake 
         -B ${{ steps.strings.outputs.build-output-dir }}
+        
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        
+        -DBUILD_TESTING=ON
+        -DSCIDUP_BUILD_LINTING=ON
+        
         -DTCL_INCLUDE_PATH=${HOME}/.local/include/
         -DTCL_LIBRARY=${HOME}/.local/lib/libtcl9.0.so
         -DTCL_TCLSH=${HOME}/.local/bin/tclsh
+        
         -DTK_INCLUDE_PATH=${HOME}/.local/include/
         -DTK_LIBRARY=${HOME}/.local/lib/libtcl9tk9.0.so
         -DTK_WISH=${HOME}/.local/bin/wish
+        
         -S ${{ github.workspace }}
 
     - name: Build
