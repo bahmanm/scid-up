@@ -47,10 +47,7 @@ else()
   target_link_libraries(scidup_libs_tcl INTERFACE ${TCL_LIBRARY})
 endif()
 
-# polyglot
-file(GLOB SCIDUP_LIBS_POLYGLOT_SOURCES src/polyglot/*.cpp)
-add_library(scidup_libs_polyglot ${SCIDUP_LIBS_POLYGLOT_SOURCES})
-add_library(ScidUp::Libs::Polyglot ALIAS scidup_libs_polyglot)
+include(cmake/libs/polyglot.cmake)
 
 # scidup
 file(GLOB SCIDUP_MAIN_SOURCES src/*.h src/*.cpp)
