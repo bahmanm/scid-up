@@ -45,11 +45,11 @@ jobs:
       if: runner.os == 'Linux'
       working-directory: ${{ runner.temp }}
       run: |
-        top_dir=$(pwd)
+        PREFIX=~/.local
         
         curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
         pushd tcl9.0.3/unix
-        ./configure --prefix=~/.local --enable-64bit
+        ./configure --prefix=$PREFIX --enable-64bit
         make install
         popd
 
@@ -58,7 +58,7 @@ jobs:
         
         curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
         pushd tk9.0.3/unix
-        ./configure --prefix=~/.local --enable-64bit --with-tcl=${{ runner.temp }}/tcl9.0.3/unix
+        ./configure --prefix=$PREFIX --enable-64bit --with-tcl=${{ runner.temp }}/tcl9.0.3/unix
         make install
         popd
         
