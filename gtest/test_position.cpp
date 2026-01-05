@@ -357,12 +357,12 @@ TEST(Test_ReadFromFen, halfmove_clock) {
 	Position pos;
 	for (auto fen : valid_fens) {
 		EXPECT_EQ(OK, pos.ReadFromFEN(fen));
-		pos.PrintFEN(buf);
+		pos.PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, fen);
 	}
 	for (auto fen : invalid_fens) {
 		EXPECT_EQ(OK, pos.ReadFromFEN(fen));
-		pos.PrintFEN(buf);
+		pos.PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, "8/K7/8/8/7k/8/8/8 w - - 0 1");
 	}
 }
@@ -432,13 +432,13 @@ TEST(Test_PositionReadCoordMoves, ReadFromFENorUCI) {
 
 	EXPECT_EQ(OK,
 	          pos.ReadFromFENorUCI("   position startpos moves e2e4 c7c5 "));
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(
 	    buf, "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2");
 
 	EXPECT_EQ(OK, pos.ReadFromFENorUCI("rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/"
 	                                   "RNBQKBNR w KQkq - 0 2 moves g1f3 "));
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(
 	    buf, "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2");
 }
@@ -459,7 +459,7 @@ TEST(Test_PositionReadCoordMoves, ReadCoordMoves) {
 		EXPECT_EQ(
 		    OK, pos.MakeCoordMoves(coordMoves, std::strlen(coordMoves), &san));
 		char buf[1024];
-		pos.PrintFEN(buf);
+		pos.PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(endpos, buf);
 		EXPECT_STREQ(sanMoves, san.c_str());
 	}
@@ -529,40 +529,40 @@ TEST(Test_PositionDoSimpleMove, castling_flags) {
 
 	parse_move(pos, &sm.emplace_back(), "e1g1");
 	pos.DoSimpleMove(sm.back());
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 1");
 
 	parse_move(pos, &sm.emplace_back(), "h8g8");
 	pos.DoSimpleMove(sm.back());
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "r3k1r1/8/8/8/8/8/8/R4RK1 w q - 2 2");
 
 	parse_move(pos, &sm.emplace_back(), "g1h2");
 	pos.DoSimpleMove(sm.back());
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "r3k1r1/8/8/8/8/8/7K/R4R2 b q - 3 2");
 
 	parse_move(pos, &sm.emplace_back(), "e8c8");
 	pos.DoSimpleMove(sm.back());
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "2kr2r1/8/8/8/8/8/7K/R4R2 w - - 4 3");
 
 	// UndoSimpleMove
 	auto it = sm.crbegin();
 	pos.UndoSimpleMove(*it++);
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "r3k1r1/8/8/8/8/8/7K/R4R2 b q - 3 2");
 
 	pos.UndoSimpleMove(*it++);
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "r3k1r1/8/8/8/8/8/8/R4RK1 w q - 2 2");
 
 	pos.UndoSimpleMove(*it++);
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 1");
 
 	pos.UndoSimpleMove(*it++);
-	pos.PrintFEN(buf);
+	pos.PrintFEN(buf, sizeof(buf));
 	EXPECT_STREQ(buf, "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
 }
 
@@ -574,28 +574,28 @@ TEST(Test_PositionDoSimpleMove, castling_flags_capture) {
 		ASSERT_EQ(OK, pos.ReadFromFEN("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"));
 		parse_move(pos, &sm, "h1h8");
 		pos.DoSimpleMove(sm);
-		pos.PrintFEN(buf);
+		pos.PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, "r3k2R/8/8/8/8/8/8/R3K3 b Qq - 0 1");
 	}
 	{
 		ASSERT_EQ(OK, pos.ReadFromFEN("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"));
 		parse_move(pos, &sm, "a1a8");
 		pos.DoSimpleMove(sm);
-		pos.PrintFEN(buf);
+		pos.PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, "R3k2r/8/8/8/8/8/8/4K2R b Kk - 0 1");
 	}
 	{
 		ASSERT_EQ(OK, pos.ReadFromFEN("r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1"));
 		parse_move(pos, &sm, "h8h1");
 		pos.DoSimpleMove(sm);
-		pos.PrintFEN(buf);
+		pos.PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, "r3k3/8/8/8/8/8/8/R3K2r w Qq - 0 2");
 	}
 	{
 		ASSERT_EQ(OK, pos.ReadFromFEN("r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1"));
 		parse_move(pos, &sm, "a8a1");
 		pos.DoSimpleMove(sm);
-		pos.PrintFEN(buf);
+		pos.PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, "4k2r/8/8/8/8/8/8/r3K2R w Kk - 0 2");
 	}
 }
@@ -763,7 +763,7 @@ TEST(Test_PrintFen, castling_flag_kside) {
 	    "2bn1rkr/3pppq1/8/ppp3pp/PPP3PP/8/3PPPQ1/2BN1RKR w - - 8 6"};
 	for (auto expected : fens) {
 		char buf[1024];
-		game.currentPos()->PrintFEN(buf);
+		game.currentPos()->PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, expected);
 		game.MoveForwardInPGN();
 	}
@@ -792,7 +792,7 @@ TEST(Test_PrintFen, castling_flag_qside) {
 	    "r1kr4/1b1ppn2/8/pppQ1pPp/PPPq1PP1/8/1B1PPN2/R1KR4 b - - 2 5"};
 	for (auto expected : fens) {
 		char buf[1024];
-		game.currentPos()->PrintFEN(buf);
+		game.currentPos()->PrintFEN(buf, sizeof(buf));
 		EXPECT_STREQ(buf, expected);
 		game.MoveForwardInPGN();
 	}
@@ -816,7 +816,7 @@ TEST(Test_PrintFen, illegal_castling_flag) {
 			Position pos;
 			pos.ReadFromFEN(fen.c_str());
 			char buf[1024];
-			pos.PrintFEN(buf);
+			pos.PrintFEN(buf, sizeof(buf));
 			EXPECT_STREQ(buf, fen.c_str());
 		}
 	}
@@ -832,7 +832,7 @@ TEST(Test_PrintFen, illegal_castling_flag) {
 			Position pos;
 			pos.ReadFromFEN(fen.c_str());
 			char buf[1024];
-			pos.PrintFEN(buf);
+			pos.PrintFEN(buf, sizeof(buf));
 			EXPECT_STREQ(buf, expected.c_str());
 		}
 	}
@@ -849,7 +849,7 @@ TEST(Test_PrintFen, illegal_castling_flag) {
 			Position pos;
 			pos.ReadFromFEN(fen.c_str());
 			char buf[1024];
-			pos.PrintFEN(buf);
+			pos.PrintFEN(buf, sizeof(buf));
 			EXPECT_STREQ(buf, expected.c_str());
 		}
 	}
@@ -866,7 +866,7 @@ TEST(Test_PrintFen, illegal_castling_flag) {
 			Position pos;
 			pos.ReadFromFEN(fen.c_str());
 			char buf[1024];
-			pos.PrintFEN(buf);
+			pos.PrintFEN(buf, sizeof(buf));
 			EXPECT_STREQ(buf, expected.c_str());
 		}
 	}
