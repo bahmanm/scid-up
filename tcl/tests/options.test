@@ -1,0 +1,351 @@
+package require tcltest 2.5
+
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+
+# options.tcl expects these platform flags to exist.
+if {![info exists ::macOS]} { set ::macOS 0 }
+
+# Ensure namespaces used at file scope by options.tcl exist before sourcing it.
+namespace eval ::book {}
+namespace eval ::docking {}
+namespace eval ::novag {}
+namespace eval ::pgn {}
+namespace eval ::pinfo {}
+namespace eval ::tree::mask {}
+namespace eval ::utils {}
+namespace eval ::utils::sound {}
+namespace eval ::win {}
+namespace eval ::windows::stats {}
+
+namespace eval ::options_test {
+    variable stubbedCommands {}
+
+    # When this suite replaces the minimal `font` stub, keep the original around
+    # so we can restore it for users who run multiple suites in one interpreter.
+    variable originalFontCommand ""
+}
+
+proc ::options_test::stubCommand {name argList body} {
+    variable stubbedCommands
+    ::scid_test::mocks::stubCommand stubbedCommands $name $argList $body
+}
+
+proc ::options_test::restoreStubs {} {
+    variable stubbedCommands
+    ::scid_test::mocks::restoreStubs stubbedCommands
+}
+
+proc ::options_test::ensureGlobalDefaults {defaults} {
+    if {[llength $defaults] % 2 != 0} {
+        error "ensureGlobalDefaults expects key/value pairs, got: $defaults"
+    }
+
+    foreach {name defaultValue} $defaults {
+        set fqName $name
+        if {![string match "::*" $fqName]} {
+            set fqName "::$fqName"
+        }
+
+        if {![info exists $fqName]} {
+            set $fqName $defaultValue
+        }
+    }
+}
+
+proc ::options_test::restoreFontStub {} {
+    if {![info exists ::options_test::originalFontCommand]} { return }
+    set orig $::options_test::originalFontCommand
+    if {$orig eq ""} { return }
+    if {![llength [info commands $orig]]} { return }
+
+    if {[llength [info commands ::font]]} {
+        catch {rename ::font ""}
+    }
+    rename $orig ::font
+    set ::options_test::originalFontCommand ""
+}
+
+# Provide a richer `font` stub for options.tcl initialisation (InitDefaultFonts).
+# This replaces the minimal stub from scid_test_stubs.tcl.
+if {[llength [info commands ::font]]} {
+    catch {rename ::options_test::font__orig ""}
+    if {![catch {rename ::font ::options_test::font__orig}]} {
+        set ::options_test::originalFontCommand ::options_test::font__orig
+    }
+}
+proc ::font {subcmd args} {
+    switch -- $subcmd {
+        create {
+            # `font create name ?options...?`
+            set name ""
+            if {[llength $args] > 0} {
+                set candidate [lindex $args 0]
+                if {![string match "-*" $candidate]} {
+                    set name $candidate
+                }
+            }
+            if {$name eq ""} {
+                if {![info exists ::scid_test::font_counter]} {
+                    set ::scid_test::font_counter 0
+                }
+                incr ::scid_test::font_counter
+                set name "scid_test_font$::scid_test::font_counter"
+            }
+            return $name
+        }
+        families {
+            return {Droid Sans Arial Courier}
+        }
+        actual {
+            # Minimal support for: `font actual TkDefaultFont -family`
+            set fontName [lindex $args 0]
+            set opt [lindex $args 1]
+            if {$opt ne "-family"} {
+                error "font actual option not stubbed: $opt"
+            }
+            switch -- $fontName {
+                TkDefaultFont { return "Arial" }
+                TkFixedFont { return "Courier" }
+                default { return "Arial" }
+            }
+        }
+        default {
+            error "font $subcmd not stubbed in tests"
+        }
+    }
+}
+
+# Configure a suite-local config dir so sourcing options.tcl does not read/write
+# outside the test sandbox.
+set ::scidConfigDir [file join [::scid_test::tempDir] options_test_config_[pid]]
+file mkdir $::scidConfigDir
+catch {file delete -force [file join $::scidConfigDir options.dat]}
+
+# Source the module under test.
+source [file join [::scid_test::tclDir] options.tcl]
+
+proc ::options_test::setup {} {
+    ::options_test::restoreStubs
+
+    file mkdir $::scidConfigDir
+    catch {file delete -force [file join $::scidConfigDir options.dat]}
+
+    unset -nocomplain ::autosave_opt
+
+    unset -nocomplain ::options_test::scalar
+    catch {unset ::options_test::arr}
+
+    set ::scidVersion "test"
+
+    # options.write references some globals that are normally initialised in the
+    # full application runtime.
+    ::options_test::ensureGlobalDefaults [list \
+        ecoFile "" \
+        scidBooksDir [::scid_test::tempDir] \
+        scidBasesDir [::scid_test::tempDir] \
+        FilterMaxMoves 999 \
+        FilterMinMoves 0 \
+        FilterStepMoves 1 \
+        FilterMaxElo 4000 \
+        FilterMinElo 0 \
+        FilterStepElo 50 \
+        FilterMaxYear 2100 \
+        FilterMinYear 0 \
+        FilterStepYear 1 \
+        FilterGuessELO 0 \
+    ]
+
+    # options.write assumes these arrays exist.
+    array set ::winGeometry {}
+    array set winX {}
+    array set winY {}
+
+    ::options_test::stubCommand ::docking::layout_save {slot} { return }
+    ::options_test::stubCommand ::win::saveWinGeometry {wnd} { return }
+}
+
+proc ::options_test::cleanup {} {
+    ::options_test::restoreStubs
+
+    unset -nocomplain ::autosave_opt
+
+    unset -nocomplain ::options_test::scalar
+    catch {unset ::options_test::arr}
+
+    catch {unset ::doColorPgn}
+
+    ::options_test::restoreFontStub
+
+    catch {file delete -force $::scidConfigDir}
+}
+
+
+
+test options-store-initialises-and-registers-1.0 {options.store initialises a missing variable and registers it for persistence} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+    unset -nocomplain ::options_test::x
+
+    # Act
+    options.store ::options_test::x "abc"
+
+    # Assert
+    list $::options_test::x $::autosave_opt
+} -cleanup {
+    ::options_test::cleanup
+} -result {abc ::options_test::x}
+
+
+test options-store-does-not-overwrite-existing-1.0 {options.store does not overwrite an existing variable} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+    set ::options_test::x "keep"
+
+    # Act
+    options.store ::options_test::x "abc"
+
+    # Assert
+    list $::options_test::x $::autosave_opt
+} -cleanup {
+    ::options_test::cleanup
+} -result {keep ::options_test::x}
+
+
+test options-store-does-not-duplicate-registration-1.0 {options.store does not register the same variable more than once} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+    unset -nocomplain ::options_test::x
+
+    # Act
+    options.store ::options_test::x "abc"
+    options.store ::options_test::x "abc"
+
+    # Assert
+    list $::options_test::x $::autosave_opt
+} -cleanup {
+    ::options_test::cleanup
+} -result {abc ::options_test::x}
+
+
+test options-store-registers-arrays-1.0 {options.store registers array variables without clobbering their elements} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+    array set ::options_test::arr {a 1 b 2}
+
+    # Act
+    options.store ::options_test::arr
+
+    # Assert
+    list [array get ::options_test::arr] $::autosave_opt
+} -cleanup {
+    ::options_test::cleanup
+} -result {{a 1 b 2} ::options_test::arr}
+
+
+test options-scidConfigFile-maps-known-types-1.0 {scidConfigFile maps known types to the correct filenames} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    list \
+        [file tail [scidConfigFile options]] \
+        [file tail [scidConfigFile engines]]
+} -cleanup {
+    ::options_test::cleanup
+} -result {options.dat engines.dat}
+
+
+test options-scidConfigFile-unknown-type-errors-1.0 {scidConfigFile errors for an unknown config type} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+
+    # Act
+    set code [catch {scidConfigFile does.not.exist} msg]
+
+    # Assert
+    list $code [string match "*No such config file type*" $msg]
+} -cleanup {
+    ::options_test::cleanup
+} -result {1 1}
+
+
+test options-ConvertOldOptionVariables-copies-legacy-vars-1.0 {ConvertOldOptionVariables copies legacy global vars into their namespaced equivalents} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+    set ::pgn::showColor 1
+    set ::doColorPgn 0
+
+    # Act
+    ConvertOldOptionVariables
+
+    # Assert
+    set ::pgn::showColor
+} -cleanup {
+    ::options_test::cleanup
+} -result {0}
+
+
+test options-write-emits-autosave-vars-1.0 {options.write emits the autosave_opt section including namespace creation and array element values} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+    set ::options_test::scalar "value with spaces"
+    array set ::options_test::arr {a 1 b {two words}}
+
+    options.store ::options_test::scalar
+    options.store ::options_test::arr
+
+    # Act
+    options.write
+
+    set ch [open [scidConfigFile options] r]
+    set content [read $ch]
+    close $ch
+
+    # Assert
+    list \
+        [regexp {set ::autosave_opt .*::options_test::arr} $content] \
+        [regexp {set ::autosave_opt .*::options_test::scalar} $content] \
+        [regexp {namespace eval ::options_test \{\}} $content] \
+        [regexp {set ::options_test::scalar \{value with spaces\}} $content] \
+        [regexp {set ::options_test::arr\(a\) 1} $content] \
+        [regexp {set ::options_test::arr\(b\) \{two words\}} $content]
+} -cleanup {
+    ::options_test::cleanup
+} -result {1 1 1 1 1 1}
+
+
+test options-autoSaveHack-appends-line-1.0 {options.autoSaveHack appends the optionsAutoSave value to the options file} -setup {
+    ::options_test::setup
+} -body {
+    # Arrange
+    set ::optionsAutoSave 0
+
+    set ch [open [scidConfigFile options] w]
+    puts $ch "# seed"
+    close $ch
+
+    # Act
+    options.autoSaveHack
+
+    set ch2 [open [scidConfigFile options] r]
+    set content [read $ch2]
+    close $ch2
+
+    # Assert
+    regexp {set ::optionsAutoSave 0} $content
+} -cleanup {
+    ::options_test::cleanup
+} -result {1}
+
+
+cleanupTests
