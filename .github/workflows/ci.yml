@@ -36,13 +36,15 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up the environment
-      run: |
+      run: >
         DEPS_INSTALL_PREFIX=${{ runner.temp }}/install/
         DEPS_BUILD_PREFIX=${{ runner.temp }}/build/
         PATH=$DEPS_INSTALL_PREFIX/bin:$PATH
         env | grep -E '\bPATH\b|\bDEPS.+PREFIX\b' >> "$GITHUB_ENV"
-        
-        mkdir -p $DEPS_BUILD_PREFIX DEPS_INSTALL_PREFIX
+
+    - name: Set up the directories
+      run: >
+        mkdir -p $DEPS_BUILD_PREFIX $DEPS_INSTALL_PREFIX
 
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
