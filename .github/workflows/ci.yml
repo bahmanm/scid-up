@@ -37,13 +37,12 @@ jobs:
 
     - name: Set up the environment
       run: |
-        mkdir -p ${{ runner.temp }}/
-        echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}/" >> "$GITHUB_ENV"
+        DEPS_INSTALL_PREFIX=${{ runner.temp }}/install/
+        DEPS_BUILD_PREFIX=${{ runner.temp }}/build/
+        PATH=$DEPS_INSTALL_PREFIX/bin:$PATH
+        env | grep -E '\bPATH\b|\bDEPS.+PREFIX\b' >> "$GITHUB_ENV"
         
-        mkdir -p ${{ runner.temp }}/tmp/
-        echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/tmp/" >> "$GITHUB_ENV"
-        
-        echo "PATH=$DEPS_BUILD_PREFIX/bin:$PATH" >> $GITHUB_ENV
+        mkdir -p $DEPS_BUILD_PREFIX DEPS_INSTALL_PREFIX
 
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
