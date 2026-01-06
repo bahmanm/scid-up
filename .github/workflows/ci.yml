@@ -42,6 +42,8 @@ jobs:
         
         mkdir -p ${{ runner.temp }}/tmp/
         echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/tmp/" >> "$GITHUB_ENV"
+        
+        echo "PATH=$DEPS_BUILD_PREFIX/bin:$PATH" >> $GITHUB_ENV
 
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
