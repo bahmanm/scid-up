@@ -40,7 +40,7 @@ jobs:
         DEPS_INSTALL_PREFIX=${{ runner.temp }}/install/
         DEPS_BUILD_PREFIX=${{ runner.temp }}/build/
         PATH=$DEPS_INSTALL_PREFIX/bin:$PATH
-        env | grep -E '\bPATH\b|\bDEPS.+PREFIX\b' >> "$GITHUB_ENV"
+        env >> "$GITHUB_ENV"
 
     - name: Set up the directories
       run: >
