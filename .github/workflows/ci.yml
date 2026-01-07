@@ -35,20 +35,25 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set reusable strings
-      id: strings
-      shell: bash
+    - name: Set up the environment
       run: >
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+        DEPS_INSTALL_PREFIX=${{ runner.temp }}/install/
+        DEPS_BUILD_PREFIX=${{ runner.temp }}/build/
+        PATH=$DEPS_INSTALL_PREFIX/bin:$PATH
+        env >> "$GITHUB_ENV"
+
+    - name: Set up the directories
+      run: >
+        mkdir -p $DEPS_BUILD_PREFIX $DEPS_INSTALL_PREFIX
 
     - name: Install Tcl/Tk (Linux)
       if: runner.os == 'Linux'
       run: |
-        top_dir=$(pwd)
+        cd $DEPS_BUILD_PREFIX
         
         curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
-        pushd ${top_dir}/tcl9.0.3/unix
-        ./configure --prefix=${HOME}/.local --enable-64bit
+        pushd tcl9.0.3/unix
+        ./configure --prefix=$DEPS_INSTALL_PREFIX --enable-64bit
         make install
         popd
 
@@ -56,48 +61,43 @@ jobs:
         sudo apt-get install -y libx11-dev
         
         curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
-        pushd ${top_dir}/tk9.0.3/unix
-        ./configure --prefix=${HOME}/.local --enable-64bit --with-tcl=${top_dir}/tcl9.0.3/unix
+        pushd tk9.0.3/unix
+        ./configure --prefix=$DEPS_INSTALL_PREFIX --enable-64bit --with-tcl=$DEPS_BUILD_PREFIX/tcl9.0.3/unix
         make install
         popd
         
-        ln -sf ${HOME}/.local/bin/tclsh9.0 ${HOME}/.local/bin/tclsh
-        ln -sf ${HOME}/.local/bin/wish9.0 ${HOME}/.local/bin/wish
+        ln -sf $DEPS_INSTALL_PREFIX/bin/tclsh9.0 $DEPS_INSTALL_PREFIX/bin/tclsh
+        ln -sf $DEPS_INSTALL_PREFIX/bin/wish9.0 $DEPS_INSTALL_PREFIX/bin/wish
 
     - name: Configure
       run: >
-        cmake 
-        -B ${{ steps.strings.outputs.build-output-dir }}
+        cmake
+        --preset ci
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DTCL_INCLUDE_PATH=${HOME}/.local/include/
-        -DTCL_LIBRARY=${HOME}/.local/lib/libtcl9.0.so
-        -DTCL_TCLSH=${HOME}/.local/bin/tclsh
-        -DTK_INCLUDE_PATH=${HOME}/.local/include/
-        -DTK_LIBRARY=${HOME}/.local/lib/libtcl9tk9.0.so
-        -DTK_WISH=${HOME}/.local/bin/wish
-        -S ${{ github.workspace }}
+        -DCMAKE_PREFIX_PATH=$DEPS_INSTALL_PREFIX
 
     - name: Build
       run: >
-        cmake 
-        --build ${{ steps.strings.outputs.build-output-dir }} 
-        --config ${{ matrix.build_type }}
+        cmake
+        --build
+        --preset ci
         --verbose
 
     - name: Lint
-      run: >
-        curl -LsSf https://astral.sh/uv/install.sh | sh;
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh \
+        | env UV_INSTALL_DIR=$DEPS_INSTALL_PREFIX/bin bash
         
-        cmake
-        --build ${{ steps.strings.outputs.build-output-dir }} 
-        --target tcl_lint
+        cmake \
+        --build \
+        --preset ci \
+        --target tcl_lint \
         || echo "Ignored linter violations. For now."
 
     - name: Test
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: >
-        ctest 
-        --build-config ${{ matrix.build_type }}
+        ctest
+        --preset ci
         --verbose

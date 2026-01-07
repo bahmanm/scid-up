@@ -1,0 +1,88 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 30,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Hack away; all checks on!",
+      "description": "Local programming setup: fast iteration build with tests + lint enabled.",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "SCIDUP_BUILD_LINTING": "ON"
+      }
+    },
+    {
+      "name": "dev-no-checks",
+      "displayName": "Hack cautiously; all checks off!",
+      "description": "Local setup: fast iteration build without any tests or linting.",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "OFF",
+        "SCIDUP_BUILD_LINTING": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Release build; no checks.",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "SCIDUP_BUILD_LINTING": "OFF"
+      }
+    },
+    {
+      "name": "ci",
+      "displayName": "CI",
+      "description": "For CI pipelines.",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "SCIDUP_BUILD_LINTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "dev-no-checks",
+      "configurePreset": "dev-no-checks"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "ci",
+      "configurePreset": "ci"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci",
+      "configurePreset": "ci",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

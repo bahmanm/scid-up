@@ -142,7 +142,7 @@ proc InitDirs {} {
 
   # scidShareDir, scidImgDir, scidTclDir, scidBooksDir, scidBasesDir, ecoFile:
   # Location of Scid resources
-  set scidShareDir [file normalize [file join $scidExeDir "../share/scid"]]
+  set scidShareDir [file normalize [file join $scidExeDir "../share/scid-up"]]
   if {! [file isdirectory $::scidShareDir]} {
     set scidShareDir $::scidExeDir
   }
