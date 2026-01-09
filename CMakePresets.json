@@ -40,6 +40,19 @@
       }
     },
     {
+      "name": "portable",
+      "displayName": "Portable Archive",
+      "description": "Release build configured for portable archive packaging (bundles Tcl/Tk).",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SCIDUP_PORTABLE_ARCHIVE": "ON",
+        "BUILD_TESTING": "OFF",
+        "SCIDUP_BUILD_LINTING": "OFF",
+        "SCIDUP_BUNDLE_TCL_TK": "ON"
+      }
+    },
+    {
       "name": "ci",
       "displayName": "CI",
       "description": "For CI pipelines.",
@@ -65,8 +78,23 @@
       "configurePreset": "release"
     },
     {
+      "name": "portable",
+      "configurePreset": "portable"
+    },
+    {
       "name": "ci",
       "configurePreset": "ci"
+    }
+  ],
+  "packagePresets": [
+    {
+      "name": "portable-tgz",
+      "displayName": "Portable (TGZ)",
+      "description": "Creates a portable .tar.gz from the portable install tree.",
+      "configurePreset": "portable",
+      "generators": [
+        "TGZ"
+      ]
     }
   ],
   "testPresets": [
