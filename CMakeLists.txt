@@ -20,6 +20,7 @@ project(
     LANGUAGES CXX )
 
 include( GNUInstallDirs )
+include( cmake/package/portable/layout.cmake )
 include( cmake/general.cmake )
 include( cmake/libs/threads.cmake )
 include( cmake/libs/tcl.cmake )
