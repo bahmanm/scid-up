@@ -32,6 +32,29 @@ add_executable(
 set_target_properties(
     scidup_main
     PROPERTIES OUTPUT_NAME "scid-up" )
+
+if( DEFINED SCIDUP_BUNDLE_TCL_TK AND SCIDUP_BUNDLE_TCL_TK AND UNIX AND NOT WIN32 )
+    file(
+        RELATIVE_PATH
+        _scidup_relative_library_directory
+        "${CMAKE_INSTALL_FULL_BINDIR}"
+        "${CMAKE_INSTALL_FULL_LIBDIR}" )
+
+    if( _scidup_relative_library_directory STREQUAL "." )
+        set( _scidup_relative_library_directory "" )
+    endif()
+
+    if( APPLE )
+        set( _scidup_install_rpath "@loader_path/${_scidup_relative_library_directory}" )
+    else()
+        set( _scidup_install_rpath "$ORIGIN/${_scidup_relative_library_directory}" )
+    endif()
+
+    set_target_properties(
+        scidup_main
+        PROPERTIES INSTALL_RPATH "${_scidup_install_rpath}" )
+endif()
+
 set_property(
     TARGET scidup_main
     PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE True )
