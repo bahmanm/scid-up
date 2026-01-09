@@ -19,8 +19,8 @@ project(
     VERSION 5.1.0
     LANGUAGES CXX )
 
-include( GNUInstallDirs )
 include( cmake/package/portable/layout.cmake )
+include( GNUInstallDirs )
 include( cmake/general.cmake )
 include( cmake/libs/threads.cmake )
 include( cmake/libs/tcl.cmake )

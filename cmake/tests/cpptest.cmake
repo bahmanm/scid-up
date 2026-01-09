@@ -1,6 +1,8 @@
 include( cmake/libs/threads.cmake )
 
 include( FetchContent )
+set( INSTALL_GTEST OFF CACHE BOOL "Disable installation rules for googletest." FORCE )
+set( BUILD_GMOCK OFF CACHE BOOL "Do not build GoogleMock (ScidUp tests use GoogleTest only)." FORCE )
 fetchcontent_declare(
     googletest
     URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
