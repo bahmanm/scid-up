@@ -46,6 +46,7 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{DEPS_INSTALL_PREFIX};$env{CMAKE_PREFIX_PATH}",
         "SCIDUP_PORTABLE_ARCHIVE": "ON",
         "BUILD_TESTING": "OFF",
         "SCIDUP_BUILD_LINTING": "OFF",
@@ -59,6 +60,7 @@
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{DEPS_INSTALL_PREFIX};$env{CMAKE_PREFIX_PATH}",
         "BUILD_TESTING": "ON",
         "SCIDUP_BUILD_LINTING": "ON"
       }

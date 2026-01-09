@@ -33,6 +33,12 @@ set_target_properties(
     scidup_main
     PROPERTIES OUTPUT_NAME "scid-up" )
 
+if( SCIDUP_PORTABLE_ARCHIVE )
+    target_compile_definitions(
+        scidup_main
+        PRIVATE SCIDUP_PORTABLE_ARCHIVE_MODE=1 )
+endif()
+
 if( DEFINED SCIDUP_BUNDLE_TCL_TK AND SCIDUP_BUNDLE_TCL_TK AND UNIX AND NOT WIN32 )
     file(
         RELATIVE_PATH
