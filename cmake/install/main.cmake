@@ -38,3 +38,5 @@ file(
 install(
     FILES ${ECO_FILES}
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
+
+include( cmake/install/tcl-tk.cmake )
