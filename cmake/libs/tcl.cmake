@@ -1,6 +1,74 @@
 set( SCIDUP_REQUIRED_TCLTK_PATCHLEVEL "9.0.3" )
 
 ###############################################################################
+# Exclusively use DEPS_INSTALL_PREFIX to avoid mixing installation
+# from different providers, e.g. OS.
+set( _scidup_dependencies_install_prefix "" )
+if( DEFINED ENV{DEPS_INSTALL_PREFIX} AND NOT "$ENV{DEPS_INSTALL_PREFIX}" STREQUAL "" )
+    set( _scidup_dependencies_install_prefix "$ENV{DEPS_INSTALL_PREFIX}" )
+endif()
+
+if( _scidup_dependencies_install_prefix )
+    find_program(
+        _scidup_tclsh_from_prefix
+        NAMES tclsh tclsh9.0
+        HINTS "${_scidup_dependencies_install_prefix}/bin"
+        NO_DEFAULT_PATH )
+    if( _scidup_tclsh_from_prefix )
+        set( TCL_TCLSH "${_scidup_tclsh_from_prefix}" CACHE FILEPATH "Path to tclsh" FORCE )
+    endif()
+
+    find_program(
+        _scidup_wish_from_prefix
+        NAMES wish wish9.0
+        HINTS "${_scidup_dependencies_install_prefix}/bin"
+        NO_DEFAULT_PATH )
+    if( _scidup_wish_from_prefix )
+        set( TK_WISH "${_scidup_wish_from_prefix}" CACHE FILEPATH "Path to wish" FORCE )
+    endif()
+
+    find_path(
+        _scidup_tcl_include_from_prefix
+        NAMES tcl.h
+        HINTS
+            "${_scidup_dependencies_install_prefix}/include"
+            "${_scidup_dependencies_install_prefix}/include/tcl-tk"
+        NO_DEFAULT_PATH )
+    if( _scidup_tcl_include_from_prefix )
+        set( TCL_INCLUDE_PATH "${_scidup_tcl_include_from_prefix}" CACHE PATH "Path to Tcl headers" FORCE )
+    endif()
+
+    find_path(
+        _scidup_tk_include_from_prefix
+        NAMES tk.h
+        HINTS
+            "${_scidup_dependencies_install_prefix}/include"
+            "${_scidup_dependencies_install_prefix}/include/tcl-tk"
+        NO_DEFAULT_PATH )
+    if( _scidup_tk_include_from_prefix )
+        set( TK_INCLUDE_PATH "${_scidup_tk_include_from_prefix}" CACHE PATH "Path to Tk headers" FORCE )
+    endif()
+
+    find_library(
+        _scidup_tcl_library_from_prefix
+        NAMES tcl9.0 tcl9 tcl
+        HINTS "${_scidup_dependencies_install_prefix}/lib"
+        NO_DEFAULT_PATH )
+    if( _scidup_tcl_library_from_prefix )
+        set( TCL_LIBRARY "${_scidup_tcl_library_from_prefix}" CACHE FILEPATH "Path to Tcl library" FORCE )
+    endif()
+
+    find_library(
+        _scidup_tk_library_from_prefix
+        NAMES tk9.0 tcl9tk9.0 tk9 tk
+        HINTS "${_scidup_dependencies_install_prefix}/lib"
+        NO_DEFAULT_PATH )
+    if( _scidup_tk_library_from_prefix )
+        set( TK_LIBRARY "${_scidup_tk_library_from_prefix}" CACHE FILEPATH "Path to Tk library" FORCE )
+    endif()
+endif()
+
+###############################################################################
 set( _scidup_original_cmake_find_framework "${CMAKE_FIND_FRAMEWORK}" )
 if( APPLE )
     set( CMAKE_FIND_FRAMEWORK LAST )

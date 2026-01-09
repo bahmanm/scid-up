@@ -270,8 +270,54 @@ inline int sc_search_obj      (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj*
 inline int sc_tree_obj        (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_tree, cd, ti, objc, objv); }
 inline int sc_var_obj         (ClientData cd, Tcl_Interp* ti, int objc, Tcl_Obj* const objv[]) { return UI_impl::LegacyCmdFromObjv(sc_var, cd, ti, objc, objv); }
 
+#ifndef SCIDUP_PORTABLE_ARCHIVE_MODE
+#define SCIDUP_PORTABLE_ARCHIVE_MODE 0
+#endif
+
+inline void ConfigureTclTkForPortableArchive(UI_impl::UI_handle_t ti)
+{
+	if (SCIDUP_PORTABLE_ARCHIVE_MODE == 0) {
+		return;
+	}
+
+	const char* executable_name = Tcl_GetNameOfExecutable();
+	if (executable_name == nullptr || *executable_name == '\0') {
+		return;
+	}
+
+	#ifndef WIN32
+	char* resolved_executable_name = realpath(executable_name, 0);
+	const char* executable_path = (resolved_executable_name != nullptr) ? resolved_executable_name : executable_name;
+	#else
+	const char* executable_path = executable_name;
+	#endif
+
+	std::string executable_path_string(executable_path);
+
+	#ifndef WIN32
+	if (resolved_executable_name != nullptr) free(resolved_executable_name);
+	#endif
+
+	const auto last_slash = executable_path_string.find_last_of('/');
+	if (last_slash == std::string::npos) {
+		return;
+	}
+
+	std::string executable_directory = executable_path_string.substr(0, last_slash);
+	std::string bundle_root = executable_directory + "/..";
+	std::string tcl_library_directory = bundle_root + "/lib/tcl" + std::string(TCL_VERSION);
+	std::string tk_library_directory = bundle_root + "/lib/tk" + std::string(TCL_VERSION);
+
+	Tcl_SetVar(ti, "tcl_library", tcl_library_directory.c_str(), TCL_GLOBAL_ONLY);
+	Tcl_SetVar(ti, "tk_library", tk_library_directory.c_str(), TCL_GLOBAL_ONLY);
+	Tcl_SetVar2(ti, "env", "TCL_LIBRARY", tcl_library_directory.c_str(), TCL_GLOBAL_ONLY);
+	Tcl_SetVar2(ti, "env", "TK_LIBRARY", tk_library_directory.c_str(), TCL_GLOBAL_ONLY);
+}
+
 inline int UI_impl::initTclTk (UI_handle_t ti)
 {
+	ConfigureTclTkForPortableArchive(ti);
+
 	if (Tcl_Init (ti) == TCL_ERROR) { return TCL_ERROR; }
 
 	Tcl_CreateObjCommand(ti, "strIsPrefix" , str_is_prefix_obj , 0, nullptr);
