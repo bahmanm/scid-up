@@ -17,8 +17,8 @@
 
 # The "\" at the end of the comment line below is necessary! It means
 #   that the "exec" line is a comment to Tcl/Tk, but not to /bin/sh.
-# The next line restarts using tkscid: \
-exec `dirname $0`/tkscid "$0" "$@"
+# The next line restarts using scid-up: \
+exec `dirname $0`/../../../bin/scid-up "$0" "$@"
 # exec tkscid "$0" "$@"
 
 # The above launches tkscid from the same directory that this startup
@@ -111,6 +111,7 @@ if {[tk windowingsystem] == "aqua"} {
 proc InitDirs {} {
   global scidExeDir scidUserDir scidConfigDir scidDataDir scidLogDir scidShareDir scidImgDir scidTclDir
   global scidBooksDir scidBasesDir ecoFile
+  global scidUpIsBundle scidUpBundleRoot scidUpBundleLibraryDir
 
   # scidExeDir: contains the directory of the Scid executable program.
   # Used to determine the location of various relative data directories.
@@ -123,6 +124,13 @@ proc InitDirs {} {
     }
   } else {
     set scidExeDir [file dirname $scidExecutable]
+  }
+
+  set scidUpBundleRoot [file normalize [file join $scidExeDir ".."]]
+  set scidUpBundleLibraryDir [file join $scidUpBundleRoot "lib"]
+  set scidUpIsBundle 0
+  if {[file exists [file join $scidUpBundleLibraryDir "tcl9" "9.0" "init.tcl"]] && [file exists [file join $scidUpBundleLibraryDir "tk9.0" "tk.tcl"]]} {
+    set scidUpIsBundle 1
   }
 
   # scidUserDir: location of user-specific Scid files.
