@@ -7,6 +7,11 @@ if( NOT SCIDUP_PORTABLE_ARCHIVE )
     return()
 endif()
 
+set( CMAKE_INSTALL_PREFIX "/" )
+set( CMAKE_INSTALL_BINDIR "/bin" )
+set( CMAKE_INSTALL_LIBDIR "/lib" )
+set( CMAKE_INSTALL_DATADIR "/share" )
+
 set(
     CMAKE_INSTALL_PREFIX
     "/"
@@ -16,22 +21,21 @@ set(
 
 set(
     CMAKE_INSTALL_BINDIR
-    "bin"
+    "/bin"
     CACHE PATH
     "Executable directory for portable archives."
     FORCE )
 
 set(
     CMAKE_INSTALL_LIBDIR
-    "lib"
+    "/lib"
     CACHE PATH
     "Library directory for portable archives."
     FORCE )
 
 set(
     CMAKE_INSTALL_DATADIR
-    "share"
+    "/share"
     CACHE PATH
     "Data directory for portable archives."
     FORCE )
-

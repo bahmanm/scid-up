@@ -9,3 +9,4 @@ endif()
 
 include( cmake/tests/cpptest.cmake )
 include( cmake/tests/tcl.cmake )
+include( cmake/tests/portable.cmake )
