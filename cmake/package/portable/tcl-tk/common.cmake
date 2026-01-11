@@ -40,71 +40,107 @@ if( NOT DEFINED TK_LIBRARY OR TK_LIBRARY STREQUAL "" )
     )
 endif()
 
-function( _scidup_find_unique_runtime_directory output_variable prefix runtime_glob description )
-    file(
-        GLOB
-        _scidup_runtime_candidates
-        CONFIGURE_DEPENDS
-        "${prefix}/lib/${runtime_glob}" )
-
-    list( LENGTH _scidup_runtime_candidates _scidup_runtime_candidate_count )
-    if( _scidup_runtime_candidate_count EQUAL 0 )
-        message(
-            FATAL_ERROR
-            "Failed to locate ${description} under ${prefix}/lib.\n"
-            "Expected a match for: ${prefix}/lib/${runtime_glob}\n"
-        )
-    endif()
-
-    if( _scidup_runtime_candidate_count GREATER 1 )
-        string( JOIN "\n" _scidup_runtime_candidates_joined ${_scidup_runtime_candidates} )
-        message(
-            FATAL_ERROR
-            "Found multiple candidates for ${description} under ${prefix}/lib.\n"
-            "Matches:\n${_scidup_runtime_candidates_joined}\n"
-        )
-    endif()
-
-    list( GET _scidup_runtime_candidates 0 _scidup_runtime_entry )
-    get_filename_component( _scidup_runtime_directory "${_scidup_runtime_entry}" DIRECTORY )
-    set( "${output_variable}" "${_scidup_runtime_directory}" PARENT_SCOPE )
-endfunction()
-
-_scidup_find_unique_runtime_directory(
-    _scidup_tcl_runtime_directory
-    "${SCIDUP_TCL_TK_PREFIX}"
-    "tcl*/init.tcl"
-    "Tcl runtime scripts" )
-
-_scidup_find_unique_runtime_directory(
-    _scidup_tk_runtime_directory
-    "${SCIDUP_TCL_TK_PREFIX}"
-    "tk*/tk.tcl"
-    "Tk runtime scripts" )
-
-set( _scidup_tcl_packages_directory "" )
-string( REGEX MATCH "tcl([0-9]+)" _scidup_tcl_major_match "${_scidup_tcl_runtime_directory}" )
-if( CMAKE_MATCH_1 )
-    set( _scidup_tcl_packages_directory "${SCIDUP_TCL_TK_PREFIX}/lib/tcl${CMAKE_MATCH_1}" )
+if( NOT DEFINED TCL_TCLSH OR TCL_TCLSH STREQUAL "" )
+    message(
+        FATAL_ERROR
+        "SCIDUP_BUNDLE_TCL_TK is enabled, but TCL_TCLSH is empty.\n"
+        "Please ensure find_package(TCL) succeeded.\n"
+    )
 endif()
-
-if( _scidup_tcl_packages_directory STREQUAL _scidup_tcl_runtime_directory )
-    set( _scidup_tcl_packages_directory "" )
-endif()
-
-if( _scidup_tcl_packages_directory AND NOT IS_DIRECTORY "${_scidup_tcl_packages_directory}" )
-    set( _scidup_tcl_packages_directory "" )
+if( NOT EXISTS "${TCL_TCLSH}" )
+    message(
+        FATAL_ERROR
+        "SCIDUP_BUNDLE_TCL_TK is enabled, but TCL_TCLSH does not exist: ${TCL_TCLSH}\n"
+    )
 endif()
 
 set(
-    _scidup_tcl_tk_runtime_directories
-    "${_scidup_tcl_runtime_directory}"
-    "${_scidup_tk_runtime_directory}" )
-if( _scidup_tcl_packages_directory )
-    list( APPEND _scidup_tcl_tk_runtime_directories "${_scidup_tcl_packages_directory}" )
+    _scidup_tcl_info_script
+    "puts \"patchlevel=[info patchlevel]\"\n"
+    "puts \"library=[info library]\"\n"
+    "puts \"tcl_library=$tcl_library\"\n"
+    "exit\n"
+)
+set( _scidup_tcl_info_script_file "${CMAKE_BINARY_DIR}/scidup-tcl-info.tcl" )
+file( WRITE "${_scidup_tcl_info_script_file}" "${_scidup_tcl_info_script}" )
+
+execute_process(
+    COMMAND "${TCL_TCLSH}" "${_scidup_tcl_info_script_file}"
+    RESULT_VARIABLE _scidup_tcl_info_result
+    OUTPUT_VARIABLE _scidup_tcl_info_output
+    ERROR_VARIABLE _scidup_tcl_info_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if( NOT _scidup_tcl_info_result EQUAL 0 )
+    message(
+        FATAL_ERROR
+        "Failed to execute TCL_TCLSH to validate the bundled Tcl installation.\n"
+        "TCL_TCLSH=${TCL_TCLSH}\n"
+        "stdout:\n${_scidup_tcl_info_output}\n"
+        "stderr:\n${_scidup_tcl_info_error}\n"
+    )
 endif()
 
-install(
-    DIRECTORY ${_scidup_tcl_tk_runtime_directories}
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    USE_SOURCE_PERMISSIONS )
+string( REPLACE "\r" "" _scidup_tcl_info_output "${_scidup_tcl_info_output}" )
+
+string( REGEX MATCH "(^|\n)patchlevel=([0-9]+\\.[0-9]+\\.[0-9]+)" _scidup_patchlevel_match "${_scidup_tcl_info_output}" )
+set( _scidup_patchlevel "${CMAKE_MATCH_2}" )
+
+string( REGEX MATCH "(^|\n)library=([^\n]*)" _scidup_library_match "${_scidup_tcl_info_output}" )
+set( _scidup_tcl_info_library "${CMAKE_MATCH_2}" )
+
+if( NOT _scidup_patchlevel OR _scidup_patchlevel STREQUAL "" )
+    message(
+        FATAL_ERROR
+        "Failed to parse Tcl patchlevel from TCL_TCLSH output:\n${_scidup_tcl_info_output}\n"
+    )
+endif()
+if( NOT _scidup_tcl_info_library OR _scidup_tcl_info_library STREQUAL "" )
+    message(
+        FATAL_ERROR
+        "Failed to parse 'info library' from TCL_TCLSH output:\n${_scidup_tcl_info_output}\n"
+    )
+endif()
+
+if( NOT _scidup_tcl_info_library MATCHES "^//zipfs:" )
+    message(
+        FATAL_ERROR
+        "The portable archive assumes zipfs-backed Tcl/Tk, but Tcl reports a non-zipfs library path.\n"
+        "patchlevel=${_scidup_patchlevel}\n"
+        "info library=${_scidup_tcl_info_library}\n"
+    )
+endif()
+
+string( REGEX MATCH "^([0-9]+)\\.([0-9]+)\\." _scidup_patchlevel_components "${_scidup_patchlevel}" )
+set( _scidup_tcl_version_major "${CMAKE_MATCH_1}" )
+set( _scidup_tcl_version_minor "${CMAKE_MATCH_2}" )
+
+set( _scidup_tcl_tk_runtime_directories "" )
+
+set( _scidup_tcl_major_dir "${SCIDUP_TCL_TK_PREFIX}/lib/tcl${_scidup_tcl_version_major}" )
+if( IS_DIRECTORY "${_scidup_tcl_major_dir}" )
+    list( APPEND _scidup_tcl_tk_runtime_directories "${_scidup_tcl_major_dir}" )
+endif()
+
+set( _scidup_tk_version_dir "${SCIDUP_TCL_TK_PREFIX}/lib/tk${_scidup_tcl_version_major}.${_scidup_tcl_version_minor}" )
+if( IS_DIRECTORY "${_scidup_tk_version_dir}" )
+    list( APPEND _scidup_tcl_tk_runtime_directories "${_scidup_tk_version_dir}" )
+endif()
+
+file(
+    GLOB
+    _scidup_pkgindex_files
+    CONFIGURE_DEPENDS
+    "${SCIDUP_TCL_TK_PREFIX}/lib/*/pkgIndex.tcl" )
+foreach( _scidup_pkgindex_file IN LISTS _scidup_pkgindex_files )
+    get_filename_component( _scidup_pkgindex_directory "${_scidup_pkgindex_file}" DIRECTORY )
+    list( APPEND _scidup_tcl_tk_runtime_directories "${_scidup_pkgindex_directory}" )
+endforeach()
+list( REMOVE_DUPLICATES _scidup_tcl_tk_runtime_directories )
+
+if( _scidup_tcl_tk_runtime_directories )
+    install(
+        DIRECTORY ${_scidup_tcl_tk_runtime_directories}
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        USE_SOURCE_PERMISSIONS )
+endif()

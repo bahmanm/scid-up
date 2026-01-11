@@ -51,13 +51,13 @@ jobs:
 
           curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
           pushd tcl9.0.3/unix
-          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --enable-zipfs
           make install
           popd
 
           curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
           pushd tk9.0.3/unix
-          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --with-tcl="$DEPS_BUILD_PREFIX/tcl9.0.3/unix"
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --enable-zipfs --with-tcl="$DEPS_BUILD_PREFIX/tcl9.0.3/unix"
           make install
           popd
 
@@ -71,13 +71,13 @@ jobs:
 
           curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
           pushd tcl9.0.3/unix
-          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --enable-zipfs
           make install
           popd
 
           curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
           pushd tk9.0.3/unix
-          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --enable-aqua --with-tcl="$DEPS_BUILD_PREFIX/tcl9.0.3/unix"
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --enable-zipfs --enable-aqua --with-tcl="$DEPS_BUILD_PREFIX/tcl9.0.3/unix"
           make install
           popd
 
@@ -153,15 +153,15 @@ jobs:
           curl.exe -L "http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz" -o tcl9.0.3-src.tar.gz
           tar -xzf tcl9.0.3-src.tar.gz
           Push-Location tcl9.0.3\\win
-          nmake -f makefile.vc release
-          nmake -f makefile.vc install INSTALLDIR=$env:DEPS_INSTALL_PREFIX
+          nmake -f makefile.vc release OPTS=none
+          nmake -f makefile.vc install OPTS=none INSTALLDIR=$env:DEPS_INSTALL_PREFIX
           Pop-Location
 
           curl.exe -L "http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz" -o tk9.0.3-src.tar.gz
           tar -xzf tk9.0.3-src.tar.gz
           Push-Location tk9.0.3\\win
-          nmake -f makefile.vc release TCLDIR=..\\..\\tcl9.0.3
-          nmake -f makefile.vc install INSTALLDIR=$env:DEPS_INSTALL_PREFIX TCLDIR=..\\..\\tcl9.0.3
+          nmake -f makefile.vc release OPTS=none TCLDIR=..\\..\\tcl9.0.3
+          nmake -f makefile.vc install OPTS=none INSTALLDIR=$env:DEPS_INSTALL_PREFIX TCLDIR=..\\..\\tcl9.0.3
           Pop-Location
 
           if (!(Test-Path "$env:DEPS_INSTALL_PREFIX\\bin\\tclsh.exe")) {
