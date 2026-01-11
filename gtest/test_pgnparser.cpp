@@ -16,6 +16,7 @@
 
 #include "game.h"
 #include "pgnparse.h"
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -42,6 +43,11 @@ auto readFile(const char* filename) {
 	return res;
 }
 
+std::string normaliseNewlines(std::string text) {
+	text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+	return text;
+}
+
 } // end of anonymous namespace
 
 TEST(Test_PgnParser, UTF8_char) {
@@ -57,7 +63,7 @@ TEST(Test_PgnParser, UTF8_char) {
 	                   PGN_STYLE_SCIDFLAGS);
 	auto pgn = game.WriteToPGN(75, true);
 
-	ASSERT_STREQ(pgnUTF8.c_str(), pgn.first);
+	ASSERT_EQ(normaliseNewlines(std::move(pgnUTF8)), normaliseNewlines(std::string{pgn.first}));
 }
 
 TEST(Test_PgnParser, Latin1_char) {
@@ -76,7 +82,7 @@ TEST(Test_PgnParser, Latin1_char) {
 	auto pgnUTF8 = readFile(gameLatin1Conv);
 	ASSERT_TRUE(pgnUTF8.size() > 0);
 
-	ASSERT_STREQ(pgnUTF8.c_str(), pgn.first);
+	ASSERT_EQ(normaliseNewlines(std::move(pgnUTF8)), normaliseNewlines(std::string{pgn.first}));
 }
 
 TEST(Test_PgnParser, EPD) {
