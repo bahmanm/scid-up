@@ -19,17 +19,15 @@
 #   that the "exec" line is a comment to Tcl/Tk, but not to /bin/sh.
 # The next line restarts using scid-up: \
 exec `dirname $0`/../../../bin/scid-up "$0" "$@"
-# exec tkscid "$0" "$@"
 
-# The above launches tkscid from the same directory that this startup
-# script was launched from (which feels as a suitable default scenario).
+# The above launches scid-up from a location relative to this script.
 # Alternatively, you can change the top line of this startup script
-# to start tkscid directly from a specific location, e.g.:
+# to start scid-up directly from a specific location, e.g.:
 
-# For the above to work, tkscid must be in a directory in your PATH.
-# Alternatively, you can set the first line to start tkscid directly
-# by specifying the full name of tkscid, eg:
-# #!/home/myname/bin/tkscid
+# For the above to work, scid-up must be in a directory in your PATH.
+# Alternatively, you can set the first line to start scid-up directly
+# by specifying the full name of scid-up, e.g.:
+# #!/home/myname/bin/scid-up
 
 ############################################################
 

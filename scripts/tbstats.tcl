@@ -4,10 +4,15 @@
 #   Scid script to show the number of times each material configuration
 #   covered by an endgame tablebase occurs in a given Scid database.
 #   Usage: tbstats database-name
-#      or: tkscid tbstats.tcl database-name
+#      or: scid-up tbstats.tcl database-name
 
 # The "\" at the end of this line is necessary: \
-exec tkscid "$0" "$@"
+bindir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+if [ -x "$bindir/scid-up" ]; then
+  exec "$bindir/scid-up" "$0" "$@"
+else
+  exec scid-up "$0" "$@"
+fi
 
 array set p {0 q  1 r  2 b  3 n  4 p}
 set pieces {0 1 2 3 4}

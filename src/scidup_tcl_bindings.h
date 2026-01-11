@@ -1,7 +1,7 @@
 /////////////////////////////////////////////////////////////////////
 //
-//  FILE:       tkscid.h
-//              Scid extensions to Tcl/Tk interpreter
+//  FILE:       scidup_tcl_bindings.h
+//              ScidUp Tcl/Tk bindings
 //
 //  Part of:    Scid (Shane's Chess Information Database)
 //
@@ -101,5 +101,5 @@ int sc_book_positions (TCL_ARGS);
 int sc_book_update    (TCL_ARGS);
 int sc_book_movesupdate (TCL_ARGS);
 //////////////////////////////////////////////////////////////////////
-/// END of tkscid.h
+/// END of scidup_tcl_bindings.h
 //////////////////////////////////////////////////////////////////////

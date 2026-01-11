@@ -1,7 +1,7 @@
 //////////////////////////////////////////////////////////////////////
 //
-//  FILE:       tkscid.cpp
-//              Scid extensions to Tcl/Tk interpreter
+//  FILE:       scidup_tcl_bindings.cpp
+//              ScidUp Tcl/Tk bindings
 //
 //  Part of:    Scid (Shane's Chess Information Database)
 //
@@ -52,7 +52,7 @@
 #include <unordered_map>
 
 //TODO: delete
-#include "tkscid.h"
+#include "scidup_tcl_bindings.h"
 
 
 //TODO: delete
@@ -8503,5 +8503,5 @@ sc_book_movesupdate (ClientData, Tcl_Interp * ti, int argc, const char ** argv)
     return TCL_OK;
 }
 //////////////////////////////////////////////////////////////////////
-/// END of tkscid.cpp
+/// END of scidup_tcl_bindings.cpp
 //////////////////////////////////////////////////////////////////////

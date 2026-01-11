@@ -5,8 +5,13 @@
 #
 # Usage:  sc_spell <scid-database> <eco-file>
 
-# The next line restarts using tkscid: \
-exec tkscid "$0" "$@"
+# The next line restarts using scid-up: \
+bindir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+if [ -x "$bindir/scid-up" ]; then
+  exec "$bindir/scid-up" "$0" "$@"
+else
+  exec scid-up "$0" "$@"
+fi
 
 set args [llength $argv]
 if {$args != 2} {
