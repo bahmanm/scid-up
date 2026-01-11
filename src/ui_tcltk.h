@@ -305,13 +305,14 @@ inline void ConfigureTclTkForPortableArchive(UI_impl::UI_handle_t ti)
 
 	std::string executable_directory = executable_path_string.substr(0, last_slash);
 	std::string bundle_root = executable_directory + "/..";
-	std::string tcl_library_directory = bundle_root + "/lib/tcl" + std::string(TCL_VERSION);
-	std::string tk_library_directory = bundle_root + "/lib/tk" + std::string(TCL_VERSION);
 
-	Tcl_SetVar(ti, "tcl_library", tcl_library_directory.c_str(), TCL_GLOBAL_ONLY);
-	Tcl_SetVar(ti, "tk_library", tk_library_directory.c_str(), TCL_GLOBAL_ONLY);
-	Tcl_SetVar2(ti, "env", "TCL_LIBRARY", tcl_library_directory.c_str(), TCL_GLOBAL_ONLY);
-	Tcl_SetVar2(ti, "env", "TK_LIBRARY", tk_library_directory.c_str(), TCL_GLOBAL_ONLY);
+	// Prefer bundled Tcl packages (if any) via TCLLIBPATH when running from a portable archive.
+	const std::string tcllibpath_directory = bundle_root + "/lib";
+	Tcl_Obj* tcllibpath_list = Tcl_NewListObj(0, nullptr);
+	Tcl_ListObjAppendElement(ti, tcllibpath_list, Tcl_NewStringObj(tcllibpath_directory.c_str(), -1));
+	Tcl_IncrRefCount(tcllibpath_list);
+	Tcl_SetVar2Ex(ti, "env", "TCLLIBPATH", tcllibpath_list, TCL_GLOBAL_ONLY);
+	Tcl_DecrRefCount(tcllibpath_list);
 }
 
 inline int UI_impl::initTclTk (UI_handle_t ti)

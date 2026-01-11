@@ -23,8 +23,7 @@ file(
     "puts \"library=[info library]\"\n"
     "puts \"tcl_library=$tcl_library\"\n"
     "if {[info exists tk_library]} { puts \"tk_library=$tk_library\" }\n"
-    "if {[info exists env(TCL_LIBRARY)]} { puts \"env(TCL_LIBRARY)=$env(TCL_LIBRARY)\" }\n"
-    "if {[info exists env(TK_LIBRARY)]} { puts \"env(TK_LIBRARY)=$env(TK_LIBRARY)\" }\n"
+    "if {[info exists env(TCLLIBPATH)]} { puts \"env(TCLLIBPATH)=$env(TCLLIBPATH)\" }\n"
     "exit\n"
 )
 
@@ -44,21 +43,9 @@ set( _scidup_combined_output "${_scidup_smoke_output}\n${_scidup_smoke_error}" )
 string( REGEX MATCH "(^|[\n\r])patchlevel=([0-9]+\\.[0-9]+\\.[0-9]+)" _scidup_patchlevel_match "${_scidup_combined_output}" )
 set( _scidup_patchlevel "${CMAKE_MATCH_2}" )
 
-string( REGEX MATCH "^([0-9]+)\\.([0-9]+)\\." _scidup_patchlevel_components "${_scidup_patchlevel}" )
-if(
-    NOT DEFINED CMAKE_MATCH_1 OR "${CMAKE_MATCH_1}" STREQUAL ""
-    OR NOT DEFINED CMAKE_MATCH_2 OR "${CMAKE_MATCH_2}" STREQUAL ""
-)
-    message( FATAL_ERROR "Unexpected patchlevel format: ${_scidup_patchlevel}" )
+if( NOT _scidup_patchlevel OR _scidup_patchlevel STREQUAL "" )
+    message( FATAL_ERROR "Missing patchlevel in smoke-test output." )
 endif()
-set( _scidup_tcl_version_major "${CMAKE_MATCH_1}" )
-set( _scidup_tcl_version_minor "${CMAKE_MATCH_2}" )
-
-set( _scidup_expected_tcl_library_dir "${_scidup_staging_root}/lib/tcl${_scidup_tcl_version_major}.${_scidup_tcl_version_minor}" )
-set( _scidup_expected_tk_library_dir "${_scidup_staging_root}/lib/tk${_scidup_tcl_version_major}.${_scidup_tcl_version_minor}" )
-
-get_filename_component( _scidup_expected_tcl_library_dir "${_scidup_expected_tcl_library_dir}" REALPATH )
-get_filename_component( _scidup_expected_tk_library_dir "${_scidup_expected_tk_library_dir}" REALPATH )
 
 function( _scidup_extract_value output_variable key output )
     string( REGEX MATCH "(^|[\n\r])${key}=([^\n\r]*)" _match "${output}" )
@@ -70,40 +57,26 @@ endfunction()
 
 _scidup_extract_value( _scidup_value_library "library" "${_scidup_combined_output}" )
 _scidup_extract_value( _scidup_value_tcl_library "tcl_library" "${_scidup_combined_output}" )
-_scidup_extract_value( _scidup_value_tk_library "tk_library" "${_scidup_combined_output}" )
-_scidup_extract_value( _scidup_value_env_tcl_library "env\\(TCL_LIBRARY\\)" "${_scidup_combined_output}" )
-_scidup_extract_value( _scidup_value_env_tk_library "env\\(TK_LIBRARY\\)" "${_scidup_combined_output}" )
+_scidup_extract_value( _scidup_value_env_tcllibpath "env\\(TCLLIBPATH\\)" "${_scidup_combined_output}" )
 
-foreach( _scidup_key IN ITEMS
-    _scidup_value_library
-    _scidup_value_tcl_library
-    _scidup_value_tk_library
-    _scidup_value_env_tcl_library
-    _scidup_value_env_tk_library
-)
-    # Values are validated by _scidup_extract_value.
-endforeach()
+string( REGEX MATCH "(^|[\n\r])tk_library=([^\n\r]*)" _scidup_tk_library_match "${_scidup_combined_output}" )
+set( _scidup_value_tk_library "${CMAKE_MATCH_2}" )
 
-get_filename_component( _scidup_value_library_real "${_scidup_value_library}" REALPATH )
-get_filename_component( _scidup_value_tcl_library_real "${_scidup_value_tcl_library}" REALPATH )
-get_filename_component( _scidup_value_tk_library_real "${_scidup_value_tk_library}" REALPATH )
-get_filename_component( _scidup_value_env_tcl_library_real "${_scidup_value_env_tcl_library}" REALPATH )
-get_filename_component( _scidup_value_env_tk_library_real "${_scidup_value_env_tk_library}" REALPATH )
+if( NOT _scidup_value_library MATCHES "^//zipfs:" )
+    message( FATAL_ERROR "Unexpected info library (expected //zipfs:...)." )
+endif()
+if( NOT _scidup_value_tcl_library MATCHES "^//zipfs:" )
+    message( FATAL_ERROR "Unexpected tcl_library (expected //zipfs:...)." )
+endif()
+if( _scidup_value_tk_library AND NOT _scidup_value_tk_library MATCHES "^//zipfs:" )
+    message( FATAL_ERROR "Unexpected tk_library (expected //zipfs:...)." )
+endif()
 
-if( NOT _scidup_value_library_real STREQUAL _scidup_expected_tcl_library_dir )
-    message( FATAL_ERROR "Unexpected info library." )
-endif()
-if( NOT _scidup_value_tcl_library_real STREQUAL _scidup_expected_tcl_library_dir )
-    message( FATAL_ERROR "Unexpected tcl_library." )
-endif()
-if( NOT _scidup_value_env_tcl_library_real STREQUAL _scidup_expected_tcl_library_dir )
-    message( FATAL_ERROR "Unexpected env(TCL_LIBRARY)." )
-endif()
-if( NOT _scidup_value_tk_library_real STREQUAL _scidup_expected_tk_library_dir )
-    message( FATAL_ERROR "Unexpected tk_library." )
-endif()
-if( NOT _scidup_value_env_tk_library_real STREQUAL _scidup_expected_tk_library_dir )
-    message( FATAL_ERROR "Unexpected env(TK_LIBRARY)." )
+set( _scidup_expected_tcllibpath "${_scidup_staging_root}/lib" )
+get_filename_component( _scidup_expected_tcllibpath_real "${_scidup_expected_tcllibpath}" REALPATH )
+get_filename_component( _scidup_value_tcllibpath_real "${_scidup_value_env_tcllibpath}" REALPATH )
+if( NOT _scidup_value_tcllibpath_real STREQUAL _scidup_expected_tcllibpath_real )
+    message( FATAL_ERROR "Unexpected env(TCLLIBPATH)." )
 endif()
 
 # Best-effort cleanup.
