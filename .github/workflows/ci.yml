@@ -18,14 +18,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [ Release ]
         include:
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
@@ -92,7 +88,6 @@ jobs:
         --preset ci
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DCMAKE_PREFIX_PATH=$DEPS_INSTALL_PREFIX
 
     - name: Build
