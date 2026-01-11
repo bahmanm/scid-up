@@ -1,13 +1,3 @@
-option(
-    SCIDUP_BUNDLE_TCL_TK
-    "Bundle Tcl/Tk into the installation tree (intended for portable archives)."
-    OFF )
-
-###############################################################################
-if( NOT SCIDUP_BUNDLE_TCL_TK )
-    return()
-endif()
-
 set( _scidup_default_tcl_tk_prefix "" )
 if( DEFINED TCL_TCLSH AND NOT TCL_TCLSH STREQUAL "" )
     get_filename_component( _scidup_tclsh_directory "${TCL_TCLSH}" DIRECTORY )
@@ -34,7 +24,6 @@ if( NOT IS_DIRECTORY "${SCIDUP_TCL_TK_PREFIX}/lib" )
     )
 endif()
 
-###############################################################################
 if( NOT DEFINED TCL_LIBRARY OR TCL_LIBRARY STREQUAL "" )
     message(
         FATAL_ERROR
@@ -107,25 +96,15 @@ if( _scidup_tcl_packages_directory AND NOT IS_DIRECTORY "${_scidup_tcl_packages_
     set( _scidup_tcl_packages_directory "" )
 endif()
 
-set( _scidup_tcl_tk_library_destination "${CMAKE_INSTALL_LIBDIR}" )
-if( NOT IS_ABSOLUTE "${_scidup_tcl_tk_library_destination}" )
-    set( _scidup_tcl_tk_library_destination "${CMAKE_INSTALL_PREFIX}/${_scidup_tcl_tk_library_destination}" )
-endif()
-cmake_path( NORMAL_PATH _scidup_tcl_tk_library_destination )
-
-install(
-    CODE
-    "file( INSTALL DESTINATION \"${_scidup_tcl_tk_library_destination}\" TYPE FILE FOLLOW_SYMLINK_CHAIN FILES \"${TCL_LIBRARY}\" \"${TK_LIBRARY}\" )" )
-
 set(
-    _scidup_runtime_directories
+    _scidup_tcl_tk_runtime_directories
     "${_scidup_tcl_runtime_directory}"
     "${_scidup_tk_runtime_directory}" )
 if( _scidup_tcl_packages_directory )
-    list( APPEND _scidup_runtime_directories "${_scidup_tcl_packages_directory}" )
+    list( APPEND _scidup_tcl_tk_runtime_directories "${_scidup_tcl_packages_directory}" )
 endif()
 
 install(
-    DIRECTORY ${_scidup_runtime_directories}
+    DIRECTORY ${_scidup_tcl_tk_runtime_directories}
     DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     USE_SOURCE_PERMISSIONS )
