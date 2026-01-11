@@ -7,5 +7,4 @@ set( CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF )
 set( CPACK_PACKAGING_INSTALL_PREFIX "/" )
 set( CPACK_SET_DESTDIR ON )
 
-include( cmake/package/portable/bundle-tcl-tk.cmake )
-
+include( cmake/package/portable/tcl-tk/all.cmake )
