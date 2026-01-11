@@ -1,0 +1,94 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+source [file join [::scid_test::tclDir] scidup dirs.tcl]
+
+namespace eval ::dirs_test {
+    variable savedEnv
+}
+
+proc ::dirs_test::saveEnv {name} {
+    variable savedEnv
+    if {[info exists ::env($name)]} {
+        set savedEnv($name) [list 1 $::env($name)]
+    } else {
+        set savedEnv($name) [list 0 ""]
+    }
+}
+
+proc ::dirs_test::restoreEnv {name} {
+    variable savedEnv
+    if {![info exists savedEnv($name)]} {
+        return
+    }
+    lassign $savedEnv($name) existed value
+    if {$existed} {
+        set ::env($name) $value
+    } else {
+        unset -nocomplain ::env($name)
+    }
+    unset -nocomplain savedEnv($name)
+}
+
+proc ::dirs_test::setup {} {
+    foreach name {XDG_CONFIG_HOME XDG_CONFIG_DIR APPDATA} {
+        ::dirs_test::saveEnv $name
+        unset -nocomplain ::env($name)
+    }
+}
+
+proc ::dirs_test::cleanup {} {
+    foreach name {XDG_CONFIG_HOME XDG_CONFIG_DIR APPDATA} {
+        ::dirs_test::restoreEnv $name
+    }
+}
+
+test dirs-configRoot-prefers-xdg-config-home-1.0 {configRoot prefers XDG_CONFIG_HOME over platform defaults} -setup {
+    ::dirs_test::setup
+} -body {
+    set tmp [::scid_test::tempDir]
+    set ::env(XDG_CONFIG_HOME) [file join $tmp xdg_home]
+    set exeDir [file join $tmp exe]
+
+    set actual [::scidup::dirs::configRoot $::tcl_platform(platform) $::tcl_platform(os) $exeDir]
+    set expected [file nativename [file join $::env(XDG_CONFIG_HOME) scid-up]]
+    list $actual $expected
+} -cleanup {
+    ::dirs_test::cleanup
+} -result [list \
+    [file nativename [file join [::scid_test::tempDir] xdg_home scid-up]] \
+    [file nativename [file join [::scid_test::tempDir] xdg_home scid-up]]]
+
+test dirs-configRoot-uses-xdg-config-dir-when-home-unset-1.0 {configRoot uses XDG_CONFIG_DIR when XDG_CONFIG_HOME is unset} -setup {
+    ::dirs_test::setup
+} -body {
+    set tmp [::scid_test::tempDir]
+    set ::env(XDG_CONFIG_DIR) [file join $tmp xdg_dir]
+    set exeDir [file join $tmp exe]
+
+    set actual [::scidup::dirs::configRoot $::tcl_platform(platform) $::tcl_platform(os) $exeDir]
+    set expected [file nativename [file join $::env(XDG_CONFIG_DIR) scid-up]]
+    list $actual $expected
+} -cleanup {
+    ::dirs_test::cleanup
+} -result [list \
+    [file nativename [file join [::scid_test::tempDir] xdg_dir scid-up]] \
+    [file nativename [file join [::scid_test::tempDir] xdg_dir scid-up]]]
+
+test dirs-configRoot-xdg-home-wins-over-xdg-dir-1.0 {configRoot prefers XDG_CONFIG_HOME over XDG_CONFIG_DIR} -setup {
+    ::dirs_test::setup
+} -body {
+    set tmp [::scid_test::tempDir]
+    set ::env(XDG_CONFIG_HOME) [file join $tmp xdg_home2]
+    set ::env(XDG_CONFIG_DIR) [file join $tmp xdg_dir2]
+    set exeDir [file join $tmp exe]
+
+    set actual [::scidup::dirs::configRoot $::tcl_platform(platform) $::tcl_platform(os) $exeDir]
+    set expected [file nativename [file join $::env(XDG_CONFIG_HOME) scid-up]]
+    list $actual $expected
+} -cleanup {
+    ::dirs_test::cleanup
+} -result [list \
+    [file nativename [file join [::scid_test::tempDir] xdg_home2 scid-up]] \
+    [file nativename [file join [::scid_test::tempDir] xdg_home2 scid-up]]]
+
