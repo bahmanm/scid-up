@@ -796,9 +796,8 @@ set helpText(Menus) {<h1>Scid menus</h1>
   This menu provides entries for setting most of Scid's configurable
   options.
   The <menu>Save options</menu> entry saves the current options to the
-  file "<b>~/.scid/config/options.dat</b>" (or "<b>options.dat</b>" in the
-  sub directory "<b>config</b>" of the Scid executable programs for Windows
-  users); this file is loaded each time you start up Scid.
+  file "<b>options.dat</b>" in ScidUp's configuration directory; this file is loaded
+  each time you start up ScidUp.
   </p>
   
   <h3><name Help>Help</name></h3>
@@ -3758,10 +3757,10 @@ set helpText(Options) {<h1>Options and preferences</h1>
   The options file is loaded whenever you start Scid.
   </p>
   <p>
-  If you use Windows, the options file is <b>scid.opt</b> in the directory
-  where the Scid program file <b>scid.exe</b> is located. For users of Unix
-  operating systems (such as Solaris or Linux) the file
-  is <b>~/.scid/scidrc</b>.
+  In ScidUp, the options file is <b>options.dat</b> in the configuration directory.
+  If <b>$XDG_CONFIG_HOME</b> is set, it is always used (on all platforms) as <b>$XDG_CONFIG_HOME/scid-up</b>.
+  Otherwise, ScidUp uses <b>%APPDATA%\\scid-up</b> on Windows, <b>~/Library/Application Support/scid-up</b> on macOS,
+  and <b>~/.config/scid-up</b> on other Unix platforms.
   </p>
   
   <h3><name MyPlayerNames>Setting your player names</name></h3>
