@@ -1,0 +1,234 @@
+name: Release (Portable Archives)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  unix-build-and-package:
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash -euo pipefail {0}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            asset_suffix: ubuntu-22.04-x86_64
+          - os: macos-15
+            asset_suffix: macos-15-arm64
+          - os: macos-15-intel
+            asset_suffix: macos-15-intel-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up the environment
+        run: |
+          echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}/install" >> "$GITHUB_ENV"
+          echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/build" >> "$GITHUB_ENV"
+          echo "${{ runner.temp }}/install/bin" >> "$GITHUB_PATH"
+
+      - name: Set up the directories
+        run: |
+          mkdir -p "$DEPS_BUILD_PREFIX" "$DEPS_INSTALL_PREFIX"
+
+      - name: Install Tcl/Tk (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd "$DEPS_BUILD_PREFIX"
+
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev
+
+          curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
+          pushd tcl9.0.3/unix
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit
+          make install
+          popd
+
+          curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
+          pushd tk9.0.3/unix
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --with-tcl="$DEPS_BUILD_PREFIX/tcl9.0.3/unix"
+          make install
+          popd
+
+          ln -sf "$DEPS_INSTALL_PREFIX/bin/tclsh9.0" "$DEPS_INSTALL_PREFIX/bin/tclsh"
+          ln -sf "$DEPS_INSTALL_PREFIX/bin/wish9.0" "$DEPS_INSTALL_PREFIX/bin/wish"
+
+      - name: Install Tcl/Tk (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd "$DEPS_BUILD_PREFIX"
+
+          curl -L http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz | tar -xzf -
+          pushd tcl9.0.3/unix
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit
+          make install
+          popd
+
+          curl -L http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz | tar -xzf -
+          pushd tk9.0.3/unix
+          ./configure --prefix="$DEPS_INSTALL_PREFIX" --enable-64bit --enable-aqua --with-tcl="$DEPS_BUILD_PREFIX/tcl9.0.3/unix"
+          make install
+          popd
+
+          ln -sf "$DEPS_INSTALL_PREFIX/bin/tclsh9.0" "$DEPS_INSTALL_PREFIX/bin/tclsh"
+          ln -sf "$DEPS_INSTALL_PREFIX/bin/wish9.0" "$DEPS_INSTALL_PREFIX/bin/wish"
+
+      - name: Configure
+        run: |
+          cmake --preset portable
+
+      - name: Build
+        run: |
+          cmake --build --preset portable --verbose
+
+      - name: Package
+        run: |
+          cpack --preset portable-tgz
+
+      - name: Rename archive
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="sha-${GITHUB_SHA::7}"
+          fi
+
+          archive_path=(build/portable/*.tar.gz)
+          if [[ ${#archive_path[@]} -ne 1 ]]; then
+            echo "Expected exactly one .tar.gz in build/portable, found ${#archive_path[@]}" >&2
+            ls -la build/portable || true
+            exit 1
+          fi
+
+          output_path="build/portable/scid-up-${version}-portable-${{ matrix.asset_suffix }}.tar.gz"
+          mv "${archive_path[0]}" "$output_path"
+          echo "ASSET_PATH=$output_path" >> "$GITHUB_ENV"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: scid-up-portable-${{ matrix.asset_suffix }}
+          path: ${{ env.ASSET_PATH }}
+          if-no-files-found: error
+
+  windoze-build-and-package:
+    runs-on: windows-2022
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up the environment
+        run: |
+          "DEPS_INSTALL_PREFIX=${{ runner.temp }}\\install" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DEPS_BUILD_PREFIX=${{ runner.temp }}\\build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "${{ runner.temp }}\\install\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Set up the directories
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:DEPS_BUILD_PREFIX | Out-Null
+          New-Item -ItemType Directory -Force -Path $env:DEPS_INSTALL_PREFIX | Out-Null
+
+      - name: Install Tcl/Tk (Windows)
+        run: |
+          Set-Location $env:DEPS_BUILD_PREFIX
+
+          curl.exe -L "http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz" -o tcl9.0.3-src.tar.gz
+          tar -xzf tcl9.0.3-src.tar.gz
+          Push-Location tcl9.0.3\\win
+          nmake -f makefile.vc release
+          nmake -f makefile.vc install INSTALLDIR=$env:DEPS_INSTALL_PREFIX
+          Pop-Location
+
+          curl.exe -L "http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz" -o tk9.0.3-src.tar.gz
+          tar -xzf tk9.0.3-src.tar.gz
+          Push-Location tk9.0.3\\win
+          nmake -f makefile.vc release TCLDIR=..\\..\\tcl9.0.3
+          nmake -f makefile.vc install INSTALLDIR=$env:DEPS_INSTALL_PREFIX TCLDIR=..\\..\\tcl9.0.3
+          Pop-Location
+
+          if (!(Test-Path "$env:DEPS_INSTALL_PREFIX\\bin\\tclsh.exe")) {
+            Copy-Item -Force "$env:DEPS_INSTALL_PREFIX\\bin\\tclsh90.exe" "$env:DEPS_INSTALL_PREFIX\\bin\\tclsh.exe"
+          }
+          if (!(Test-Path "$env:DEPS_INSTALL_PREFIX\\bin\\wish.exe")) {
+            Copy-Item -Force "$env:DEPS_INSTALL_PREFIX\\bin\\wish90.exe" "$env:DEPS_INSTALL_PREFIX\\bin\\wish.exe"
+          }
+
+      - name: Configure
+        run: |
+          cmake --preset portable
+
+      - name: Build
+        run: |
+          cmake --build --preset portable --config Release --verbose
+
+      - name: Package
+        run: |
+          cpack --preset portable-tgz -C Release
+
+      - name: Rename archive
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $version = $env:GITHUB_REF_NAME
+          } else {
+            $version = "sha-$($env:GITHUB_SHA.Substring(0,7))"
+          }
+
+          $archives = Get-ChildItem -Path "build\\portable" -Filter "*.tar.gz" | Select-Object -ExpandProperty FullName
+          if ($archives.Count -ne 1) {
+            Write-Error "Expected exactly one .tar.gz in build\\portable, found $($archives.Count)"
+            Get-ChildItem -Path "build\\portable" | Format-List
+            exit 1
+          }
+
+          $output = "build\\portable\\scid-up-$version-portable-windows-2022-x86_64.tar.gz"
+          Move-Item -Force $archives[0] $output
+
+          "ASSET_PATH=$output" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: scid-up-portable-windows-2022-x86_64
+          path: ${{ env.ASSET_PATH }}
+          if-no-files-found: error
+
+  publish-github-release:
+    if: github.ref_type == 'tag'
+    needs:
+      - unix-build-and-package
+      - windoze-build-and-package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ScidUp ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-testing-') }}
+          files: dist/*.tar.gz
+          fail_on_unmatched_files: true
+          generate_release_notes: true
