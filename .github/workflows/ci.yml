@@ -34,11 +34,10 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up the environment
-      run: >
-        DEPS_INSTALL_PREFIX=${{ runner.temp }}/install/
-        DEPS_BUILD_PREFIX=${{ runner.temp }}/build/
-        PATH=$DEPS_INSTALL_PREFIX/bin:$PATH
-        env >> "$GITHUB_ENV"
+      run: |
+        echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}/install/" >> "$GITHUB_ENV"
+        echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/build/" >> "$GITHUB_ENV"
+        echo "${{ runner.temp }}/install/bin" >> "$GITHUB_PATH"
 
     - name: Set up the directories
       run: >
