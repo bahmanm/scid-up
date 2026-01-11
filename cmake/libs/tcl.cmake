@@ -11,7 +11,7 @@ endif()
 if( _scidup_dependencies_install_prefix )
     find_program(
         _scidup_tclsh_from_prefix
-        NAMES tclsh tclsh9.0
+        NAMES tclsh tclsh9.0 tclsh90
         HINTS "${_scidup_dependencies_install_prefix}/bin"
         NO_DEFAULT_PATH )
     if( _scidup_tclsh_from_prefix )
@@ -20,7 +20,7 @@ if( _scidup_dependencies_install_prefix )
 
     find_program(
         _scidup_wish_from_prefix
-        NAMES wish wish9.0
+        NAMES wish wish9.0 wish90
         HINTS "${_scidup_dependencies_install_prefix}/bin"
         NO_DEFAULT_PATH )
     if( _scidup_wish_from_prefix )
@@ -31,8 +31,8 @@ if( _scidup_dependencies_install_prefix )
         _scidup_tcl_include_from_prefix
         NAMES tcl.h
         HINTS
-            "${_scidup_dependencies_install_prefix}/include"
-            "${_scidup_dependencies_install_prefix}/include/tcl-tk"
+        "${_scidup_dependencies_install_prefix}/include"
+        "${_scidup_dependencies_install_prefix}/include/tcl-tk"
         NO_DEFAULT_PATH )
     if( _scidup_tcl_include_from_prefix )
         set( TCL_INCLUDE_PATH "${_scidup_tcl_include_from_prefix}" CACHE PATH "Path to Tcl headers" FORCE )
@@ -42,8 +42,8 @@ if( _scidup_dependencies_install_prefix )
         _scidup_tk_include_from_prefix
         NAMES tk.h
         HINTS
-            "${_scidup_dependencies_install_prefix}/include"
-            "${_scidup_dependencies_install_prefix}/include/tcl-tk"
+        "${_scidup_dependencies_install_prefix}/include"
+        "${_scidup_dependencies_install_prefix}/include/tcl-tk"
         NO_DEFAULT_PATH )
     if( _scidup_tk_include_from_prefix )
         set( TK_INCLUDE_PATH "${_scidup_tk_include_from_prefix}" CACHE PATH "Path to Tk headers" FORCE )
@@ -51,8 +51,10 @@ if( _scidup_dependencies_install_prefix )
 
     find_library(
         _scidup_tcl_library_from_prefix
-        NAMES tcl9.0 tcl9 tcl
-        HINTS "${_scidup_dependencies_install_prefix}/lib"
+        NAMES tcl9.0 tcl90 tcl9 tcl
+        HINTS
+        "${_scidup_dependencies_install_prefix}/lib"
+        "${_scidup_dependencies_install_prefix}/bin"
         NO_DEFAULT_PATH )
     if( _scidup_tcl_library_from_prefix )
         set( TCL_LIBRARY "${_scidup_tcl_library_from_prefix}" CACHE FILEPATH "Path to Tcl library" FORCE )
@@ -60,8 +62,10 @@ if( _scidup_dependencies_install_prefix )
 
     find_library(
         _scidup_tk_library_from_prefix
-        NAMES tk9.0 tcl9tk9.0 tk9 tk
-        HINTS "${_scidup_dependencies_install_prefix}/lib"
+        NAMES tk9.0 tk90 tcl9tk9.0 tcl9tk90 tk9 tk
+        HINTS
+        "${_scidup_dependencies_install_prefix}/lib"
+        "${_scidup_dependencies_install_prefix}/bin"
         NO_DEFAULT_PATH )
     if( _scidup_tk_library_from_prefix )
         set( TK_LIBRARY "${_scidup_tk_library_from_prefix}" CACHE FILEPATH "Path to Tk library" FORCE )
@@ -187,6 +191,6 @@ else()
 endif()
 
 ###############################################################################
-if(APPLE)
+if( APPLE )
     set( CMAKE_FIND_FRAMEWORK "${_scidup_original_cmake_find_framework}" )
 endif()

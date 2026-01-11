@@ -377,10 +377,12 @@ test sound-checkQueue-pipe-writes-file-1.0 {CheckSoundQueue writes the sound fil
     set content [string trim [read $ch]]
     close $ch
 
+    set expected [file nativename [file join $folder King.wav]]
+
     list \
         $::utils::sound::soundQueue \
         $::utils::sound::isPlayingSound \
-        [string match "*[file join $folder King.wav]" $content]
+        [expr {[string first $expected $content] >= 0}]
 } -cleanup {
     ::sound_test::cleanup
 } -result {{} 1 1}
