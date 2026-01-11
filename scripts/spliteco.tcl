@@ -1,6 +1,11 @@
 #!/bin/sh
 # \
-exec `dirname $0`/tkscid "$0" "$@"
+bindir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+if [ -x "$bindir/scid-up" ]; then
+  exec "$bindir/scid-up" "$0" "$@"
+else
+  exec scid-up "$0" "$@"
+fi
 
 # spliteco:
 #   Takes a Scid-format database and produces a number of smaller

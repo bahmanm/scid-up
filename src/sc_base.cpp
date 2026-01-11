@@ -958,7 +958,7 @@ UI_res_t sc_base_player_elo(const scidBaseT& dbase, UI_handle_t ti, int argc,
 
 } // End of anonymous namespace
 
-//TODO: move this function here from tkscid.cpp
+//TODO: move this function here from scidup_tcl_bindings.cpp
 UI_res_t sc_base_inUse       (UI_extra_t, UI_handle_t, int argc, const char ** argv);
 UI_res_t sc_base_export      (UI_extra_t, UI_handle_t, int argc, const char ** argv);
 UI_res_t sc_base_piecetrack  (UI_extra_t, UI_handle_t, int argc, const char ** argv);
