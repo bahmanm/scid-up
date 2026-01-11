@@ -8,7 +8,7 @@ on:
     branches: [ "master" ]
 
 jobs:
-  build-and-test:
+  unix-build-and-test:
     runs-on: ${{ matrix.os }}
 
     defaults:
@@ -35,8 +35,8 @@ jobs:
 
     - name: Set up the environment
       run: |
-        echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}/install/" >> "$GITHUB_ENV"
-        echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/build/" >> "$GITHUB_ENV"
+        echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}/install" >> "$GITHUB_ENV"
+        echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/build" >> "$GITHUB_ENV"
         echo "${{ runner.temp }}/install/bin" >> "$GITHUB_PATH"
 
     - name: Set up the directories
@@ -118,3 +118,64 @@ jobs:
         ctest
         --preset ci
         --verbose
+
+  windoze-build-and-test:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Set up the environment
+      run: |
+        "DEPS_INSTALL_PREFIX=${{ runner.temp }}\\install" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "DEPS_BUILD_PREFIX=${{ runner.temp }}\\build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "${{ runner.temp }}\\install\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Set up the directories
+      run: |
+        New-Item -ItemType Directory -Force -Path $env:DEPS_BUILD_PREFIX | Out-Null
+        New-Item -ItemType Directory -Force -Path $env:DEPS_INSTALL_PREFIX | Out-Null
+
+    - name: Install Tcl/Tk (Windows)
+      run: |
+        Set-Location $env:DEPS_BUILD_PREFIX
+
+        curl.exe -L "http://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz" -o tcl9.0.3-src.tar.gz
+        tar -xzf tcl9.0.3-src.tar.gz
+        Push-Location tcl9.0.3\\win
+        nmake -f makefile.vc release
+        nmake -f makefile.vc install INSTALLDIR=$env:DEPS_INSTALL_PREFIX
+        Pop-Location
+
+        curl.exe -L "http://prdownloads.sourceforge.net/tcl/tk9.0.3-src.tar.gz" -o tk9.0.3-src.tar.gz
+        tar -xzf tk9.0.3-src.tar.gz
+        Push-Location tk9.0.3\\win
+        nmake -f makefile.vc release TCLDIR=..\\..\\tcl9.0.3
+        nmake -f makefile.vc install INSTALLDIR=$env:DEPS_INSTALL_PREFIX TCLDIR=..\\..\\tcl9.0.3
+        Pop-Location
+
+        if (!(Test-Path "$env:DEPS_INSTALL_PREFIX\\bin\\tclsh.exe")) {
+          Copy-Item -Force "$env:DEPS_INSTALL_PREFIX\\bin\\tclsh90.exe" "$env:DEPS_INSTALL_PREFIX\\bin\\tclsh.exe"
+        }
+        if (!(Test-Path "$env:DEPS_INSTALL_PREFIX\\bin\\wish.exe")) {
+          Copy-Item -Force "$env:DEPS_INSTALL_PREFIX\\bin\\wish90.exe" "$env:DEPS_INSTALL_PREFIX\\bin\\wish.exe"
+        }
+
+    - name: Configure
+      run: |
+        cmake --preset ci -DSCIDUP_BUILD_LINTING=OFF
+
+    - name: Build
+      run: |
+        cmake --build --preset ci --config Release --verbose
+
+    - name: Test
+      run: |
+        ctest --preset ci -C Release --verbose
