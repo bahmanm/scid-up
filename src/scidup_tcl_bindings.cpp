@@ -43,7 +43,9 @@
 #include "dbasepool.h"
 #include "ui.h"
 #include <algorithm>
+#include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <numeric>
@@ -53,6 +55,19 @@
 
 //TODO: delete
 #include "scidup_tcl_bindings.h"
+
+#ifdef _WIN32
+// Provide Tcl_ConsolePanic for embedding applications on Windows.
+extern "C" TCL_NORETURN void Tcl_ConsolePanic(const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+	fputc('\n', stderr);
+	fflush(stderr);
+	abort();
+}
+#endif
 
 
 //TODO: delete
