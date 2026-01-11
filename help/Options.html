@@ -24,10 +24,12 @@ you select <b>Save Options</b> from the Options menu.
 The options file is loaded whenever you start Scid.
 </p>
 <p>
-If you use Windows, the options file is <b>scid.opt</b> in the directory
-where the Scid program file <b>scid.exe</b> is located. For users of Unix
-operating systems (such as Solaris or Linux) the file
-is <b>~/.scid/scidrc</b>.
+In ScidUp, the options file is <b>options.dat</b> in ScidUp's configuration
+directory. If <b>$SCIDUP_CONFIG_HOME</b> is set, it is always used. Otherwise,
+if <b>$XDG_CONFIG_HOME</b> is set, it is used as <b>$XDG_CONFIG_HOME/scid-up</b>.
+Otherwise, ScidUp uses <b>%APPDATA%\\scid-up</b> on Windows,
+<b>~/Library/Application Support/scid-up</b> on macOS, and <b>~/.config/scid-up</b>
+on other Unix platforms.
 </p>
 
 <h3><a name="MyPlayerNames">Setting your player names</a></h3>
@@ -56,4 +58,3 @@ for the <a href="Tree.html">tree</a> and <a href="Crosstable.html">crosstable</a
 
 </body>
 </html>
-

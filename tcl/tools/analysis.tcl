@@ -583,11 +583,12 @@ proc ::enginelist::edit {index} {
             ttk::button $f.current -text " . " -command {
                 set engines(newDir) .
             }
-            ttk::button $f.user -text "~/.scid" -command {
-                set engines(newDir) $scidUserDir
-            }
-            if {$::windowsOS} {
-                $f.user configure -text "scid.exe dir"
+            ttk::button $f.user -text "Config dir" -command {
+                if {[info exists ::scidUpConfigRootDir]} {
+                    set engines(newDir) $::scidUpConfigRootDir
+                } else {
+                    set engines(newDir) $scidConfigDir
+                }
             }
             grid $f.current -row $row -column 2 -sticky we
             grid $f.user -row $row -column 3 -sticky we

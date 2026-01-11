@@ -31,6 +31,8 @@ exec `dirname $0`/../../../bin/scid-up "$0" "$@"
 
 ############################################################
 
+source [file join [file dirname [info script]] scidup dirs.tcl]
+
 package require Tk  9
 set useLocalTooltip [catch {package require tooltip 2.0}]
 
@@ -108,6 +110,7 @@ if {[tk windowingsystem] == "aqua"} {
 ################################################################################
 proc InitDirs {} {
   global scidExeDir scidUserDir scidConfigDir scidDataDir scidLogDir scidShareDir scidImgDir scidTclDir
+  global scidUpConfigRootDir
   global scidBooksDir scidBasesDir ecoFile
   global scidUpIsBundle scidUpBundleRoot scidUpBundleLibraryDir
 
@@ -132,17 +135,12 @@ proc InitDirs {} {
   }
 
   # scidUserDir: location of user-specific Scid files.
-  # This is "~/.scid" on Unix, and the Scid executable dir on Windows.
-  if {$::windowsOS} {
-    set scidUserDir $scidExeDir
-  } else {
-    regexp {(\d+\.\d+).*} $::scidVersion -> version
-    set scidUserDir [file nativename "~/.scid$version"]
-  }
+  set scidUserDir [::scidup::dirs::configRoot $::tcl_platform(platform) $::tcl_platform(os) $scidExeDir]
+  set scidUpConfigRootDir $scidUserDir
 
   # scidConfigDir, scidDataDir, scidLogDir:
   # Location of Scid configuration, data and log files.
-  set scidConfigDir [file nativename [file join $scidUserDir "config"]]
+  set scidConfigDir $scidUserDir
   set scidDataDir [file nativename [file join $scidUserDir "data"]]
   set scidLogDir [file nativename [file join $scidUserDir "log"]]
 
@@ -187,7 +185,6 @@ proc InitDirs {} {
       file mkdir $dir
     }
   }
-  makeScidDir $scidUserDir
   makeScidDir $scidConfigDir
   makeScidDir $scidDataDir
   makeScidDir $scidLogDir
