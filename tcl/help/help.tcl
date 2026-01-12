@@ -498,7 +498,7 @@ set helpText(MainWindow) {<h1>Scid main window</h1>
   <b> ; </b> (ie. space semicolon space). To resolve the bibliographic
   reference, Scid first searches a .bib-file named like the database
   in the database directory. If it can not find such a file it resorts
-  to <b>~/.scid/data/Bookshelf.bib</b>.
+  to <b>data/Bookshelf.bib</b> in ScidUp's configuration directory.
   </p>
   <p>
   The fifth line shows the <a ECO>ECO</a> (Encyclopedia of Chess
@@ -506,7 +506,7 @@ set helpText(MainWindow) {<h1>Scid main window</h1>
   the ECO file being used.
   </p>
   <p>
-  If Scid can find a suitable photo file (either in ~/.scid or Scid's
+  If ScidUp can find a suitable photo file (either in ScidUp's configuration directory or ScidUp's
   share directory within the photos folder) and photos for the players
   exist, also these photos show up in the information area. (Suitable
   photo files can be downloaded from the <url
@@ -796,9 +796,8 @@ set helpText(Menus) {<h1>Scid menus</h1>
   This menu provides entries for setting most of Scid's configurable
   options.
   The <menu>Save options</menu> entry saves the current options to the
-  file "<b>~/.scid/config/options.dat</b>" (or "<b>options.dat</b>" in the
-  sub directory "<b>config</b>" of the Scid executable programs for Windows
-  users); this file is loaded each time you start up Scid.
+  file "<b>options.dat</b>" in ScidUp's configuration directory; this file is loaded
+  each time you start up ScidUp.
   </p>
   
   <h3><name Help>Help</name></h3>
@@ -2894,11 +2893,9 @@ set helpText(Analysis) {<h1>The Analysis window</h1>
   So if an engine that should work fine in Scid does not start, try
   changing its directory setting. To avoid engines creating log files
   in many different directories, I recommend starting engines in
-  the directory of the Scid User files (this is where the <b>scid.exe</b>
-  file is located on Windows, or <b>~/.scid/</b> on Unix); there is a
-  button in the dialog box for editing engine details marked
-  <b>scid.exe dir</b> on Windows or <b>~/.scid</b> on Unix that lets
-  you set the engine to start in this directory.
+  ScidUp's configuration directory; there is a button in the dialog box for
+  editing engine details marked <b>Config dir</b> that lets you set the engine
+  to start in this directory.
   </p>
   <p>
   If an engine needs additional parameters for startup (e.g. a
@@ -3758,10 +3755,11 @@ set helpText(Options) {<h1>Options and preferences</h1>
   The options file is loaded whenever you start Scid.
   </p>
   <p>
-  If you use Windows, the options file is <b>scid.opt</b> in the directory
-  where the Scid program file <b>scid.exe</b> is located. For users of Unix
-  operating systems (such as Solaris or Linux) the file
-  is <b>~/.scid/scidrc</b>.
+  In ScidUp, the options file is <b>options.dat</b> in the configuration directory.
+  If <b>$SCIDUP_CONFIG_HOME</b> is set, it is always used (on all platforms).
+  Otherwise, if <b>$XDG_CONFIG_HOME</b> is set, it is used as <b>$XDG_CONFIG_HOME/scid-up</b>.
+  Otherwise, ScidUp uses <b>%APPDATA%\\scid-up</b> on Windows, <b>~/Library/Application Support/scid-up</b> on macOS,
+  and <b>~/.config/scid-up</b> on other Unix platforms.
   </p>
   
   <h3><name MyPlayerNames>Setting your player names</name></h3>
