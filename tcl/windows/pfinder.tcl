@@ -81,7 +81,7 @@ proc ::plist::Open {} {
   set ::plistWin 1
 
   ::createToplevel $w
-  ::setTitle $w "Scid: [tr WindowsPList]"
+  ::setTitle $w "[tr ScidUp]: [tr WindowsPList]"
 
   autoscrollText both $w.t $w.t.text Treeview
   $w.t.text configure -width 55 -height 25 -font font_Small -wrap none  -state normal

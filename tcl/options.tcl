@@ -674,7 +674,7 @@ proc options.write {} {
  uplevel #0 {
   set optionF ""
   if {[catch {open [scidConfigFile options] w} optionF]} {
-    tk_messageBox -title "Scid: Unable to write file" -type ok -icon warning \
+    tk_messageBox -title "[tr ScidUp]: Unable to write file" -type ok -icon warning \
         -message "Unable to write options file: [scidConfigFile options]\n$optionF"
   } else {
     puts $optionF "# Scid options file"

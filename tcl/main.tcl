@@ -208,7 +208,7 @@ proc updateMainGame {} {
 #   - Reads game metadata via `sc_game info` and `sc_game altered`.
 ################################################################################
 proc updateTitle {} {
-    set title "Scid - "
+    set title "[tr ScidUp] - "
     set fname [sc_base filename $::curr_db]
     set fname [file tail $fname]
     append title "$fname ($::tr(game) "
@@ -1145,7 +1145,7 @@ proc getPromoPiece {} {
     set ::result 2
     toplevel $w
     # wm transient $w .main
-    ::setTitle $w "Scid"
+    ::setTitle $w [tr ScidUp]
     wm resizable $w 0 0
     set col "w"
     if { [sc_pos side] == "black" } { set col "b" }
@@ -1186,7 +1186,7 @@ proc confirmReplaceMove {} {
     }
 
     option add *Dialog.msg.wrapLength 4i interactive
-    catch {tk_dialog .dialog "Scid: $::tr(ReplaceMove)?" \
+    catch {tk_dialog .dialog "[tr ScidUp]: $::tr(ReplaceMove)?" \
                 $::tr(ReplaceMoveMessage) "" 0 \
                 $::tr(ReplaceMove) $::tr(NewMainLine) \
                 $::tr(AddNewVar) $::tr(Cancel)} answer

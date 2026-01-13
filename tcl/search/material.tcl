@@ -394,7 +394,7 @@ proc ::search::material {{ref_base ""}} {
   set small font_Small
 
   win::createDialog $w
-  wm title $w "Scid: $::tr(MaterialSearch)"
+  wm title $w "[tr ScidUp]: $::tr(MaterialSearch)"
 
   bind $w <F1> { helpWindow Searches Material }
   bind $w <Escape> [list ${w}.b3.cancel invoke]

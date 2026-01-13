@@ -43,9 +43,9 @@ set scidVersionExpected "5.1.0"
 # Check that the version of c++ code matches the version of tcl code
 #
 if {[string compare $::scidVersion $::scidVersionExpected]} {
-  set msg "This is Scid version $::scidVersion, but the scid GUI (tcl/tk code)\n"
+  set msg "This is ScidUp version $::scidVersion, but the ScidUp GUI (tcl/tk code)\n"
   append msg "has the version number $scidVersionExpected.\n"
-  tk_messageBox -type ok -icon error -title "Scid: Version Error" -message $msg
+  tk_messageBox -type ok -icon error -title "ScidUp: Version Error" -message $msg
   exit 1
 }
 
@@ -249,7 +249,7 @@ proc InitImg {} {
   }
 }
 if {[catch {InitImg}]} {
-  tk_messageBox -type ok -icon error -title "Scid: Error" \
+  tk_messageBox -type ok -icon error -title "ScidUp: Error" \
     -message "Cannot load images.\n$::errorCode\n\n$::errorInfo"
   exit
 }

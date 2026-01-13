@@ -85,7 +85,7 @@ proc ::utils::date::chooser {{date "now"}} {
   bind $win <Right> [list ::utils::date::_day $win +1]
 
   wm minsize $win 250 200
-  wm title $win "Scid: Choose Date"
+  wm title $win "[tr ScidUp]: Choose Date"
   focus $win
   grab $win
   tkwait window $win

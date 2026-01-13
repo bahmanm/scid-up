@@ -119,20 +119,21 @@ proc ::win::getWindows {} {
 #   - If `w` is docked, updates the containing notebook tab label.
 #   - If `w` is undocked, updates the toplevel title via `wm title`.
 # Notes:
-#   - In docked mode, a leading "Scid: " prefix is trimmed to save space.
+#   - In docked mode, a leading "<app name>: " prefix is trimmed to save space.
 ################################################################################
-proc setTitle { w title } {
-	lassign [::win::isDocked $w] docked_nb w
-	if {$docked_nb ne ""} {
-		# in docked mode trim down title to spare space
-		if {[string equal -length 6 $title "Scid: "]} {
-			set title [string range $title 6 end]
+	proc setTitle { w title } {
+		lassign [::win::isDocked $w] docked_nb w
+		if {$docked_nb ne ""} {
+			# in docked mode trim down title to spare space
+			set prefix "[tr ScidUp]: "
+			if {[string first $prefix $title] == 0} {
+				set title [string range $title [string length $prefix] end]
+			}
+			$docked_nb tab $w -text $title
+		} else {
+			wm title $w $title
 		}
-		$docked_nb tab $w -text $title
-	} else {
-		wm title $w $title
 	}
-}
 
 ################################################################################
 # ::win::getMenu
@@ -297,10 +298,10 @@ proc ::win::undockWindow { wnd srctab {title ""} } {
 		set children $tmp
 	}
 
-	if {$srctab ne "" } {
-		set old_options [::docking::remove_tab $wnd $srctab]
-		set title "Scid: [dict get $old_options -text]"
-	}
+		if {$srctab ne "" } {
+			set old_options [::docking::remove_tab $wnd $srctab]
+			set title "[tr ScidUp]: [dict get $old_options -text]"
+		}
 
 	wm manage $wnd
 	wm title $wnd $title
@@ -337,13 +338,14 @@ proc ::win::undockWindow { wnd srctab {title ""} } {
 #   - Inserts the window as a notebook tab via `::docking::insert_tab`.
 #   - Restores any associated menu via `::setMenu`.
 ################################################################################
-proc ::win::dockWindow {wnd} {
-	::win::saveWinGeometry $wnd
-	# in docked mode trim down title to spare space
-	set title [wm title $wnd]
-	if {[string equal -length 6 $title "Scid: "]} {
-		set title [string range $title 6 end]
-	}
+	proc ::win::dockWindow {wnd} {
+		::win::saveWinGeometry $wnd
+		# in docked mode trim down title to spare space
+		set title [wm title $wnd]
+		set prefix "[tr ScidUp]: "
+		if {[string first $prefix $title] == 0} {
+			set title [string range $title [string length $prefix] end]
+		}
 
 	lassign [::win::getMenu $wnd] menu wmenu
 	$wmenu configure -menu {}

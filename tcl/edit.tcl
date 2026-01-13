@@ -43,7 +43,7 @@ proc setupBoard {} {
 
   set w ".setup"
   win::createDialog $w
-  wm title $w "Scid: $::tr(SetupBoard)"
+  wm title $w "[tr ScidUp]: $::tr(SetupBoard)"
   wm minsize $w 640 460
 
   #Frames
@@ -472,9 +472,9 @@ proc exitSetupBoard {} {
 ################################################################################
 proc fenErrorDialog {{msg {}}} {
   if {[winfo exists .setup]} {
-    tk_messageBox -icon info -type ok -title "Scid: Invalid FEN" -message $msg -parent .setup
+    tk_messageBox -icon info -type ok -title "[tr ScidUp]: Invalid FEN" -message $msg -parent .setup
   } else {
-    tk_messageBox -icon info -type ok -title "Scid: Invalid FEN" -message $msg
+    tk_messageBox -icon info -type ok -title "[tr ScidUp]: Invalid FEN" -message $msg
   }
 }
 

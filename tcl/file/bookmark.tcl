@@ -330,7 +330,7 @@ proc ::bookmarks::Edit {} {
   if {[winfo exists $w]} { return }
   set bookmarks(old) $bookmarks(data)
   win::createDialog $w
-  wm title $w "Scid: [tr FileBookmarksEdit]"
+  wm title $w "[tr ScidUp]: [tr FileBookmarksEdit]"
   # wm transient $w .
   bind $w <F1> {helpWindow Bookmarks}
   ttk::entry $w.e -width 40 \
@@ -649,7 +649,7 @@ proc ::bookmarks::Save {{reportError 0}} {
   set filename [scidConfigFile bookmarks]
   if  {[catch {open $filename w} f]} {
     if {$reportError} {
-      tk_messageBox -title "Scid" -type ok -icon warning \
+      tk_messageBox -title [tr ScidUp] -type ok -icon warning \
         -message "Unable to write bookmarks file: $filename\n$f"
     }
     return

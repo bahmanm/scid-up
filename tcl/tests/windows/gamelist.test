@@ -369,7 +369,7 @@ test gamelist-CopyGames-ask-ok-copies-and-notifies-1.0 {CopyGames performs copy,
 } -cleanup {
     catch {unset ::clipbase_db}
     ::gamelist_test::cleanup
-} -result {{{progressWindow Scid {Copy games...} Cancel} closeProgressWindow} {{copygames 1 dbfilter 2}} {{DatabaseModified 2}}}
+} -result {{{progressWindow ScidUp {Copy games...} Cancel} closeProgressWindow} {{copygames 1 dbfilter 2}} {{DatabaseModified 2}}}
 
 
 cleanupTests

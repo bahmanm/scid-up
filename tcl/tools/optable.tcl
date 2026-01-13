@@ -130,7 +130,7 @@ proc ::optable::makeReportWin {args} {
     set w .progress
     toplevel $w -background [ttk::style lookup . -background]
     wm withdraw $w
-    wm title $w "Scid: Generating Report"
+    wm title $w "[tr ScidUp]: Generating Report"
     bind $w <Visibility> [list raiseWin $w]
 
     pack [ttk::frame $w.b] -side bottom -fill x
@@ -330,15 +330,15 @@ proc ::optable::mergeGames { {game_count 50} {ply 999} } {
     set res [scan $g "%d:  <g_%d>" d1 game_number]
     if {$res != 2} {
       if {[info exists game_number]} {
-        tk_messageBox -title "Scid: Error writing report" -type ok -icon warning -message "Error merging game $game_number"
+        tk_messageBox -title "[tr ScidUp]: Error writing report" -type ok -icon warning -message "Error merging game $game_number"
       } else  {
-        tk_messageBox -title "Scid: Error writing report" -type ok -icon warning -message "Error merging game"
+        tk_messageBox -title "[tr ScidUp]: Error writing report" -type ok -icon warning -message "Error merging game"
       }
       break
     }
     set err [ catch { sc_game merge $base $game_number $ply } result ]
     if {$err} {
-      tk_messageBox -title "Scid" -type ok -icon info -message "Unable to merge the selected game:\n$result"
+      tk_messageBox -title [tr ScidUp] -type ok -icon info -message "Unable to merge the selected game:\n$result"
       break
     }
   }
@@ -475,7 +475,7 @@ proc ::optable::setOptions {} {
   packdlgbuttons $w.b.cancel $w.b.ok
   array set ::optable::backup [array get ::optable]
   wm resizable $w 0 0
-  wm title $w  "Scid: [tr ToolsOpReport]: [tr OprepFileOptions]"
+  wm title $w  "[tr ScidUp]: [tr ToolsOpReport]: [tr OprepFileOptions]"
   bind $w <Escape> [list ${w}.b.cancel invoke]
 }
 
@@ -500,7 +500,7 @@ proc ::optable::previewLaTeX {} {
   set fname [file join $tmpdir $tmpfile]
   catch {exec /bin/sh -c "rm $fname.*" }
   if {[catch {set tempfile [open $fname.tex w]}]} {
-    tk_messageBox -title "Scid: Error writing report" -type ok -icon warning \
+    tk_messageBox -title "[tr ScidUp]: Error writing report" -type ok -icon warning \
         -message "Unable to write the file: $fname.tex"
   }
   # Add the "batchmode" command to the top of the file to prevent latex
@@ -510,16 +510,16 @@ proc ::optable::previewLaTeX {} {
   close $tempfile
   if {! [catch {exec /bin/sh -c "cd $tmpdir; latex '$tmpfile.tex'" >& /dev/null}]} {
     if {[catch {exec /bin/sh -c "cd $tmpdir; dvips '$tmpfile.dvi'" >& /dev/null}]} {
-      tk_messageBox -title "Scid" -icon warning -type ok \
+      tk_messageBox -title [tr ScidUp] -icon warning -type ok \
           -message "Unable to run \"dvips\" to convert the report to PostScript."
     } else {
       if {[catch {exec /bin/sh -c "ghostview '$fname.ps'" >& /dev/null &}]} {
-        tk_messageBox -title "Scid" -icon warning -type ok \
+        tk_messageBox -title [tr ScidUp] -icon warning -type ok \
             -message "Unable to run \"xdvi\" to view the report."
       }
     }
   } else {
-    tk_messageBox -title "Scid: Errors producing report" -type ok \
+    tk_messageBox -title "[tr ScidUp]: Errors producing report" -type ok \
         -icon warning \
         -message "Errors running latex on the file: $fname.tex\n\nSee $fname.log for details."
   }
@@ -545,7 +545,7 @@ proc ::optable::previewHTML {} {
   set tmpfile "TempOpeningReport"
   set fname [file join $tmpdir $tmpfile]
   if {[catch {set tempfile [open $fname.html w]}]} {
-    tk_messageBox -title "Scid: Error writing report" -type ok -icon warning \
+    tk_messageBox -title "[tr ScidUp]: Error writing report" -type ok -icon warning \
         -message "Unable to write the file: $fname.html"
   }
   puts $tempfile [::optable::report html 1 $::optable::_flip]
@@ -573,7 +573,7 @@ proc ::optable::previewHTML {} {
 #   - May convert report encoding when `::hasEncoding` is enabled.
 ################################################################################
 proc ::optable::saveReport {fmt} {
-  set t [tk_dialog .dialog "Scid: Select report type" \
+  set t [tk_dialog .dialog "[tr ScidUp]: Select report type" \
       "Select the report type. You may save a full report (which includes the theory table), a compact report (with no theory table), or just the theory table by itself." \
       "" 0 "Full report" "Compact report" \
       "Theory table" "Cancel"]
@@ -598,12 +598,12 @@ proc ::optable::saveReport {fmt} {
   }
 
   set fname [tk_getSaveFile -initialdir [pwd] -filetypes $ftype \
-      -defaultextension $default -title "Scid: Save opening report"]
+      -defaultextension $default -title "[tr ScidUp]: Save opening report"]
   if {$fname == ""} { return }
 
   busyCursor .
   if {[catch {set tempfile [open $fname w]}]} {
-    tk_messageBox -title "Scid: Error writing report" -type ok -icon warning \
+    tk_messageBox -title "[tr ScidUp]: Error writing report" -type ok -icon warning \
         -message "Unable to write the file: $fname\n\n"
   } else {
     if {$t == 2} {
@@ -1437,7 +1437,7 @@ proc ::optable::favoriteReportNames {} {
 proc ::optable::addFavoriteDlg {} {
   set w .addFavoriteDlg
   win::createDialog $w
-  wm title $w "Scid: Add Opening Report Favorite"
+  wm title $w "[tr ScidUp]: Add Opening Report Favorite"
   ttk::label $w.name -text "Enter a name for the opening report of this position:"
   pack $w.name -side top
   ttk::entry $w.e -width 40
@@ -1496,7 +1496,7 @@ proc ::optable::addFavoriteOK {} {
     destroy $w
     return
   }
-  tk_messageBox -title Scid -icon info -type ok -message $err
+  tk_messageBox -title [tr ScidUp] -icon info -type ok -message $err
 }
 
 set reportFavoritesName ""
@@ -1522,7 +1522,7 @@ proc ::optable::editFavoritesDlg {} {
 
   set ::reportFavoritesTemp $::reportFavorites
   win::createDialog $w
-  wm title $w "Scid: [tr OprepFavoritesEdit]"
+  wm title $w "[tr ScidUp]: [tr OprepFavoritesEdit]"
   # wm transient $w .
   bind $w <F1> {helpWindow Reports Opening}
   ttk::entry $w.e -width 60 \
@@ -1781,7 +1781,7 @@ set reportType full
 proc ::optable::generateFavoriteReports {} {
   global reportFavorites
   if {[llength $reportFavorites] == 0} {
-    tk_messageBox -title "Scid" -type ok -icon info \
+    tk_messageBox -title [tr ScidUp] -type ok -icon info \
         -message "You have no favorite report positions."
     return
   }
@@ -1790,7 +1790,7 @@ proc ::optable::generateFavoriteReports {} {
   set w .reportFavoritesDlg
   if {[winfo exists $w]} { return }
   win::createDialog $w
-  wm title $w "Scid: Generate Reports..."
+  wm title $w "[tr ScidUp]: Generate Reports..."
   pack [ttk::label $w.typelabel -text "Select the report type:" -font font_Bold] -side top -anchor w
   pack [ttk::frame $w.type] -side top -anchor w
   ttk::radiobutton $w.type.full -text "Full" -variable reportType -value full
@@ -1810,7 +1810,7 @@ proc ::optable::generateFavoriteReports {} {
   ttk::entry $w.dir.entry -textvariable ::reportDir
   ttk::button $w.dir.choose -text $::tr(Browse...) -command {
     set tmpdir [tk_chooseDirectory -parent .reportFavoritesDlg \
-        -title "Scid: Choose Report Folder"]
+        -title "[tr ScidUp]: Choose Report Folder"]
     if {$tmpdir != ""} {
       set ::reportDir [file nativename $tmpdir]
     }
@@ -1864,7 +1864,7 @@ proc ::optable::reportFavoritesOK {} {
   set w .reportsProgress
   toplevel $w
   wm withdraw $w
-  wm title $w "Scid: Generating Reports"
+  wm title $w "[tr ScidUp]: Generating Reports"
   bind $w <Visibility> [list raiseWin $w]
   pack [ttk::label $w.t -width 40 -text "Generating reports. Please wait..." -font font_Bold] -side top -pady 5
   pack [ttk::label $w.report] -side top -pady 5
@@ -1879,7 +1879,7 @@ proc ::optable::reportFavoritesOK {} {
     set moves [lindex $entry 1]
     set fname [file join $reportDir "$name$suffix"]
     if {[catch {open $fname w} f]} {
-      tk_messageBox -title "Scid" -icon warning -type ok \
+      tk_messageBox -title [tr ScidUp] -icon warning -type ok \
           -message "Unable to write file: $fname\n$f"
       grab release $w
       destroy $w

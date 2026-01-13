@@ -40,7 +40,7 @@ proc loadSpellCheckFile {{message 1}} {
   set fullname [tk_getOpenFile -initialdir [file dirname $spellCheckFile] -filetypes $ftype -title "Open Spellcheck file"]
   if {![string compare $fullname ""]} { return "" }
 
-  progressWindow "Scid - [tr Spellcheking]" "Loading $fullname ..."
+  progressWindow "[tr ScidUp] - [tr Spellcheking]" "Loading $fullname ..."
   set err [catch {sc_name read $fullname} result]
   closeProgressWindow
   if {$err} {
@@ -100,7 +100,7 @@ proc readSpellCheckFile { fullname {message 1}} {
   global spellCheckFile
 
     if { $fullname != ""} {
-        progressWindow "Scid - [tr Spellcheking]" "Loading $fullname ..."
+        progressWindow "[tr ScidUp] - [tr Spellcheking]" "Loading $fullname ..."
         set err [catch {sc_name read $fullname} result]
         closeProgressWindow
         if {$err} {
@@ -259,7 +259,7 @@ proc updateSpellCheckWin {type} {
                                    -ambiguous $spellcheckAmbiguous $type} result]
     stopScanning
     if {$err} {
-        ERROR::MessageBox "" "Scid: Spellcheck results"
+        ERROR::MessageBox "" "[tr ScidUp]: Spellcheck results"
         return
     }
 
@@ -294,7 +294,7 @@ proc openSpellCheckWin {type {parent .}} {
     set w .spellcheckWin
 
     if {[winfo exists $w]} {
-        tk_messageBox -type ok -icon info -title "Scid: Spellcheck error" \
+        tk_messageBox -type ok -icon info -title "[tr ScidUp]: Spellcheck error" \
                       -parent $parent \
                       -message "The spellcheck window is already open; close it first."
         return
@@ -309,7 +309,7 @@ proc openSpellCheckWin {type {parent .}} {
     set spellcheckType $type
 
     win::createDialog $w
-    wm title $w "Scid: $::tr(Spellchecking) $::tr(Result)"
+    wm title $w "[tr ScidUp]: $::tr(Spellchecking) $::tr(Result)"
     wm minsize $w 0 15
 
     bind $w <F1> { helpWindow Maintenance }
@@ -367,7 +367,7 @@ proc openSpellCheckWin {type {parent .}} {
         catch {set spelltext [.spellcheckWin.text.text get 1.0 end-1c]}
         .spellcheckWin.text.text delete 1.0 end
         .spellcheckWin.text.text insert end \
-            "Scid is making the spelling corrections.\nPlease wait..."
+            "[tr ScidUp] is making the spelling corrections.\nPlease wait..."
 
         # Enable the progress bar
         #
@@ -388,7 +388,7 @@ proc openSpellCheckWin {type {parent .}} {
             append msg "Number of games NOT corrected (date<birth or >death): "
             append msg "[lindex $spell_result 3]"
             tk_messageBox -type ok -parent .spellcheckWin \
-                -title "Scid: $::tr(Spellchecking) $::tr(Result)" -message $msg
+                -title "[tr ScidUp]: $::tr(Spellchecking) $::tr(Result)" -message $msg
         }
         unbusyCursor .
         focus .

@@ -247,7 +247,7 @@ test end-exportGames-filter-empty-returns-1.0 {exportGames warns and returns whe
     list $title $message
 } -cleanup {
     ::end_test::cleanup
-} -result {{Scid: Filter empty} {The filter contains no games.}}
+} -result {{ScidUp: Filter empty} {The filter contains no games.}}
 
 
 test end-exportGames-exportOptions-cancel-returns-1.0 {exportGames returns immediately when exportOptions is cancelled} -setup {

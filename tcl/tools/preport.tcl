@@ -28,7 +28,7 @@ set ::preport::_clipbase 0
 #   - Shows a warning `tk_messageBox` if the current database is empty.
 proc ::preport::preportDlg {args} {
   if {[sc_base numGames $::curr_db] == 0} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message "No games in current base"
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message "No games in current base"
     return
   }
   # Set default player and color if parameters are provided
@@ -47,7 +47,7 @@ proc ::preport::preportDlg {args} {
   set w .preportDlg
   if {[winfo exists $w]} { return }
   win::createDialog $w
-  wm title $w "Scid: [tr ToolsPlayerReport]"
+  wm title $w "[tr ScidUp]: [tr ToolsPlayerReport]"
   wm resizable $w 0 0
   pack [ttk::frame $w.g] -side top -fill x -expand yes
   ttk::label $w.g.where -text $::tr(Player)
@@ -186,7 +186,7 @@ proc ::preport::makeReportWin {args} {
     set w .progress
     toplevel $w
     wm withdraw $w
-    wm title $w "Scid: [tr ToolsPlayerReport]"
+    wm title $w "[tr ScidUp]: [tr ToolsPlayerReport]"
     bind $w <Visibility> [list raiseWin $w]
 
     pack [ttk::frame $w.b] -side bottom -fill x
@@ -264,7 +264,7 @@ proc ::preport::makeReportWin {args} {
   set w .preportWin
   if {![winfo exists $w]} {
     toplevel $w
-    wm title $w "Scid: $::tr(PReportTitle)"
+    wm title $w "[tr ScidUp]: $::tr(PReportTitle)"
     menu $w.menu
     ::setMenu $w $w.menu
     $w.menu add cascade -label OprepFile -menu $w.menu.file
@@ -403,7 +403,7 @@ proc ::preport::setOptions {} {
   packdlgbuttons $w.b.cancel $w.b.ok
   array set ::preport::backup [array get ::preport]
   wm resizable $w 0 0
-  wm title $w  "Scid: [tr ToolsPlayerReport]: [tr Options]"
+  wm title $w  "[tr ScidUp]: [tr ToolsPlayerReport]: [tr Options]"
   bind $w <Escape> [list ${w}.b.cancel invoke]
 }
 
@@ -425,7 +425,7 @@ proc ::preport::previewHTML {} {
   set tmpfile "TempPlayerReport"
   set fname [file join $tmpdir $tmpfile]
   if {[catch {set tempfile [open $fname.html w]}]} {
-    tk_messageBox -title "Scid: Error writing report" -type ok -icon warning \
+    tk_messageBox -title "[tr ScidUp]: Error writing report" -type ok -icon warning \
         -message "Unable to write the file: $fname.html"
   }
   puts $tempfile [::preport::report html 1]
@@ -471,12 +471,12 @@ proc ::preport::saveReport {fmt} {
   }
 
   set fname [tk_getSaveFile -initialdir [pwd] -filetypes $ftype \
-      -defaultextension $default -title "Scid: Save opening report"]
+      -defaultextension $default -title "[tr ScidUp]: Save opening report"]
   if {$fname == ""} { return }
 
   busyCursor .
   if {[catch {set tempfile [open $fname w]}]} {
-    tk_messageBox -title "Scid: Error writing report" -type ok -icon warning \
+    tk_messageBox -title "[tr ScidUp]: Error writing report" -type ok -icon warning \
         -message "Unable to write the file: $fname\n\n"
   } else {
     set report [::preport::report $fmt 1]

@@ -83,7 +83,7 @@ proc ::crosstab::Open {} {
     set fname [tk_getSaveFile -initialdir [pwd] -filetypes $ftype  -title "Save Crosstable"]
     if {$fname != ""} {
       if {[catch {set tempfile [open $fname w]}]} {
-        tk_messageBox -title "Scid: Error saving file" -type ok -icon warning -message "Unable to save the file: $fname\n\n"
+        tk_messageBox -title "[tr ScidUp]: Error saving file" -type ok -icon warning -message "Unable to save the file: $fname\n\n"
       } else {
         puts -nonewline $tempfile [$::crosstab::win.f.text get 1.0 end]
         close $tempfile
@@ -101,7 +101,7 @@ proc ::crosstab::Open {} {
         append fname ".html"
       }
       if {[catch {set tempfile [open $fname w]}]} {
-        tk_messageBox -title "Scid: Error saving file" -type ok -icon warning -message "Unable to save the file: $fname\n\n"
+        tk_messageBox -title "[tr ScidUp]: Error saving file" -type ok -icon warning -message "Unable to save the file: $fname\n\n"
       } else {
         catch {sc_game crosstable html $crosstab(sort) $crosstab(type) \
               $crosstab(ratings) $crosstab(countries) $crosstab(flags) $crosstab(titles) \
@@ -124,7 +124,7 @@ proc ::crosstab::Open {} {
         append fname ".tex"
       }
       if {[catch {set tempfile [open $fname w]}]} {
-        tk_messageBox -title "Scid: Error saving file" \
+        tk_messageBox -title "[tr ScidUp]: Error saving file" \
             -type ok -icon warning \
             -message "Unable to save the file: $fname\n\n"
       } else {

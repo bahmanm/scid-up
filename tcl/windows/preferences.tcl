@@ -162,7 +162,7 @@ proc ::preferences::checkFileDir { widget command type oldvalue} {
 
 ################################################################################
 # ::preferences::resources
-#   Opens the “Scid Resources” dialog for configuring resource file/directories.
+#   Opens the “ScidUp Resources” dialog for configuring resource file/directories.
 # Visibility:
 #   Public.
 # Inputs:
@@ -180,7 +180,7 @@ proc ::preferences::resources { } {
     if { [winfo exists $w] } return
 
     win::createDialog $w
-    ::setTitle $w "Scid Resources"
+    ::setTitle $w "[tr ScidUp] Resources"
 
     set idx 0
     foreach file {

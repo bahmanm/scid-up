@@ -186,9 +186,9 @@ namespace eval uci {
             }
             
             if {$n == 1} {
-                catch {wm title .analysisWin$n "Scid: Analysis: $name"}
+                catch {wm title .analysisWin$n "[tr ScidUp]: Analysis: $name"}
             } else {
-                catch {wm title .analysisWin$n "Scid: Analysis $n: $name"}
+                catch {wm title .analysisWin$n "[tr ScidUp]: Analysis $n: $name"}
             }
         }
         
@@ -434,7 +434,7 @@ namespace eval uci {
         
         if {[info exists ::uci::uciInfo(pipe$n)]} {
             if {$::uci::uciInfo(pipe$n) != ""} {
-                tk_messageBox -title "Scid" -icon warning -type ok -message "An engine is already running"
+                tk_messageBox -title [tr ScidUp] -icon warning -type ok -message "An engine is already running"
                 return
             }
         }
@@ -449,7 +449,7 @@ namespace eval uci {
         # Try to execute the analysis program:
         if {[catch {set pipe [open "| [list $cmd] $arg" "r+"]} result]} {
             if {$oldpwd != ""} { catch {cd $oldpwd} }
-            tk_messageBox -title "Scid: error starting UCI engine" \
+            tk_messageBox -title "[tr ScidUp]: error starting UCI engine" \
                     -icon warning -type ok -message "Unable to start the program:\n$cmd"
             return
         }
@@ -970,7 +970,7 @@ namespace eval uci {
         # Try to execute the analysis program:
         if {[catch {set uciInfo(pipe$n) [open "| [list $analysisCommand] $analysisArgs" "r+"]} result]} {
             if {$oldpwd != ""} { catch {cd $oldpwd} }
-            tk_messageBox -title "Scid: error starting engine" -icon warning -type ok \
+            tk_messageBox -title "[tr ScidUp]: error starting engine" -icon warning -type ok \
                     -message "Unable to start the program:\n$analysisCommand"
             return 1
         }
@@ -1039,11 +1039,11 @@ namespace eval uci {
             set uciInfo(pipe$n) ""
             if { $exit_status != 0 } {
                 logEngineNote $n {Engine terminated with exit code $exit_status: "\"$standard_error\""}
-                tk_messageBox -type ok -icon info -parent . -title "Scid" \
+                tk_messageBox -type ok -icon info -parent . -title [tr ScidUp] \
                               -message "The analysis engine terminated with exit code $exit_status: \"$standard_error\""
             } else {
                 logEngineNote $n {Engine terminated without exit code: "\"$standard_error\""}
-                tk_messageBox -type ok -icon info -parent . -title "Scid" \
+                tk_messageBox -type ok -icon info -parent . -title [tr ScidUp] \
                               -message "The analysis engine terminated without exist code: \"$standard_error\""
             }
             return 0
@@ -1078,7 +1078,7 @@ namespace eval uci {
         fileevent $pipe readable {}
         
         if {! $uciok } {
-            tk_messageBox -title "Scid: error closing UCI engine" \
+            tk_messageBox -title "[tr ScidUp]: error closing UCI engine" \
                     -icon warning -type ok -message "Not an UCI engine"
         }
         

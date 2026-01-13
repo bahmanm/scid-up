@@ -29,7 +29,7 @@ proc findNovelty {} {
     return
   }
   win::createDialog $w
-  wm title $w "Scid: $::tr(FindNovelty)"
+  wm title $w "[tr ScidUp]: $::tr(FindNovelty)"
 
   pack [ttk::frame $w.help] -side top -fill x
   ttk::label $w.help.text -wraplength 3i -justify left -text $::tr(NoveltyHelp)
@@ -50,7 +50,7 @@ proc findNovelty {} {
   pack [ttk::frame $w.b] -side top -fill x
   dialogbutton $w.b.go -text $::tr(FindNovelty) -command {
     destroy .noveltyWin
-    progressWindow "Scid" "$::tr(FindNovelty)" $::tr(Cancel)
+  progressWindow [tr ScidUp] "$::tr(FindNovelty)" $::tr(Cancel)
     if {$noveltyOlder} {
       set err [catch {sc_game novelty -older $noveltyBase} result]
     } else {
@@ -134,7 +134,7 @@ proc mergeGame {base gnum} {
   set err [catch {sc_game merge $base $gnum} result]
   sc_game pop
   if {$err} {
-    tk_messageBox -title "Scid" -type ok -icon info \
+    tk_messageBox -title [tr ScidUp] -type ok -icon info \
         -message "Unable to merge the selected game:\n$result"
     return
   }
@@ -142,7 +142,7 @@ proc mergeGame {base gnum} {
   set merge(gnum) $gnum
   set w .mergeDialog
   win::createDialog $w
-  wm title $w "Scid: $::tr(MergeGame)"
+  wm title $w "[tr ScidUp]: $::tr(MergeGame)"
   bind $w <Escape> [list ${w}.b.cancel invoke]
   bind $w <F1> {helpWindow GameList Browsing}
   ttk::label $w.title -text $::tr(Preview:) -font font_Bold -anchor center
@@ -266,7 +266,7 @@ proc setExportText {exportType} {
   set w .setExportText$exportType
   if {[winfo exists $w]} { return }
   win::createDialog $w
-  wm title $w "Scid: $title"
+  wm title $w "[tr ScidUp]: $title"
 
   ttk::frame $w.buttons
   pack $w.buttons -side bottom -fill x -anchor e
@@ -388,7 +388,7 @@ proc exportOptions {exportType} {
   set w .exportFlagsWin
   set exportFlags(ok) -1
   win::createDialog $w
-  wm title $w "Scid: [tr OptionsExport]"
+  wm title $w "[tr ScidUp]: [tr OptionsExport]"
   # wm transient $w .
   wm protocol $w WM_DELETE_WINDOW { }
   bind $w <Escape> [list ${w}.b.cancel invoke]
@@ -475,7 +475,7 @@ proc exportOptions {exportType} {
 proc exportGames {selection exportType} {
   global ::pgn::moveNumberSpaces exportStartFile exportEndFile exportFlags
   if {$selection == "filter" && [sc_filter count] == 0} {
-      tk_messageBox -title "Scid: Filter empty" -type ok -icon info \
+      tk_messageBox -title "[tr ScidUp]: Filter empty" -type ok -icon info \
           -message "The filter contains no games."
       return
   }
@@ -524,7 +524,7 @@ proc exportGames {selection exportType} {
   set fName [$getfile -initialdir $idir -filetypes $ftype -defaultextension $default -title $title]
   if {$fName == ""} { return }
 
-  progressWindow "Scid" "Exporting games..." $::tr(Cancel)
+  progressWindow [tr ScidUp] "Exporting games..." $::tr(Cancel)
   sc_base export $selection $exportType $fName -append $exportFlags(append) \
       -starttext $exportStartFile($exportType) \
       -endtext $exportEndFile($exportType) \
@@ -745,7 +745,7 @@ proc nameEditor {} {
     return
   }
   win::createDialog $w
-  wm title $w "Scid: [tr FileMaintNameEditor]"
+  wm title $w "[tr ScidUp]: [tr FileMaintNameEditor]"
   set nameEditorWin 1
   setWinLocation $w
   bind $w <Configure> [list recordWinSize $w]
@@ -941,11 +941,11 @@ proc gameSave { gnum } {
   if {[winfo exists $w]} { return }
   win::createDialog $w
   if {$gnum == 0} {
-    wm title $w "Scid: [tr GameAdd]"
+    wm title $w "[tr ScidUp]: [tr GameAdd]"
     pack [ttk::frame $w.refdb] -side top -fill x -pady {0 10}
     CreateSelectDBWidget "$w.refdb" "gameSave_toBase" [sc_base current] 0
   } else {
-    wm title $w "Scid: [tr GameReplace]"
+    wm title $w "[tr ScidUp]: [tr GameReplace]"
   }
   set gsaveNum $gnum
   catch {grab $w}
@@ -1489,7 +1489,7 @@ if {$loadAtStart(eco)} {
 bind TNotebook <Key-Right> {}
 bind TNotebook <Key-Left>  {}
 
-wm iconname . "Scid"
+wm iconname . [tr ScidUp]
 wm protocol . WM_DELETE_WINDOW { ::file::Exit }
 setMenu . .menu
 keyboardShortcuts .
@@ -1503,7 +1503,7 @@ if {$startup(tip)} { ::tip::show }
 
 # Try to load the spellcheck file:
 if {$loadAtStart(spell)} {
-  progressWindow "Scid - [tr Spellcheking]" "Loading $spellCheckFile ..."
+  progressWindow "[tr ScidUp] - [tr Spellcheking]" "Loading $spellCheckFile ..."
   set err [catch {sc_name read $spellCheckFile} result]
   closeProgressWindow
 }
