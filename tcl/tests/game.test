@@ -229,7 +229,7 @@ test game-Strip-error-shows-messagebox-1.0 {::game::Strip shows an info message 
     list $::game_test::uiCalls $::game_test::scGameCalls
 } -cleanup {
     ::game_test::cleanup
-} -result {{{undoFeature save {}} {tk_messageBox {-parent . -type ok -icon info -title Scid -message boom}}} {{strip comments}}}
+} -result {{{undoFeature save {}} {tk_messageBox {-parent . -type ok -icon info -title ScidUp -message boom}}} {{strip comments}}}
 
 test game-TruncateBegin-success-updates-board-and-title-1.0 {::game::TruncateBegin updates board/title on success} -setup {
     ::game_test::setup

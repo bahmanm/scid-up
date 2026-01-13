@@ -1,5 +1,16 @@
 namespace eval ::scid_test {}
 
+# Minimal `tr` stub required for modules that use `tr` directly under plain
+# `tclsh`. The real command is provided by `tcl/language.tcl`.
+if {![llength [info commands tr]]} {
+    proc tr {tag {lang ""}} {
+        if {[info exists ::tr($tag)]} {
+            return $::tr($tag)
+        }
+        return $tag
+    }
+}
+
 # Minimal `font` stub for sourcing modules that assume Tk is present.
 # The real command is provided by Tk (`wish`).
 if {![llength [info commands font]]} {
