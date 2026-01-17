@@ -32,12 +32,12 @@ proc ::recentFiles::save {{reportError 0}} {
   set filename [scidConfigFile recentfiles]
   if  {[catch {open $filename w} f]} {
     if {$reportError} {
-      tk_messageBox -title "Scid" -type ok -icon warning \
+      tk_messageBox -title [tr ScidUp] -type ok -icon warning \
           -message "Unable to write file: $filename\n$f"
     }
     return
   }
-  puts $f "# Scid $::scidVersion recent files list"
+  puts $f "# ScidUp $::scidVersion recent files list"
   puts $f ""
   foreach i {limit menu extra data} {
     puts $f "set recentFiles($i) [list [set recentFiles($i)]]"

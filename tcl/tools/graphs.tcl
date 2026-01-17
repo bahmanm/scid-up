@@ -92,7 +92,7 @@ proc getScorefromComment { comment maxY } {
 proc ::tools::graphs::Save {mode w} {
   if {! [winfo exists $w]} { return }
   set ftypes {{"PostScript files" {.eps .ps}} {"All files" *}}
-  set fname [tk_getSaveFile -filetypes $ftypes -parent $w -defaultextension ".eps" -title "Scid: Save Graph"]
+  set fname [tk_getSaveFile -filetypes $ftypes -parent $w -defaultextension ".eps" -title "[tr ScidUp]: Save Graph"]
   if {$fname == ""} { return }
 
   if {[file extension $fname] != ".eps" && [file extension $fname] != ".ps" } {
@@ -100,7 +100,7 @@ proc ::tools::graphs::Save {mode w} {
   }
 
   if {[catch {$w postscript -file $fname -colormode $mode} result]} {
-    tk_messageBox -icon info -parent $w -title "Scid" -message $result
+    tk_messageBox -icon info -parent $w -title [tr ScidUp] -message $result
   }
 }
 
@@ -796,7 +796,7 @@ proc ::tools::graphs::score::Refresh { {docreate 1 }} {
       ::utils::graph::redraw score
     }
     bind $w.c <1> {::tools::graphs::score::Move %x}
-    ::setTitle $w "Scid: [tr WindowsGraph]"
+    ::setTitle $w "[tr ScidUp]: [tr WindowsGraph]"
     ::createToplevelFinalize $w
     ::tools::graphs::score::ConfigMenus
   }
@@ -1017,7 +1017,7 @@ proc ::tools::graphs::rating::Refresh {{type ""} {player ""}} {
     }
     bind $w.c <Button-1> [list ::tools::graphs::rating::Refresh]
     bind $w.c <Button-$::MB3> [list ::tools::graphs::rating::Refresh]
-    wm title $w "Scid: [tr ToolsRating]"
+    wm title $w "[tr ScidUp]: [tr ToolsRating]"
     ::tools::graphs::rating::ConfigMenus
   }
 

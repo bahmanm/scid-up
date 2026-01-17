@@ -304,7 +304,7 @@ proc chooseBoardColors { w {choice -1}} {
     LightSquares DarkSquares SelectedSquares SuggestedSquares
   } {
     button $f.b$c -image e20 -background [set $c] -command [list apply {{w c} {
-      set x [tk_chooseColor -initialcolor $::newColors($c) -title Scid]
+      set x [tk_chooseColor -initialcolor $::newColors($c) -title [tr ScidUp]]
       if {$x ne ""} { set ::newColors($c) $x; updateBoardColors $w }
     }} $w $c]
     ttk::label $f.l$c -text "$::tr($n)  "

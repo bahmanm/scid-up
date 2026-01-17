@@ -416,13 +416,13 @@ test win-manageWindow-docked-inserts-tab-1.0 {manageWindow inserts a docked tab 
     set ::docking::notebook_name(.w) .nb
 
     # Act
-    ::win::manageWindow .w "Scid: Title"
+    ::win::manageWindow .w "ScidUp: Title"
 
     # Assert
     list [info exists ::win::menu_(.w)] [info exists ::docking::notebook_name(.w)] $::win_test::dockingCalls
 } -cleanup {
     ::win_test::cleanup
-} -result {0 0 {{insert_tab .w .nb end {-text {Scid: Title} -image tb_close -compound left}}}}
+} -result {0 0 {{insert_tab .w .nb end {-text {ScidUp: Title} -image tb_close -compound left}}}}
 
 
 test win-manageWindow-undocked-calls-undock-1.0 {manageWindow undocks when windowsDock is false} -setup {
@@ -565,7 +565,7 @@ test win-getMenu-fdock-unadultered-name-1.0 {getMenu returns stored menu and str
 } -result {.m .foo}
 
 
-test win-setTitle-docked-trims-scid-prefix-1.0 {setTitle trims "Scid: " for docked tabs} -setup {
+test win-setTitle-docked-trims-scid-prefix-1.0 {setTitle trims "ScidUp: " for docked tabs} -setup {
     ::win_test::setup
 } -body {
     # Arrange
@@ -573,7 +573,7 @@ test win-setTitle-docked-trims-scid-prefix-1.0 {setTitle trims "Scid: " for dock
     set ::docking::tbs(.nb) .pw
 
     # Act
-    ::setTitle .w "Scid: Hello"
+    ::setTitle .w "ScidUp: Hello"
 
     # Assert
     list $::win_test::notebookCalls $::win_test::notebookTabOptions(.nb,.w)
@@ -782,7 +782,7 @@ test win-undockWindow-with-srctab-rewrites-title-1.0 {undockWindow removes the t
     list $::win_test::wmTitle(.w) $::win_test::dockingCalls $::docking::notebook_name(.w) $::win_test::afterCalls
 } -cleanup {
     ::win_test::cleanup
-} -result {{Scid: TabTitle} {{remove_tab .w .nb}} .nb {{idle after 1 {::win::restoreWinGeometry .w}}}}
+} -result {{ScidUp: TabTitle} {{remove_tab .w .nb}} .nb {{idle after 1 {::win::restoreWinGeometry .w}}}}
 
 
 cleanupTests

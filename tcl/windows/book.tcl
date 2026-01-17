@@ -165,7 +165,7 @@ namespace eval book {
 
     # No book found
     if { [llength $bookList] == 0 } {
-      tk_messageBox -title "Scid" -type ok -icon error -message "No books found. Check books directory"
+      tk_messageBox -title [tr ScidUp] -type ok -icon error -message "No books found. Check books directory"
       set ::book::isOpen 0
       set ::book::currentBook ""
       ::win::closeWindow $w
@@ -209,7 +209,7 @@ namespace eval book {
     bind $w <Destroy> [list ::book::closeMainBook]
     # we make a redundant check here, another one is done a few line above
     if { [catch {bookSelect} ] } {
-      tk_messageBox -title "Scid" -type ok -icon error -message "No books found. Check books directory"
+      tk_messageBox -title [tr ScidUp] -type ok -icon error -message "No books found. Check books directory"
       set ::book::isOpen 0
       set ::book::currentBook ""
       ::win::closeWindow .bookWin
@@ -388,7 +388,7 @@ namespace eval book {
 
     # No book found
     if { [llength $bookList] == 0 } {
-      tk_messageBox -title "Scid" -type ok -icon error -message "No books found. Check books directory"
+      tk_messageBox -title [tr ScidUp] -type ok -icon error -message "No books found. Check books directory"
       set ::book::isOpen 0
       set ::book::currentBook ""
       ::win::closeWindow $w
@@ -630,17 +630,17 @@ namespace eval book {
   proc export {} {
     ::windows::gamelist::Refresh
     updateTitle
-    progressWindow "Scid" "ExportingBook..." $::tr(Cancel) "::book::sc_progressBar"
+    progressWindow [tr ScidUp] "ExportingBook..." $::tr(Cancel) "::book::sc_progressBar"
     set ::book::cancelBookExport 0
     set ::book::exportCount 0
     ::book::book2pgn
     set ::book::hashList ""
     closeProgressWindow
     if { $::book::exportCount >= $::book::exportMax } {
-      tk_messageBox -title "Scid" -type ok -icon info \
+      tk_messageBox -title [tr ScidUp] -type ok -icon info \
           -message "$::tr(Movesloaded)  $::book::exportCount\n$::tr(BookPartiallyLoaded)"
     } else  {
-      tk_messageBox -title "Scid" -type ok -icon info -message "$::tr(Movesloaded)  $::book::exportCount"
+      tk_messageBox -title [tr ScidUp] -type ok -icon info -message "$::tr(Movesloaded)  $::book::exportCount"
     }
     updateBoard -pgn
   }

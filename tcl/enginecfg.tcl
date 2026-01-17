@@ -142,7 +142,7 @@ proc ::enginecfg::remove {name} {
     set msg "Name: $name\n"
     append msg "Command: $cmd\n\n"
     append msg "Do you really want to remove this engine from the list?"
-    set answer [tk_messageBox -title Scid -icon question -type yesno -message $msg]
+    set answer [tk_messageBox -title [tr ScidUp] -icon question -type yesno -message $msg]
     if {$answer ne "yes"} { return false }
 
     set ::engines(list) [lreplace $::engines(list) $idx $idx]
@@ -201,7 +201,7 @@ proc ::enginecfg::save {enginecfg {force_write false}} {
 proc ::enginecfg::write {} {
     set enginesFile [scidConfigFile engines]
     set f [open $enginesFile w]
-    puts $f "\# Analysis engines list file for Scid $::scidVersion with UCI support"
+    puts $f "\# Analysis engines list file for ScidUp $::scidVersion with UCI support"
     puts $f ""
     foreach e $::engines(list) {
         lassign $e name cmd args dir elo time url uci opt

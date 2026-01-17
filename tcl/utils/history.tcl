@@ -265,13 +265,13 @@ proc ::utils::history::Save {{reportError 0}} {
   
   if  {[catch {open $filename w} f]} {
     if {$reportError} {
-      tk_messageBox -title "Scid" -type ok -icon warning \
+      tk_messageBox -title [tr ScidUp] -type ok -icon warning \
           -message "Unable to write file: $filename\n$f"
     }
     return
   }
   
-  puts $f "# Scid $::scidVersion combobox history lists"
+  puts $f "# ScidUp $::scidVersion combobox history lists"
   puts $f ""
   foreach i [lsort [array names listData]] {
     puts $f "set ::utils::history::listData($i) [list $listData($i)]"

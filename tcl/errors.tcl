@@ -102,16 +102,16 @@ after idle {
   set ::ERROR::msg($::ERROR::FileMode) \
     "Error: file mode."
   set ::ERROR::msg($::ERROR::FileVersion) \
-    "Database version newer than Scid; please upgrade Scid."
+    "Database version newer than ScidUp; please upgrade ScidUp."
   set ::ERROR::msg($::ERROR::OldScidVersion) \
-    "Old format Scid file, now out of date."
+    "Old format ScidUp file, now out of date."
   set ::ERROR::msg($::ERROR::FileReadOnly) \
     $::tr(ErrReadOnly)
 
   set ::ERROR::msg(CompactCreate) \
     "A temporary database from a previous unsuccessfully compact operation already exists.\nPlease remove the files with suffix __COMPACT__ and retry.\n"
   set ::ERROR::msg($::ERROR::CompactRemove) \
-    "A compacted database has been successfully created with suffix __COMPACT__.\nHowever Scid could not remove the original database (due to insufficient privileges or because a file is opened in another program).\nPlease rename it manually.\n"
+    "A compacted database has been successfully created with suffix __COMPACT__.\nHowever ScidUp could not remove the original database (due to insufficient privileges or because a file is opened in another program).\nPlease rename it manually.\n"
   set ::ERROR::msg($::ERROR::CorruptData) \
     "Error while processing data: corrupted.\n"
   set ::ERROR::msg($::ERROR::Full) \

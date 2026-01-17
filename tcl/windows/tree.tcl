@@ -59,7 +59,7 @@ proc ::tree::make { { baseNumber -1 } {locked 0} } {
   ::createToplevel .treeWin$baseNumber
 
   # Set the tree window title now:
-  ::setTitle $w "Scid: [tr WindowsTree] $baseNumber"
+  ::setTitle $w "[tr ScidUp]: [tr WindowsTree] $baseNumber"
   set ::treeWin$baseNumber 1
   set tree(training$baseNumber) 0
   set tree(autorefresh$baseNumber) 1
@@ -856,7 +856,7 @@ proc ::tree::status { msg baseNumber } {
   if { $tree(status$baseNumber) == "" } {
     catch {sc_base filename $baseNumber} tree(status$baseNumber)
     set tree(status$baseNumber) [file tail $tree(status$baseNumber)]
-    ::setTitle $w "Scid: [tr WindowsTree] $baseNumber: $tree(status$baseNumber)"
+    ::setTitle $w "[tr ScidUp]: [tr WindowsTree] $baseNumber: $tree(status$baseNumber)"
   }
 
   if {$msg != ""} {
@@ -1074,7 +1074,7 @@ proc ::tree::graph { baseNumber {bpress 0}} {
     update
     bind $w <Configure> [list ::tree::graphRedraw $baseNumber]
     bind $w.c <Button-1> [list ::tree::graph $baseNumber]
-    ::setTitle $w "Scid: Tree Graph $baseNumber: [file tail [sc_base filename $baseNumber]]"
+    ::setTitle $w "[tr ScidUp]: Tree Graph $baseNumber: [file tail [sc_base filename $baseNumber]]"
     # wm minsize $w 300 200
     ::tree::configGraphMenus "" $baseNumber
   } elseif {$bpress == 1} {
@@ -1350,7 +1350,7 @@ proc ::tree::mask::open { {filename ""} } {
 ################################################################################
 proc ::tree::mask::askForSave {} {
   if {$::tree::mask::dirty} {
-    set answer [tk_messageBox -title Scid -icon warning -type yesno \
+    set answer [tk_messageBox -title [tr ScidUp] -icon warning -type yesno \
         -message "[ tr DoYouWantToSaveFirst ]\n$::tree::mask::maskFile ?"]
     if {$answer == "yes"} {
       ::tree::mask::save
@@ -1694,14 +1694,14 @@ proc ::tree::mask::setColor { move color {fen ""}} {
   if {$fen == ""} { set fen $::tree::mask::cacheFenIndex }
 
   if {![info exists mask($fen)]} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set ::tree::mask::dirty 1
   set moves [ lindex $mask($fen) 0 ]
   set idxm [lsearch -regexp $moves "^$move *"]
   if { $idxm == -1} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set newmove [lreplace [lindex $moves $idxm] 2 2 $color ]
@@ -1769,14 +1769,14 @@ proc ::tree::mask::setNag { move nag {fen ""} {refresh 1} } {
   if {$fen == ""} { set fen $::tree::mask::cacheFenIndex }
 
   if {![info exists mask($fen)]} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set ::tree::mask::dirty 1
   set moves [ lindex $mask($fen) 0 ]
   set idxm [lsearch -regexp $moves "^$move *"]
   if { $idxm == -1} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set newmove [lreplace [lindex $moves $idxm] 1 1 $nag ]
@@ -1839,14 +1839,14 @@ proc ::tree::mask::setComment { move comment { fen "" } } {
   set comment [string trim $comment]
 
   if {![info exists mask($fen)]} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set ::tree::mask::dirty 1
   set moves [ lindex $mask($fen) 0 ]
   set idxm [lsearch -regexp $moves "^$move *"]
   if { $idxm == -1} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set newmove [lreplace [lindex $moves $idxm] 3 3 $comment ]
@@ -1926,14 +1926,14 @@ proc ::tree::mask::setImage { move img nmr } {
   global ::tree::mask::mask
   set fen $::tree::mask::cacheFenIndex
   if {![info exists mask($fen)]} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set ::tree::mask::dirty 1
   set moves [ lindex $mask($fen) 0 ]
   set idxm [lsearch -regexp $moves "^$move *"]
   if { $idxm == -1} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
     return
   }
   set loc [expr {4 + $nmr}]
@@ -1993,7 +1993,7 @@ proc ::tree::mask::addComment { { move "" } } {
   # first check the move is present in Mask
   if { $move != "" } {
     if { ![::tree::mask::moveExists $move] } {
-      tk_messageBox -title "Scid" -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
+      tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr AddMoveToMaskFirst ]
       return
     }
   }
@@ -2061,12 +2061,12 @@ proc ::tree::mask::updateComment { { move "" } } {
 ################################################################################
 proc ::tree::mask::fillWithBase {} {
   if {$::tree::mask::maskFile == ""} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr OpenAMaskFileFirst]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr OpenAMaskFileFirst]
     return
   }
 
   set n [sc_base numGames $::curr_db]
-  progressWindow "Scid" "[tr TreeMaskFillWithBase]" $::tr(Stop)
+  progressWindow [tr ScidUp] "[tr TreeMaskFillWithBase]" $::tr(Stop)
   for {set gnum 1} { $gnum <= $n} {incr gnum} {
     if {[catch { updateProgressWindow $gnum $n }]} { break }
     ::tree::mask::fillWithGame $::curr_db $gnum 0
@@ -2092,7 +2092,7 @@ proc ::tree::mask::fillWithBase {} {
 ################################################################################
 proc ::tree::mask::fillWithGame { {base ""} {gnum ""} {refresh 1} } {
   if {$::tree::mask::maskFile == ""} {
-    tk_messageBox -title "Scid" -type ok -icon warning -message [ tr OpenAMaskFileFirst]
+    tk_messageBox -title [tr ScidUp] -type ok -icon warning -message [ tr OpenAMaskFileFirst]
     return
   }
 

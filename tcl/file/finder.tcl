@@ -30,7 +30,7 @@ proc ::file::finder::Open {} {
   if {[winfo exists $w]} { return }
   
   win::createDialog $w
-  wm title $w "Scid: $::tr(FileFinder)"
+  wm title $w "[tr ScidUp]: $::tr(FileFinder)"
   bind $w <F1> {helpWindow Finder}
   setWinLocation $w
   bind $w <Configure> [list recordWinSize $w]
@@ -364,14 +364,14 @@ proc ::file::finder::backup { f } {
   if { $ext == ".si4" || $ext == ".si5"} {
     set ver [string index $ext 3]
     if { [catch { file copy "$r.sg$ver" "$r$d.sg$ver" ; file copy "$r.sn$ver" "$r$d.sn$ver" } err ] } {
-      tk_messageBox -title Scid -icon error -type ok -message "File copy error $err"
+      tk_messageBox -title [tr ScidUp] -icon error -type ok -message "File copy error $err"
       return
     }
     catch { file copy "$r.stc" "$r$d.stc" }
   }
   
   if { [catch { file copy "$r[file extension $f]" "$r$d[file extension $f]" } err ] } {
-    tk_messageBox -title Scid -icon error -type ok -message "File copy error $err"
+    tk_messageBox -title [tr ScidUp] -icon error -type ok -message "File copy error $err"
     return
   }
   
@@ -394,7 +394,7 @@ proc ::file::finder::backup { f } {
 ################################################################################
 proc ::file::finder::copy { f } {
   if {[sc_base slot $f] != 0} {
-    tk_messageBox -title Scid -icon error -type ok -message "Close base first"
+    tk_messageBox -title [tr ScidUp] -icon error -type ok -message "Close base first"
     return
   }
   set dir [tk_chooseDirectory -initialdir [file dirname $f] ]
@@ -403,7 +403,7 @@ proc ::file::finder::copy { f } {
     if { $ext == ".si4" || $ext == ".si5"} {
       set ver [string index $ext 3]
       if { [catch { file copy "[file rootname $f].sg$ver" "[file rootname $f].sn$ver" $dir } err ] } {
-        tk_messageBox -title Scid -icon error -type ok -message "File copy error $err"
+        tk_messageBox -title [tr ScidUp] -icon error -type ok -message "File copy error $err"
         return
       }
       
@@ -411,7 +411,7 @@ proc ::file::finder::copy { f } {
     }
     
     if { [catch { file copy $f $dir } err ] } {
-      tk_messageBox -title Scid -icon error -type ok -message "File copy error $err"
+      tk_messageBox -title [tr ScidUp] -icon error -type ok -message "File copy error $err"
       return
     }
     
@@ -437,7 +437,7 @@ proc ::file::finder::copy { f } {
 ################################################################################
 proc ::file::finder::move { f } {
   if {[sc_base slot $f] != 0} {
-    tk_messageBox -title Scid -icon error -type ok -message "Close base first"
+    tk_messageBox -title [tr ScidUp] -icon error -type ok -message "Close base first"
     return
   }
   set dir [tk_chooseDirectory -initialdir [file dirname $f] ]
@@ -446,14 +446,14 @@ proc ::file::finder::move { f } {
     if { $ext == ".si4" || $ext == ".si5"} {
       set ver [string index $ext 3]
       if { [catch { file rename "[file rootname $f].sg$ver" "[file rootname $f].sn$ver" $dir } err ] } {
-        tk_messageBox -title Scid -icon error -type ok -message "File rename error $err"
+        tk_messageBox -title [tr ScidUp] -icon error -type ok -message "File rename error $err"
         return
       }
       catch { file rename "[file rootname $f].stc" $dir }
     }
     
     if { [catch { file rename $f $dir } err ] } {
-      tk_messageBox -title Scid -icon error -type ok -message "File rename error $err"
+      tk_messageBox -title [tr ScidUp] -icon error -type ok -message "File rename error $err"
       return
     }
   }
@@ -477,10 +477,10 @@ proc ::file::finder::move { f } {
 ################################################################################
 proc ::file::finder::delete { f } {
   if {[sc_base slot $f] != 0} {
-    tk_messageBox -title Scid -icon error -type ok -message "Close base first"
+    tk_messageBox -title [tr ScidUp] -icon error -type ok -message "Close base first"
     return
   }
-  set answer [tk_messageBox -title Scid -icon warning -type yesno -message "Are you sure you want to permanently delete $f ?"]
+  set answer [tk_messageBox -title [tr ScidUp] -icon warning -type yesno -message "Are you sure you want to permanently delete $f ?"]
   if {$answer == "yes"} {
     set ext [string tolower [file extension $f]]
     if { $ext == ".si4" || $ext == ".si5"} {

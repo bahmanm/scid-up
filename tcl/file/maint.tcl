@@ -107,7 +107,7 @@ proc ::maint::OpenClose {} {
   set font font_Small
   set bold font_SmallBold
   win::createDialog $w
-  wm title $w "Scid: [tr FileMaint]"
+  wm title $w "[tr ScidUp]: [tr FileMaint]"
   wm resizable $w 0 0
   bind $w <F1> {helpWindow Maintenance}
   bind $w <Escape> [list apply {{w} { destroy $w; return -code break } ::} $w]
@@ -402,7 +402,7 @@ proc ::maint::Refresh {} {
 proc markTwins {{parent .}} {
   global twinSettings
   if {[sc_base numGames $::curr_db] == 0} {
-    tk_messageBox -type ok -icon info -title [concat "Scid: " $::tr(noGames)] \
+    tk_messageBox -type ok -icon info -title [concat "[tr ScidUp]: " $::tr(noGames)] \
         -message $::tr(TwinCheckNoDelete)
     return
   }
@@ -411,7 +411,7 @@ proc markTwins {{parent .}} {
   if {! [winfo exists $w]} {
     win::createDialog $w
     wm resizable $w 0 0
-    wm title $w "Scid: $::tr(DeleteTwins)"
+    wm title $w "[tr ScidUp]: $::tr(DeleteTwins)"
     pack [ttk::frame $w.f]
     set small font_Small
     
@@ -607,7 +607,7 @@ proc doMarkDups {{parent .}} {
     set message [format %b [string map [list \$result $result] $::tr(TwinCheckFound1)]]
     if {$result > 0} {append message $::tr(TwinCheckFound2)}
     append message "."
-    tk_messageBox -type ok -parent $parent -icon info -title [concat "Scid: " $::tr(Result)] \
+    tk_messageBox -type ok -parent $parent -icon info -title [concat "[tr ScidUp]: " $::tr(Result)] \
         -message $message
   }
   ::maint::Refresh
@@ -656,7 +656,7 @@ proc makeClassifyWin {} {
     return
   }
   win::createDialog $w
-  wm title $w "Scid: [tr FileMaintClass]"
+  wm title $w "[tr ScidUp]: [tr FileMaintClass]"
   
   pack [ttk::frame $w.f] -expand 1
   ttk::labelframe  $w.f.g -text $::tr(ClassifyWhich)
@@ -948,7 +948,7 @@ proc shareTwinTags {g1 g2 {parent .}} {
     append msg [concat $::tr(game) " $gn: $tag: \"$old\" -> \"$new\""]
     append msg "\n"
   }
-  set answer [tk_messageBox -parent $parent -title "Scid" \
+  set answer [tk_messageBox -parent $parent -title [tr ScidUp] \
       -type okcancel -default ok -icon question -message $msg]
   if {$answer != "ok"} { return }
   sc_game tags share update $g1 $g2
@@ -1008,7 +1008,7 @@ proc compactDB {{base -1}} {
   append msg "Missing names (bad idx): [lindex $stats 3]"
   append msg "\n\nProceed?"
   set confirm [tk_messageBox -type okcancel -icon info -parent . \
-               -title [concat "Scid: " $::tr(CompactDatabase)] \
+               -title [concat "[tr ScidUp]: " $::tr(CompactDatabase)] \
                -message "$msg"]
   if {$confirm != "ok"} { return }
 
@@ -1027,7 +1027,7 @@ proc compactDB {{base -1}} {
   destroy .reviewgame
   destroy .inputengineconsole
  
-  progressWindow "Scid" [concat $::tr(CompactDatabase) "..."] $::tr(Cancel)
+  progressWindow [tr ScidUp] [concat $::tr(CompactDatabase) "..."] $::tr(Cancel)
   set err [catch {sc_base compact $base} result]
   closeProgressWindow
   if {$err} {
@@ -1042,7 +1042,7 @@ proc compactDB {{base -1}} {
     set msg "[sc_base filename $base]\n\n"
     append msg [tr GameFileCompacted]
     tk_messageBox -type ok -icon info -parent . \
-        -title [concat "Scid: " $::tr(CompactDatabase)] \
+        -title [concat "[tr ScidUp]: " $::tr(CompactDatabase)] \
         -message "$msg"
     ::notify::DatabaseModified $base
     ::game::Clear
@@ -1064,12 +1064,12 @@ proc compactDB {{base -1}} {
 ################################################################################
 proc allocateRatings {} {
   if {[catch {sc_name ratings -test 1} result]} {
-    tk_messageBox -type ok -icon info -parent . -title "Scid" -message $result
+    tk_messageBox -type ok -icon info -parent . -title [tr ScidUp] -message $result
     return
   }
   set w .ardialog
   win::createDialog $w
-  wm title $w "Scid"
+  wm title $w [tr ScidUp]
   ttk::label $w.lab -wraplength 3i -justify left -text $::tr(AllocRatingDescription)
   pack $w.lab -side top -expand 1 -fill x -anchor w
   ttk::labelframe $w.g -text $::tr(AddRatings)
@@ -1108,10 +1108,10 @@ proc allocateRatings {} {
 proc doAllocateRatings {} {
   global addRatings
   if {[catch {sc_name ratings -test 1} result]} {
-    tk_messageBox -type ok -icon info -parent . -title "Scid" -message $result
+    tk_messageBox -type ok -icon info -parent . -title [tr ScidUp] -message $result
     return
   }
-  progressWindow "Scid" "Adding Elo ratings..." $::tr(Cancel)
+  progressWindow [tr ScidUp] "Adding Elo ratings..." $::tr(Cancel)
   set err [catch {sc_name ratings -change $addRatings(overwrite) -filter $addRatings(filter)} result]
   closeProgressWindow
   if {$err} {
@@ -1121,7 +1121,7 @@ proc doAllocateRatings {} {
     set g [::utils::thousands [lindex $result 1]]
     set message [format %b [string map [list \$r $r \$g $g] $::tr(AddedRatings)]]
     tk_messageBox -type ok -icon info -parent . \
-        -title "Scid" -message $message
+        -title [tr ScidUp] -message $message
   }
   ::notify::DatabaseModified $::curr_db
 }
@@ -1150,7 +1150,7 @@ proc stripTags {} {
   set stripTagList {}
   
   # Find extra PGN tags:
-  progressWindow "Scid" "Searching for extra PGN tags..." $::tr(Cancel)
+  progressWindow [tr ScidUp] "Searching for extra PGN tags..." $::tr(Cancel)
   set err [catch {sc_base taglist $::curr_db} result]
   closeProgressWindow
   if {$err} {
@@ -1167,13 +1167,13 @@ proc stripTags {} {
   }
   
   if {$nTags == 0} {
-    tk_messageBox -title "Scid" -icon info -type ok \
+    tk_messageBox -title [tr ScidUp] -icon info -type ok \
         -message "No extra tags were found."
     return
   }
   
   win::createDialog $w
-  wm title $w "Scid: $::tr(StripTags)"
+  wm title $w "[tr ScidUp]: $::tr(StripTags)"
   ttk::label $w.title -text "Extra PGN tags:" -font font_Bold -anchor w
   pack $w.title -side top -fill x -anchor center
   pack [ttk::frame $w.f] -side top -fill x
@@ -1230,13 +1230,13 @@ proc doStripTags {topwin} {
     }
   }
   append msg "from this database?"
-  set result [tk_messageBox -title "Scid" -parent $topwin \
+  set result [tk_messageBox -title [tr ScidUp] -parent $topwin \
       -icon question -type yesno -message $msg]
   if {$result == "no"} {
     return
   }
   destroy $topwin
-  progressWindow "Scid" "Removing PGN tags..." $::tr(Stop)
+  progressWindow [tr ScidUp] "Removing PGN tags..." $::tr(Stop)
   set err [catch {sc_base strip $::curr_db {*}$tags} result]
   closeProgressWindow
   if {$err && $::errorCode != $::ERROR::UserCancel} {
@@ -1249,7 +1249,7 @@ proc doStripTags {topwin} {
   append result "\n\n"
   append result "To save space and maintain database efficiency, it is a "
   append result "good idea to compact the game file after removing tags."
-  tk_messageBox -title "Scid" -type ok -icon info -message $result
+  tk_messageBox -title [tr ScidUp] -type ok -icon info -message $result
   ::notify::GameChanged
   ::notify::DatabaseModified $::curr_db
 }
@@ -1272,7 +1272,7 @@ proc cleanerWin {} {
   if {[winfo exists $w]} { return }
   
   win::createDialog $w
-  wm title $w "Scid: $::tr(Cleaner)"
+  wm title $w "[tr ScidUp]: $::tr(Cleaner)"
   bind $w <F1> {helpWindow Maintenance Cleaner}
   pack [ttk::frame $w.f]
   
@@ -1340,7 +1340,7 @@ proc doCleaner {} {
   set w .mtoolStatus
   if {! [winfo exists $w]} {
     win::createDialog $w
-    wm title $w "Scid: $::tr(Cleaner)"
+    wm title $w "[tr ScidUp]: $::tr(Cleaner)"
     pack [ttk::frame $w.f]
     pack [ttk::frame $w.f.b] -side bottom -fill x -expand yes
     pack [ttk::frame $w.f.t] -side top -fill both -expand yes
@@ -1404,7 +1404,7 @@ proc doCleaner {} {
     } else {
       set r [::utils::thousands [lindex $result 0]]
       set g [::utils::thousands [lindex $result 1]]
-      $t insert end "   Scid added $r Elo ratings in $g games.\n"
+      $t insert end "   [tr ScidUp] added $r Elo ratings in $g games.\n"
     }
   }
   
@@ -1430,7 +1430,7 @@ proc doCleaner {} {
             -delete $twinSettings(delete)} result]} {
       set message $result
     } else {
-      set message "Scid found $result twin games"
+      set message "[tr ScidUp] found $result twin games"
       if {$result > 0} {append message " and set their delete flags"}
     }
     $t insert end "   $message.\n"

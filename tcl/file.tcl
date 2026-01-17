@@ -50,7 +50,7 @@ proc ::file::Exit {}  {
 
   # Only ask before exiting if there are unsaved changes:
   if {$unsavedCount > 0} {
-    set answer [tk_messageBox -title "Scid: [tr FileExit]" \
+    set answer [tk_messageBox -title "[tr ScidUp]: [tr FileExit]" \
         -message $msg -type yesno -icon question]
     if {$answer != "yes"} { return }
   }
@@ -93,7 +93,7 @@ proc ::file::New {} {
              -initialdir $::initialDir(base) \
              -filetypes $ftype \
              -defaultextension ".si5" \
-             -title "Create a Scid database"]
+             -title "Create a [tr ScidUp] database"]
 
   if {$fName == ""} { return }
   set file_extension [string tolower [file extension $fName]]
@@ -144,7 +144,7 @@ proc ::file::Open {{fName ""}} {
         { "EPD files" {".epd" ".EPD"} }
       }
 
-    set fName [tk_getOpenFile -initialdir $::initialDir(base) -filetypes $ftype -title "Open a Scid file"]
+    set fName [tk_getOpenFile -initialdir $::initialDir(base) -filetypes $ftype -title "Open a [tr ScidUp] file"]
   }
   set err [::file::Open_ "$fName"]
   if {$err == 0} {
@@ -238,7 +238,7 @@ proc ::file::Open_ {fName } {
 
   set ext [string tolower [file extension "$fName"] ]
   if {[sc_base slot $fName] != 0} {
-    tk_messageBox -title "Scid: opening file" -message "The database you selected is already opened."
+    tk_messageBox -title "[tr ScidUp]: opening file" -message "The database you selected is already opened."
     return 1
   }
 
@@ -248,7 +248,7 @@ proc ::file::Open_ {fName } {
   } elseif {"$ext" == ".pgn"} {
     # PGN file:
     set tip "[tr Tip]:\n[tr TipConvertPGN]\n([tr Database] -> [tr CopyAllGames] -> [tr FileNew])"
-    progressWindow "Scid" "$::tr(OpeningTheDatabase): $fName...\n\n$tip" $::tr(Cancel)
+    progressWindow [tr ScidUp] "$::tr(OpeningTheDatabase): $fName...\n\n$tip" $::tr(Cancel)
     set err [catch {sc_base open PGN "$fName"} ::file::lastOpened]
     closeProgressWindow
     if {$err} {
@@ -271,10 +271,10 @@ proc ::file::Open_ {fName } {
     } elseif {$ext == ".si4"} {
       set dbType "SCID4"
     } else {
-      tk_messageBox -title "Scid: opening file" -message "Unsupported database format:  $ext"
+      tk_messageBox -title "[tr ScidUp]: opening file" -message "Unsupported database format:  $ext"
       return 1;
     }
-    progressWindow "Scid" "$::tr(OpeningTheDatabase): [file tail "$fName"]..." $::tr(Cancel)
+    progressWindow [tr ScidUp] "$::tr(OpeningTheDatabase): [file tail "$fName"]..." $::tr(Cancel)
     set err [catch {sc_base open $dbType $fName} ::file::lastOpened]
     closeProgressWindow
     if {$err} {
@@ -307,13 +307,13 @@ proc ::file::Open_ {fName } {
 proc ::file::Upgrade {name} {
   if {[file readable "$name.si4"]} {
     set msg [string trim $::tr(ConfirmOpenNew)]
-    set res [tk_messageBox -title "Scid" -type yesno -icon info -message $msg]
+    set res [tk_messageBox -title [tr ScidUp] -type yesno -icon info -message $msg]
     if {$res == "no"} { return }
     return [::file::Open_ "$name.si4"]
   }
 
   set msg [string trim $::tr(ConfirmUpgrade)]
-  set res [tk_messageBox -title "Scid" -type yesno -icon info -message $msg]
+  set res [tk_messageBox -title [tr ScidUp] -type yesno -icon info -message $msg]
   if {$res == "no"} { return }
 
   set err [catch {
@@ -325,7 +325,7 @@ proc ::file::Upgrade {name} {
     return 1
   }
 
-  progressWindow "Scid" "$::tr(Opening): [file tail $name]..." $::tr(Cancel)
+  progressWindow [tr ScidUp] "$::tr(Opening): [file tail $name]..." $::tr(Cancel)
   set err [catch {sc_base open $name} ::file::lastOpened]
   closeProgressWindow
   if {$::errorCode == $::ERROR::NameDataLoss} {
@@ -339,7 +339,7 @@ proc ::file::Upgrade {name} {
       file delete "$name.sn4"
       file delete "$name.si4" }
   } else {
-    progressWindow "Scid" [concat $::tr(CompactDatabase) "..."] $::tr(Cancel)
+    progressWindow [tr ScidUp] [concat $::tr(CompactDatabase) "..."] $::tr(Cancel)
     set err_compact [catch {sc_base compact $::file::lastOpened}]
     closeProgressWindow
     if {$err_compact} { ERROR::MessageBox }

@@ -44,7 +44,7 @@ proc ::game::Clear {} {
 proc ::game::Strip {type} {
   undoFeature save
   if {[catch {sc_game strip $type} result]} {
-    tk_messageBox -parent . -type ok -icon info -title "Scid" -message $result
+    tk_messageBox -parent . -type ok -icon info -title [tr ScidUp] -message $result
     return
   }
   updateBoard -pgn
@@ -70,7 +70,7 @@ proc ::game::Strip {type} {
 proc ::game::TruncateBegin {} {
   undoFeature save
   if {[catch {sc_game truncate -start} result]} {
-    tk_messageBox -parent . -type ok -icon info -title "Scid" -message $result
+    tk_messageBox -parent . -type ok -icon info -title [tr ScidUp] -message $result
     return
   }
   updateBoard -pgn
@@ -96,7 +96,7 @@ proc ::game::TruncateBegin {} {
 proc ::game::Truncate {} {
   undoFeature save
   if {[catch {sc_game truncate} result]} {
-    tk_messageBox -parent . -type ok -icon info -title "Scid" -message $result
+    tk_messageBox -parent . -type ok -icon info -title [tr ScidUp] -message $result
     return
   }
   updateBoard -pgn
@@ -227,7 +227,7 @@ trace add variable ::game::moveEntryNumber write {::utils::validate::Regexp {^[0
 proc ::game::GotoMoveNumber {} {
   set ::game::moveEntryNumber ""
   set w [toplevel .mnumDialog]
-  wm title $w "Scid: [tr GameGotoMove]"
+  wm title $w "[tr ScidUp]: [tr GameGotoMove]"
   grab $w
   set f [ttk::frame $w.f]
   pack $f -expand 1
@@ -375,7 +375,7 @@ proc ::game::ConfirmDiscard {} {
   set w .confirmDiscard
   ::win::createDialog $w
   wm resizable $w 0 0
-  wm title $w "Scid: [tr Save]"
+  wm title $w "[tr ScidUp]: [tr Save]"
 
   ttk::frame $w.msg
   ttk::label $w.msg.image -image tb_iconSave

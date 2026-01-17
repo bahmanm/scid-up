@@ -22,7 +22,7 @@ set ::eloFromRating 0
 proc setupDefaultResolvers { } {
    set optionF ""
    if {[catch {open [scidConfigFile resolvers] w} optionF]} {
-      tk_messageBox -title "Scid: Unable to write file" -type ok -icon warning \
+      tk_messageBox -title "[tr ScidUp]: Unable to write file" -type ok -icon warning \
          -message "Unable to write options file: [scidConfigFile resolvers]\n$optionF"
    } else {
       puts $optionF "# Scid resolver configuration"
@@ -404,8 +404,8 @@ proc playerInfo {{player ""}} {
   set w .playerInfoWin
   if {! [winfo exists $w]} {
     ::createToplevel $w
-    wm title $w "Scid: [tr ToolsPInfo]"
-    ::setTitle $w "Scid: [tr ToolsPInfo]"
+    wm title $w "[tr ScidUp]: [tr ToolsPInfo]"
+    ::setTitle $w "[tr ScidUp]: [tr ToolsPInfo]"
     wm minsize $w 40 5
     pack [ttk::frame $w.b2] -side bottom -fill x
     pack [ttk::frame $w.b] -side bottom -fill x

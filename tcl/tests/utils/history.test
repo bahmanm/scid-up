@@ -329,7 +329,7 @@ test history-save-writes-file-1.0 {Save writes listData to [scidConfigFile histo
     close $f
 
     list \
-        [string match {*# Scid test combobox history lists*} $content] \
+        [string match {*# ScidUp test combobox history lists*} $content] \
         [regexp {set ::utils::history::listData\(Event\) \{Wijk aan Zee\}} $content] \
         [regexp {set ::utils::history::listData\(Player\) \{Alice Bob\}} $content]
 } -cleanup {

@@ -223,7 +223,7 @@ proc ::windows::gamelist::FilterExport {{w}} {
 	                          -typevariable ::gamelistExport \
 	                          -title [tr ToolsExpFilter] ]
 	if {$fName == ""} { return }
-	progressWindow "Scid" "Exporting games..." $::tr(Cancel)
+	progressWindow [tr ScidUp] "Exporting games..." $::tr(Cancel)
 	if {$::gamelistExport == "LaTeX"} {
         if {[file extension $fName] == ""} { append fName ".tex" }
 		set err [catch {sc_filter export $::gamelistBase($w) $::gamelistFilter($w) \
@@ -326,7 +326,7 @@ proc ::windows::gamelist::Awesome {{w} {txt}} {
 		sc_filter reset "$::gamelistBase($w)" $filter empty
 			#Split the string using " + "
 			foreach {dummy sub} [regexp -all -inline {(.+?)(?:\s\+\s|$)} $txt] {
-				progressWindow "Scid" "$::tr(HeaderSearch)..." $::tr(Cancel)
+				progressWindow [tr ScidUp] "$::tr(HeaderSearch)..." $::tr(Cancel)
 				sc_filter search $::gamelistBase($w) $filter header -filter OR {*}[AweParse $sub]
 				closeProgressWindow
 			}
@@ -522,19 +522,19 @@ proc ::windows::gamelist::CopyGames {{w} {srcBase} {dstBase} {filter "dbfilter"}
 		set err "$::tr(CopyErrTarget) ($targetName) $::tr(CopyErrReadOnly)."
 	}
 	if {$err != ""} {
-		tk_messageBox -type ok -icon info -title "Scid" \
+		tk_messageBox -type ok -icon info -title [tr ScidUp] \
 			-message "$::tr(CopyErr) \n\"$fromName\" -> \"$targetName\": \n$err"
 		return
 	}
 	# If copying to the clipbase, do not bother asking for confirmation:
 	if {$ask && $dstBase != $::clipbase_db} {
 		set msg [tr CopyConfirm]
-		set confirm [tk_messageBox -type "okcancel" -icon question -title "Scid: $::tr(CopyGames)" \
+		set confirm [tk_messageBox -type "okcancel" -icon question -title "[tr ScidUp]: $::tr(CopyGames)" \
 			-message $msg ]
 		if {$confirm != "ok"} { return }
 	}
 
-	progressWindow "Scid" "$::tr(CopyGames)..." $::tr(Cancel)
+	progressWindow [tr ScidUp] "$::tr(CopyGames)..." $::tr(Cancel)
 	set copyErr [catch {sc_base copygames $srcBase $filter $dstBase} result]
 	closeProgressWindow
 	if {$copyErr} { ERROR::MessageBox "$result"}

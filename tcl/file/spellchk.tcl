@@ -36,24 +36,24 @@ set spellstate idle
 ################################################################################
 proc loadSpellCheckFile {{message 1}} {
   global spellCheckFile
-  set ftype { { "Scid Spellcheck files" {".ssp"} } }
+  set ftype { { "ScidUp Spellcheck files" {".ssp"} } }
   set fullname [tk_getOpenFile -initialdir [file dirname $spellCheckFile] -filetypes $ftype -title "Open Spellcheck file"]
   if {![string compare $fullname ""]} { return "" }
 
-  progressWindow "Scid - [tr Spellcheking]" "Loading $fullname ..."
+  progressWindow "[tr ScidUp] - [tr Spellcheking]" "Loading $fullname ..."
   set err [catch {sc_name read $fullname} result]
   closeProgressWindow
   if {$err} {
       if {$message} {
         tk_messageBox -title "ERROR: Unable to read file" -type ok \
-          -icon error -message "Scid could not correctly read the spellcheck file you selected:\n\n$result"
+          -icon error -message "[tr ScidUp] could not correctly read the spellcheck file you selected:\n\n$result"
       }
     return ""
   }
   set spellCheckFile $fullname
   if {$message} {
     tk_messageBox -title "Spellcheck file loaded." -type ok -icon info \
-      -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start Scid, select the \"Save Options\" from the Options menu before exiting."
+      -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start [tr ScidUp], select the \"Save Options\" from the Options menu before exiting."
   }
   return $fullname
 }
@@ -74,7 +74,7 @@ proc loadSpellCheckFile {{message 1}} {
 ################################################################################
 proc getSpellCheckFile { widget } {
     global spellCheckFile
-    set ftype { { "Scid Spellcheck files" {".ssp"} } }
+    set ftype { { "ScidUp Spellcheck files" {".ssp"} } }
     set fullname [tk_getOpenFile -initialdir [file dirname $spellCheckFile] -filetypes $ftype -title "Open Spellcheck file" -parent [winfo toplevel $widget]]
     if { $fullname != "" && [readSpellCheckFile $fullname] } {
         $widget delete 0 end
@@ -100,19 +100,19 @@ proc readSpellCheckFile { fullname {message 1}} {
   global spellCheckFile
 
     if { $fullname != ""} {
-        progressWindow "Scid - [tr Spellcheking]" "Loading $fullname ..."
+        progressWindow "[tr ScidUp] - [tr Spellcheking]" "Loading $fullname ..."
         set err [catch {sc_name read $fullname} result]
         closeProgressWindow
         if {$err} {
             if {$message} {
                 tk_messageBox -title "ERROR: Unable to read file" -type ok -parent .resDialog \
-                    -icon error -message "Scid could not correctly read the spellcheck file you selected:\n\n$result\n$fullname"
+                    -icon error -message "[tr ScidUp] could not correctly read the spellcheck file you selected:\n\n$result\n$fullname"
             }
             return 0
         }
         if {$message} {
             tk_messageBox -title "Spellcheck file loaded." -type ok -icon info -parent .resDialog \
-                -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start Scid, select the \"Save Options\" from the Options menu before exiting."
+                -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start [tr ScidUp], select the \"Save Options\" from the Options menu before exiting."
         }
     }
     set spellCheckFile $fullname
@@ -245,7 +245,7 @@ proc updateSpellCheckWin {type} {
     global spellcheckAmbiguous
 
     .spellcheckWin.text.text delete 1.0 end
-    .spellcheckWin.text.text insert end "Scid is finding spelling corrections.\nPlease wait..."
+    .spellcheckWin.text.text insert end "[tr ScidUp] is finding spelling corrections.\nPlease wait..."
 
     # Enable the progress bar
     #
@@ -259,7 +259,7 @@ proc updateSpellCheckWin {type} {
                                    -ambiguous $spellcheckAmbiguous $type} result]
     stopScanning
     if {$err} {
-        ERROR::MessageBox "" "Scid: Spellcheck results"
+        ERROR::MessageBox "" "[tr ScidUp]: Spellcheck results"
         return
     }
 
@@ -294,7 +294,7 @@ proc openSpellCheckWin {type {parent .}} {
     set w .spellcheckWin
 
     if {[winfo exists $w]} {
-        tk_messageBox -type ok -icon info -title "Scid: Spellcheck error" \
+        tk_messageBox -type ok -icon info -title "[tr ScidUp]: Spellcheck error" \
                       -parent $parent \
                       -message "The spellcheck window is already open; close it first."
         return
@@ -309,7 +309,7 @@ proc openSpellCheckWin {type {parent .}} {
     set spellcheckType $type
 
     win::createDialog $w
-    wm title $w "Scid: $::tr(Spellchecking) $::tr(Result)"
+    wm title $w "[tr ScidUp]: $::tr(Spellchecking) $::tr(Result)"
     wm minsize $w 0 15
 
     bind $w <F1> { helpWindow Maintenance }
@@ -367,7 +367,7 @@ proc openSpellCheckWin {type {parent .}} {
         catch {set spelltext [.spellcheckWin.text.text get 1.0 end-1c]}
         .spellcheckWin.text.text delete 1.0 end
         .spellcheckWin.text.text insert end \
-            "Scid is making the spelling corrections.\nPlease wait..."
+            "[tr ScidUp] is making the spelling corrections.\nPlease wait..."
 
         # Enable the progress bar
         #
@@ -388,7 +388,7 @@ proc openSpellCheckWin {type {parent .}} {
             append msg "Number of games NOT corrected (date<birth or >death): "
             append msg "[lindex $spell_result 3]"
             tk_messageBox -type ok -parent .spellcheckWin \
-                -title "Scid: $::tr(Spellchecking) $::tr(Result)" -message $msg
+                -title "[tr ScidUp]: $::tr(Spellchecking) $::tr(Result)" -message $msg
         }
         unbusyCursor .
         focus .

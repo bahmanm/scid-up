@@ -11,7 +11,7 @@ menu .menu
 ## Mac Application menu has to be before any call to configure.
 if { $macOS } {
   # Application menu:
-  .menu add cascade -label Scid -menu .menu.apple
+  .menu add cascade -label [tr ScidUp] -menu .menu.apple
   menu .menu.apple
 
   set m .menu.apple
@@ -956,7 +956,7 @@ proc readThemePkgFile { fullname } {
 ################################################################################
 proc getECOFile { widget } {
   global ecoFile
-  set ftype { { "Scid ECO files" {".eco"} } }
+  set ftype [list [list "[tr ScidUp] ECO files" [list ".eco"]]]
   set fullname [tk_getOpenFile -parent [winfo toplevel $widget] -initialdir [file dirname $ecoFile] -filetypes $ftype -title "Load ECO file"]
   if { [readECOFile $fullname] } {
       $widget delete 0 end
@@ -982,11 +982,11 @@ proc readECOFile { fullname } {
   global ecoFile
   if {[string compare $fullname ""]} {
     if {[catch {sc_eco read $fullname} result]} {
-      tk_messageBox -title "Scid" -type ok -icon warning -message $result -parent .resDialog
+      tk_messageBox -title [tr ScidUp] -type ok -icon warning -message $result -parent .resDialog
     } else {
       set ecoFile $fullname
-      tk_messageBox -title "Scid: ECO file loaded." -type ok -icon info -parent .resDialog \
-          -message "ECO file $fullname loaded: $result positions.\n\nTo have this file automatically loaded when you start Scid, select \"Save Options\" from the Options menu before exiting."
+      tk_messageBox -title "[tr ScidUp]: ECO file loaded." -type ok -icon info -parent .resDialog \
+          -message "ECO file $fullname loaded: $result positions.\n\nTo have this file automatically loaded when you start [tr ScidUp], select \"Save Options\" from the Options menu before exiting."
       return 1
     }
   } else {
@@ -1031,7 +1031,7 @@ proc updateLocale {} {
 #   - Calls `updateBoard` when a colour is selected.
 ################################################################################
 proc chooseHighlightColor {} {
-  set col [ tk_chooseColor -initialcolor $::highlightLastMoveColor -title "Scid"]
+  set col [ tk_chooseColor -initialcolor $::highlightLastMoveColor -title [tr ScidUp]]
   if { $col != "" } {
     set ::highlightLastMoveColor $col
     updateBoard

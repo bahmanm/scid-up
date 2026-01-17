@@ -221,7 +221,7 @@ test enginecfg-write-creates-engine-list-file-1.0 {::enginecfg::write writes the
     close $ch
 
     list \
-        [expr {[string match "*Analysis engines list file for Scid 9.9*" $data]}] \
+        [expr {[string match "*Analysis engines list file for ScidUp 9.9*" $data]}] \
         [expr {[regexp {\n\s*Name\s+E\s*\n} $data]}] \
         [expr {[regexp {\n\s*Cmd\s+cmd\s*\n} $data]}] \
         [expr {[string match "*UCIoptions*Skill 10*" $data]}]

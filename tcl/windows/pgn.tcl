@@ -105,7 +105,7 @@ namespace eval pgn {
           append fname ".pgn"
         }
         if {[catch {set tempfile [open $fname w]}]} {
-          tk_messageBox -title "Scid: Error saving file" -type ok -icon warning \
+          tk_messageBox -title "[tr ScidUp]: Error saving file" -type ok -icon warning \
               -message "Unable to save the file: $fname\n\n"
         } else {
           puts $tempfile \

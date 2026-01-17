@@ -1260,7 +1260,7 @@ namespace eval html {
   proc exportCurrentFilter {} {
     # Check that we have some games to export:
     if {[sc_filter count] == 0} {
-      tk_messageBox -title "Scid: Filter empty" -type ok -icon info \
+      tk_messageBox -title "[tr ScidUp]: Filter empty" -type ok -icon info \
           -message "The filter contains no games."
       return
     }
@@ -1281,7 +1281,7 @@ namespace eval html {
     catch {file copy -force [file join $sourcedir scid.js] $dirtarget}
     catch {file copy -force [file join $sourcedir scid.css] $dirtarget}
     # writeIndex "[file join $dirtarget $prefix].html" $prefix
-    progressWindow "Scid" "Exporting games..."
+    progressWindow [tr ScidUp] "Exporting games..."
     set savedGameNum [sc_game number]
     set gn [sc_filter first]
     set players {}
@@ -1493,8 +1493,8 @@ namespace eval html {
     puts $f "var prefix = \"$prefix\";"
     puts $f "// \]\]>"
     puts $f "</script>"
-    puts $f "<title>Scid</title>"
-    puts $f "<meta content=\"Scid\" name=\"author\" />"
+    puts $f "<title>ScidUp</title>"
+    puts $f "<meta content=\"ScidUp\" name=\"author\" />"
     puts $f "</head>"
     puts $f "<body onload=\"doinit()\" onkeydown=\"handlekey(event)\">"
     puts $f "<div id=\"framecontent\">"
@@ -1581,7 +1581,7 @@ namespace eval html {
 
     puts $f "<br /><span class=\"VH\">$result</span>"
     puts $f "<p>"
-    puts $f "<a href=\"http://scid.sourceforge.net/\" style=\"font-size: 0.8em\">Created with Scid</a>"
+    puts $f "<a href=\"https://github.com/bahmanm/scid-up\" style=\"font-size: 0.8em\">Created with ScidUp</a>"
     puts $f "</div>"
     puts $f "</div>"
     puts $f "</div>"
@@ -1877,7 +1877,7 @@ namespace eval html {
   ################################################################################
   proc exportPGN { fName selection } {
     if {$selection == "filter"} {
-      progressWindow "Scid" "Exporting games..." $::tr(Cancel)
+      progressWindow [tr ScidUp] "Exporting games..." $::tr(Cancel)
     }
     sc_base export $selection "PGN" $fName -append 0 -starttext "" -endtext "" -comments 1 -variations 1 \
         -space 1 -symbols 1 -indentC 0 -indentV 0 -column 0 -noMarkCodes 1 -convertNullMoves 1
