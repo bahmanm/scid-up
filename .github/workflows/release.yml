@@ -199,11 +199,11 @@ jobs:
             exit 1
           }
 
-          $output = "build\\portable\\ScidUp__$version__windows.tar.gz"
+          $output = "build\\portable\\ScidUp__${version}__windows.tar.gz"
           Move-Item -Force $archives[0].FullName $output
 
           "ASSET_PATH=$output" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "ASSET_NAME=ScidUp__$version__windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ASSET_NAME=ScidUp__${version}__windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload archive
         uses: actions/upload-artifact@v4
