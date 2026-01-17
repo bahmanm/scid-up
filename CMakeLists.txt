@@ -16,7 +16,7 @@ cmake_minimum_required( VERSION 3.30 )
 
 project(
     ScidUp
-    VERSION v1
+    VERSION 1
     LANGUAGES CXX )
 
 include( cmake/package/portable/layout.cmake )
