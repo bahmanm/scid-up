@@ -22,11 +22,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            asset_suffix: ubuntu-22.04-x86_64
+            asset_label: linux
           - os: macos-15
-            asset_suffix: macos-15-arm64
+            asset_label: macos-arm
           - os: macos-15-intel
-            asset_suffix: macos-15-intel-x86_64
+            asset_label: macos-intel
 
     steps:
       - uses: actions/checkout@v4
@@ -111,14 +111,15 @@ jobs:
             exit 1
           fi
 
-          output_path="build/portable/scid-up-${version}-portable-${{ matrix.asset_suffix }}.tar.gz"
+          output_path="build/portable/ScidUp__${version}__${{ matrix.asset_label }}.tar.gz"
           mv "${archive_path[0]}" "$output_path"
           echo "ASSET_PATH=$output_path" >> "$GITHUB_ENV"
+          echo "ASSET_NAME=$(basename "$output_path" .tar.gz)" >> "$GITHUB_ENV"
 
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
-          name: scid-up-portable-${{ matrix.asset_suffix }}
+          name: ${{ env.ASSET_NAME }}
           path: ${{ env.ASSET_PATH }}
           if-no-files-found: error
 
@@ -191,22 +192,23 @@ jobs:
             $version = "sha-$($env:GITHUB_SHA.Substring(0,7))"
           }
 
-          $archives = Get-ChildItem -Path "build\\portable" -Filter "*.tar.gz" | Select-Object -ExpandProperty FullName
+          $archives = Get-ChildItem -Path "build\\portable" -Filter "*.tar.gz"
           if ($archives.Count -ne 1) {
             Write-Error "Expected exactly one .tar.gz in build\\portable, found $($archives.Count)"
             Get-ChildItem -Path "build\\portable" | Format-List
             exit 1
           }
 
-          $output = "build\\portable\\scid-up-$version-portable-windows-2022-x86_64.tar.gz"
-          Move-Item -Force $archives[0] $output
+          $output = "build\\portable\\ScidUp__$version__windows.tar.gz"
+          Move-Item -Force $archives[0].FullName $output
 
           "ASSET_PATH=$output" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ASSET_NAME=ScidUp__$version__windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
-          name: scid-up-portable-windows-2022-x86_64
+          name: ${{ env.ASSET_NAME }}
           path: ${{ env.ASSET_PATH }}
           if-no-files-found: error
 
