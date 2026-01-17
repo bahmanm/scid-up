@@ -201,7 +201,7 @@ proc ::enginecfg::save {enginecfg {force_write false}} {
 proc ::enginecfg::write {} {
     set enginesFile [scidConfigFile engines]
     set f [open $enginesFile w]
-    puts $f "\# Analysis engines list file for Scid $::scidVersion with UCI support"
+    puts $f "\# Analysis engines list file for ScidUp $::scidVersion with UCI support"
     puts $f ""
     foreach e $::engines(list) {
         lassign $e name cmd args dir elo time url uci opt
