@@ -271,7 +271,7 @@ proc ::utils::history::Save {{reportError 0}} {
     return
   }
   
-  puts $f "# Scid $::scidVersion combobox history lists"
+  puts $f "# ScidUp $::scidVersion combobox history lists"
   puts $f ""
   foreach i [lsort [array names listData]] {
     puts $f "set ::utils::history::listData($i) [list $listData($i)]"

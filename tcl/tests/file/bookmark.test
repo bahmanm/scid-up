@@ -444,7 +444,7 @@ test bookmark-save-1.0 {Save writes the bookmarks config file} -setup {
 
     list \
         [file exists $path] \
-        [string match "*# Scid X bookmarks file*" $content] \
+        [string match "*# ScidUp X bookmarks file*" $content] \
         [string match "*set bookmarks(subMenus) 1*" $content] \
         [string match "*set bookmarks(data) {{f F1} {g G1}}*" $content]
 } -cleanup {

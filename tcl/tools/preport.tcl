@@ -659,7 +659,7 @@ proc ::preport::report {fmt {withTable 1}} {
   if {$eco != ""} {
     append r "$tr(ECO): $eco$n"
   }
-  append r "$::tr(OprepGenerated) Scid $::scidVersion, [::utils::date::today]$n"
+  append r "$::tr(OprepGenerated) ScidUp $::scidVersion, [::utils::date::today]$n"
 
   if {$preport(Stats)  ||  $preport(Oldest) > 0  ||  $preport(Newest) > 0  ||
     $preport(MostFrequentOpponents) > 0  ||  $preport(Results)} {

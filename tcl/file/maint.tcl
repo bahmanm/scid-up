@@ -1404,7 +1404,7 @@ proc doCleaner {} {
     } else {
       set r [::utils::thousands [lindex $result 0]]
       set g [::utils::thousands [lindex $result 1]]
-      $t insert end "   Scid added $r Elo ratings in $g games.\n"
+      $t insert end "   [tr ScidUp] added $r Elo ratings in $g games.\n"
     }
   }
   
@@ -1430,7 +1430,7 @@ proc doCleaner {} {
             -delete $twinSettings(delete)} result]} {
       set message $result
     } else {
-      set message "Scid found $result twin games"
+      set message "[tr ScidUp] found $result twin games"
       if {$result > 0} {append message " and set their delete flags"}
     }
     $t insert end "   $message.\n"

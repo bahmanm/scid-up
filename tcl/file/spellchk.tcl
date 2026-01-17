@@ -36,7 +36,7 @@ set spellstate idle
 ################################################################################
 proc loadSpellCheckFile {{message 1}} {
   global spellCheckFile
-  set ftype { { "Scid Spellcheck files" {".ssp"} } }
+  set ftype { { "ScidUp Spellcheck files" {".ssp"} } }
   set fullname [tk_getOpenFile -initialdir [file dirname $spellCheckFile] -filetypes $ftype -title "Open Spellcheck file"]
   if {![string compare $fullname ""]} { return "" }
 
@@ -46,14 +46,14 @@ proc loadSpellCheckFile {{message 1}} {
   if {$err} {
       if {$message} {
         tk_messageBox -title "ERROR: Unable to read file" -type ok \
-          -icon error -message "Scid could not correctly read the spellcheck file you selected:\n\n$result"
+          -icon error -message "[tr ScidUp] could not correctly read the spellcheck file you selected:\n\n$result"
       }
     return ""
   }
   set spellCheckFile $fullname
   if {$message} {
     tk_messageBox -title "Spellcheck file loaded." -type ok -icon info \
-      -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start Scid, select the \"Save Options\" from the Options menu before exiting."
+      -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start [tr ScidUp], select the \"Save Options\" from the Options menu before exiting."
   }
   return $fullname
 }
@@ -74,7 +74,7 @@ proc loadSpellCheckFile {{message 1}} {
 ################################################################################
 proc getSpellCheckFile { widget } {
     global spellCheckFile
-    set ftype { { "Scid Spellcheck files" {".ssp"} } }
+    set ftype { { "ScidUp Spellcheck files" {".ssp"} } }
     set fullname [tk_getOpenFile -initialdir [file dirname $spellCheckFile] -filetypes $ftype -title "Open Spellcheck file" -parent [winfo toplevel $widget]]
     if { $fullname != "" && [readSpellCheckFile $fullname] } {
         $widget delete 0 end
@@ -106,13 +106,13 @@ proc readSpellCheckFile { fullname {message 1}} {
         if {$err} {
             if {$message} {
                 tk_messageBox -title "ERROR: Unable to read file" -type ok -parent .resDialog \
-                    -icon error -message "Scid could not correctly read the spellcheck file you selected:\n\n$result\n$fullname"
+                    -icon error -message "[tr ScidUp] could not correctly read the spellcheck file you selected:\n\n$result\n$fullname"
             }
             return 0
         }
         if {$message} {
             tk_messageBox -title "Spellcheck file loaded." -type ok -icon info -parent .resDialog \
-                -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start Scid, select the \"Save Options\" from the Options menu before exiting."
+                -message "Spellcheck file [file tail $fullname] loaded:\n[lindex $result 0] players, [lindex $result 1] events, [lindex $result 2] sites, [lindex $result 3] rounds.\n\nTo have this file automatically loaded every time you start [tr ScidUp], select the \"Save Options\" from the Options menu before exiting."
         }
     }
     set spellCheckFile $fullname
@@ -245,7 +245,7 @@ proc updateSpellCheckWin {type} {
     global spellcheckAmbiguous
 
     .spellcheckWin.text.text delete 1.0 end
-    .spellcheckWin.text.text insert end "Scid is finding spelling corrections.\nPlease wait..."
+    .spellcheckWin.text.text insert end "[tr ScidUp] is finding spelling corrections.\nPlease wait..."
 
     # Enable the progress bar
     #

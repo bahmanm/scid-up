@@ -1008,7 +1008,7 @@ namespace eval uci {
 #   - Writes to `::uci::uciInfo(pipe$n)` (best-effort; `puts` errors are caught).
 ################################################################################
     proc sendToEngine {n text} {
-        logEngine $n "Scid  : $text"
+        logEngine $n "ScidUp: $text"
         catch {puts $::uci::uciInfo(pipe$n) $text}
     }
 ################################################################################

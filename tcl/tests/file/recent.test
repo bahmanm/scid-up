@@ -342,7 +342,7 @@ test recent-save-writes-config-1.0 {save writes recent-files config including re
 
     list \
         [file exists $path] \
-        [string match "*# Scid X recent files list*" $content] \
+        [string match "*# ScidUp X recent files list*" $content] \
         [string match "*set recentFiles(limit) 7*" $content] \
         [string match "*set recentFiles(menu) 3*" $content] \
         [string match "*set recentFiles(extra) 2*" $content] \
