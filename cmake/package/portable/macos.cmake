@@ -25,7 +25,12 @@ install(
     CODE
     "
     set( _scidup_destdir \"\$ENV{DESTDIR}\" )
-    set( _scidup_exe_path \"\${_scidup_destdir}\${CMAKE_INSTALL_PREFIX}/\${CMAKE_INSTALL_BINDIR}/scid-up\" )
+
+    # Note: CMAKE_INSTALL_BINDIR is not reliably available at install time.
+    # Capture its configured value now and embed it into the install script.
+    set( _scidup_install_bindir \"${CMAKE_INSTALL_BINDIR}\" )
+
+    set( _scidup_exe_path \"\${_scidup_destdir}\${CMAKE_INSTALL_PREFIX}\${_scidup_install_bindir}/scid-up\" )
     cmake_path( NORMAL_PATH _scidup_exe_path )
 
     if( NOT EXISTS \"\${_scidup_exe_path}\" )
