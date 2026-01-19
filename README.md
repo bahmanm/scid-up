@@ -25,6 +25,18 @@ Cross-Platform Chess Database and Analysis GUI. A fork of [the magnificent Scid 
 
 ---
 
+# Download and Run
+
+1. Head over to the [Releases](https://github.com/bahmanm/scid-up/releases) page.
+2. Download the archive that matches your platform (Linux, macOS Apple Silicon, macOS Intel, Windows).
+3. Extract the archive into a directory of your choice.
+4. Read the included `README.txt` inside the extracted folder (platform-specific instructions).
+   _TL;DR_
+   - Linux/macOS: `./bin/scid-up`
+   - Windows: open `bin/` and double-click `scid-up.exe`
+
+---
+
 # Programming Setup
 
 ScidUp doesn't require a whole lot of dependencies and setup to get started hacking on it.
