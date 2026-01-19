@@ -61,5 +61,5 @@ configure_file(
 
 install(
     FILES "${_scidup_readme_output}"
-    DESTINATION "/"
+    DESTINATION "."
     RENAME "README.txt" )
