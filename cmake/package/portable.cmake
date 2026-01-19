@@ -8,7 +8,5 @@ set( CPACK_PACKAGING_INSTALL_PREFIX "/" )
 set( CPACK_SET_DESTDIR ON )
 
 include( cmake/package/portable/tcl-tk/all.cmake )
-
-if( APPLE )
-    include( cmake/package/portable/macos.cmake )
-endif()
+include( cmake/package/portable/windows.cmake )
+include( cmake/package/portable/macos.cmake )
