@@ -1,4 +1,4 @@
-name: Release (Portable Archives)
+name: Release
 
 on:
   workflow_dispatch:
