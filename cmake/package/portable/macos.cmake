@@ -4,10 +4,6 @@ if( NOT APPLE )
     return()
 endif()
 
-if( NOT SCIDUP_BUNDLE_TCL_TK )
-    return()
-endif()
-
 ###############################################################################
 # Dylib install-name fixups for the application binary.
 #
