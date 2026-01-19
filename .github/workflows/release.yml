@@ -1,7 +1,6 @@
 name: Release
 
 on:
-  workflow_dispatch:
   push:
     tags:
       - "v*"
@@ -23,10 +22,13 @@ jobs:
         include:
           - os: ubuntu-22.04
             asset_label: linux
+            readme_platform: Linux
           - os: macos-15
             asset_label: macos-arm
+            readme_platform: macOS (Apple Silicon)
           - os: macos-15-intel
             asset_label: macos-intel
+            readme_platform: macOS (Intel)
 
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +38,9 @@ jobs:
           echo "DEPS_INSTALL_PREFIX=${{ runner.temp }}/install" >> "$GITHUB_ENV"
           echo "DEPS_BUILD_PREFIX=${{ runner.temp }}/build" >> "$GITHUB_ENV"
           echo "${{ runner.temp }}/install/bin" >> "$GITHUB_PATH"
+
+          echo "SCIDUP_RELEASE_VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          echo "SCIDUP_RELEASE_DATE=$(date -u +%F)" >> "$GITHUB_ENV"
 
       - name: Set up the directories
         run: |
@@ -86,7 +91,10 @@ jobs:
 
       - name: Configure
         run: |
-          cmake --preset portable
+          cmake --preset portable \
+            -DSCIDUP_RELEASE_VERSION="$SCIDUP_RELEASE_VERSION" \
+            -DSCIDUP_RELEASE_DATE="$SCIDUP_RELEASE_DATE" \
+            -DSCIDUP_RELEASE_PLATFORM="${{ matrix.readme_platform }}"
 
       - name: Build
         run: |
@@ -98,11 +106,7 @@ jobs:
 
       - name: Rename archive
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            version="${GITHUB_REF_NAME}"
-          else
-            version="sha-${GITHUB_SHA::7}"
-          fi
+          version="${GITHUB_REF_NAME}"
 
           archive_path=(build/portable/*.tar.gz)
           if [[ ${#archive_path[@]} -ne 1 ]]; then
@@ -115,6 +119,18 @@ jobs:
           mv "${archive_path[0]}" "$output_path"
           echo "ASSET_PATH=$output_path" >> "$GITHUB_ENV"
           echo "ASSET_NAME=$(basename "$output_path" .tar.gz)" >> "$GITHUB_ENV"
+
+      - name: Prepare README
+        run: |
+          readme_path="build/portable/README__${{ matrix.asset_label }}.txt"
+          cp build/portable/README.txt "$readme_path"
+
+      - name: Upload README
+        uses: actions/upload-artifact@v4
+        with:
+          name: README__${{ matrix.asset_label }}
+          path: build/portable/README__${{ matrix.asset_label }}.txt
+          if-no-files-found: error
 
       - name: Upload archive
         uses: actions/upload-artifact@v4
@@ -141,6 +157,9 @@ jobs:
           "DEPS_INSTALL_PREFIX=${{ runner.temp }}\\install" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "DEPS_BUILD_PREFIX=${{ runner.temp }}\\build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "${{ runner.temp }}\\install\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          "SCIDUP_RELEASE_VERSION=$env:GITHUB_REF_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SCIDUP_RELEASE_DATE=$((Get-Date).ToString('yyyy-MM-dd'))" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up the directories
         run: |
@@ -173,8 +192,12 @@ jobs:
           }
 
       - name: Configure
-        run: |
-          cmake --preset portable
+        run: >
+          cmake 
+          --preset portable
+          "-DSCIDUP_RELEASE_VERSION=$env:SCIDUP_RELEASE_VERSION"
+          "-DSCIDUP_RELEASE_DATE=$env:SCIDUP_RELEASE_DATE"
+          "-DSCIDUP_RELEASE_PLATFORM=Windows"
 
       - name: Build
         run: |
@@ -186,11 +209,7 @@ jobs:
 
       - name: Rename archive
         run: |
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            $version = $env:GITHUB_REF_NAME
-          } else {
-            $version = "sha-$($env:GITHUB_SHA.Substring(0,7))"
-          }
+          $version = $env:GITHUB_REF_NAME
 
           $archives = Get-ChildItem -Path "build\\portable" -Filter "*.tar.gz"
           if ($archives.Count -ne 1) {
@@ -205,6 +224,17 @@ jobs:
           "ASSET_PATH=$output" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "ASSET_NAME=ScidUp__${version}__windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Prepare README
+        run: |
+          Copy-Item -Force "build\\portable\\README.txt" "build\\portable\\README__windows.txt"
+
+      - name: Upload README
+        uses: actions/upload-artifact@v4
+        with:
+          name: README__windows
+          path: build\\portable\\README__windows.txt
+          if-no-files-found: error
+
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
@@ -213,7 +243,6 @@ jobs:
           if-no-files-found: error
 
   publish-github-release:
-    if: github.ref_type == 'tag'
     needs:
       - unix-build-and-package
       - windoze-build-and-package
@@ -231,6 +260,8 @@ jobs:
         with:
           name: ScidUp ${{ github.ref_name }}
           prerelease: ${{ contains(github.ref_name, '-testing-') }}
-          files: dist/*.tar.gz
+          files: |
+            dist/*.tar.gz
+            dist/README__*.txt
           fail_on_unmatched_files: true
           generate_release_notes: true
