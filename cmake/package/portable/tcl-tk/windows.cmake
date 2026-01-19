@@ -46,7 +46,7 @@ file(
 set( _scidup_tcl_tk_dependency_dlls "" )
 foreach( _scidup_dependency IN LISTS _scidup_tcl_tk_resolved_dependencies )
     cmake_path( NORMAL_PATH _scidup_dependency )
-    cmake_path( IS_PREFIX "${_scidup_tcl_tk_bin_dir}" "${_scidup_dependency}" _scidup_is_tcl_tk_bin_dependency )
+    cmake_path( IS_PREFIX _scidup_tcl_tk_bin_dir "${_scidup_dependency}" NORMALIZE _scidup_is_tcl_tk_bin_dependency )
     if( _scidup_is_tcl_tk_bin_dependency )
         list( APPEND _scidup_tcl_tk_dependency_dlls "${_scidup_dependency}" )
     endif()
