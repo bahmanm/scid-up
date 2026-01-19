@@ -192,8 +192,12 @@ jobs:
           }
 
       - name: Configure
-        run: |
-          cmake --preset portable -DSCIDUP_RELEASE_VERSION=$env:SCIDUP_RELEASE_VERSION -DSCIDUP_RELEASE_DATE=$env:SCIDUP_RELEASE_DATE -DSCIDUP_RELEASE_PLATFORM="Windows"
+        run: >
+          cmake 
+          --preset portable
+          "-DSCIDUP_RELEASE_VERSION=$env:SCIDUP_RELEASE_VERSION"
+          "-DSCIDUP_RELEASE_DATE=$env:SCIDUP_RELEASE_DATE"
+          "-DSCIDUP_RELEASE_PLATFORM=Windows"
 
       - name: Build
         run: |
