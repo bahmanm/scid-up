@@ -1,0 +1,50 @@
+ScidUp - The Cross-Platform Chess Database and Analysis GUI
+
+Version          @SCIDUP_RELEASE_VERSION@
+For              @SCIDUP_RELEASE_PLATFORM@
+Released On      @SCIDUP_RELEASE_DATE_LINE@
+
+--------------------------------------------------------------------------------
+
+1️⃣ How to install
+
+1. Create a directory where you want ScidUp to live; "installation" means just
+   moving this directory.
+2. Extract the archive into that directory.
+
+For instance, assuming you want to install ScidUp in $HOME/ScidUp:
+        mkdir -p $HOME/ScidUp
+        tar -xzf <archive>.tar.gz -C $HOME/ScidUp
+
+--------------------------------------------------------------------------------
+
+2️⃣ How to run
+
+In Terminal, assuming you installed ScidUp in $HOME/ScidUp:
+        $HOME/ScidUp/bin/scid-up
+
+--------------------------------------------------------------------------------
+
+3️⃣ Where are my settings?
+
+ScidUp stores settings under:
+- ~/Library/Application Support/scid-up
+
+You can also set SCIDUP_CONFIG_HOME to use a custom settings directory.
+
+--------------------------------------------------------------------------------
+
+4️⃣ Something broken? Report it, please!
+
+- Create a new issue: https://github.com/bahmanm/scid-up/issues/new
+- See existing issues: https://github.com/bahmanm/scid-up/issues
+
+When reporting a bug, please include:
+- macOS version
+- Whether you are on Apple Silicon or Intel
+- The ScidUp release
+- Any Terminal output
+
+--------------------------------------------------------------------------------
+
+May Caissa be with you!
