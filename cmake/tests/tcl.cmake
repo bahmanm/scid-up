@@ -1,6 +1,6 @@
 set(
     TCL_TEST_RUNNER
-    "${CMAKE_SOURCE_DIR}/src/tcl/tests/run_all_tests.tcl" )
+    "${CMAKE_SOURCE_DIR}/tests/tcl/run_all_tests.tcl" )
 
 add_test(
     NAME tcl_test

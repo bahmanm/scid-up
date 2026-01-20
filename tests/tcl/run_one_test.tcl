@@ -6,7 +6,7 @@ set testDir [file dirname [info script]]
 set testFile [lindex $argv 0]
 
 if {$testFile eq ""} {
-    puts stderr "Usage: tclsh tcl/tests/run_one_test.tcl <testFileRelativeToTestsDir>"
+    puts stderr "Usage: tclsh tests/tcl/run_one_test.tcl <testFileRelativeToTestsDir>"
     exit 2
 }
 
@@ -20,4 +20,3 @@ tcltest::configure \
 set exitCode [expr {[tcltest::runAllTests] != 0}]
 tcltest::cleanupTests
 exit $exitCode
-

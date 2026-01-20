@@ -9,7 +9,7 @@ if {![info exists ::scid_test::repoRoot]} {
 }
 
 if {![info exists ::scid_test::tclDir]} {
-    set ::scid_test::tclDir [file normalize [file join $::scid_test::repoRoot tcl]]
+    set ::scid_test::tclDir [file normalize [file join $::scid_test::repoRoot src tcl]]
 }
 
 proc ::scid_test::repoRoot {} {
