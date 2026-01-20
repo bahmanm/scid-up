@@ -7,10 +7,10 @@ set(
     "${CMAKE_INSTALL_DATADIR}/scid-up" )
 
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/bitmaps"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/bitmaps"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/bitmaps2"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/bitmaps2"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/books"
