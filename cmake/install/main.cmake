@@ -22,7 +22,7 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/help"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/img"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/images"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/scripts"

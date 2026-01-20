@@ -345,7 +345,7 @@ test start-getFlagImage-missing-returns-empty-when-disallowed-1.0 {getFlagImage 
 } -body {
     # Arrange
     set ::scidImgDir [file join [::scid_test::tempDir] start_test_img_empty]
-    file mkdir [file join $::scidImgDir flags]
+    file mkdir [file join $::scidImgDir icons flags]
 
     # Act
     getFlagImage ZZZ no

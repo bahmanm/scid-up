@@ -155,7 +155,7 @@ proc InitDirs {} {
     set scidTclDir [file dirname [info script]]
     set scidShareDir [file normalize "$scidTclDir/../"]
   }
-  set scidImgDir [file nativename [file join $scidShareDir "img"]]
+  set scidImgDir [file nativename [file join $scidShareDir "images"]]
 
   #Default values, can be overwritten by file option
   set scidBooksDir [file nativename [file join $scidShareDir "books"]]
@@ -209,28 +209,28 @@ proc InitImg {} {
   global scidImgDir boardStyle boardStyles textureSquare
 
   #Set app icon
-  set scidIconFile [file nativename [file join $scidImgDir "scid-up.png"]]
+  set scidIconFile [file nativename [file join $scidImgDir "icons" "scid-up.png"]]
   if {[file readable $scidIconFile]} {
     wm iconphoto . -default [image create photo -file "$scidIconFile"]
   }
 
-  #Load all img/buttons/_filename_.gif
-  set dname [file join $::scidImgDir buttons]
+  #Load all icons/buttons/_filename_.gif
+  set dname [file join $::scidImgDir icons buttons]
   foreach {fname} [glob -directory $dname *.gif] {
     set iname [string range [file tail $fname] 0 end-4]
     image create photo $iname -file $fname
   }
 
-  #Load all img/buttons/_filename_.png
-  set dname [file join $::scidImgDir buttons]
+  #Load all icons/buttons/_filename_.png
+  set dname [file join $::scidImgDir icons buttons]
   foreach {fname} [glob -directory $dname *.png] {
     set iname [string range [file tail $fname] 0 end-4]
     image create photo $iname -format png -file $fname
   }
 
-  #Load all img/boards/_filename_.gif
+  #Load all sets/boards/_filename_.gif
   set textureSquare {}
-  set dname [file join $::scidImgDir boards]
+  set dname [file join $::scidImgDir sets boards]
   foreach {fname} [glob -directory $dname *.gif] {
     set iname [string range [file tail $fname] 0 end-4]
     image create photo $iname -file $fname
@@ -241,7 +241,7 @@ proc InitImg {} {
 
   #Search available piece sets
   set boardStyles {}
-  set dname [file join $::scidImgDir pieces]
+  set dname [file join $::scidImgDir sets pieces]
   foreach {piecetype} [glob -directory $dname *] {
     if {[file isdirectory $piecetype] == 1} {
       lappend boardStyles [file tail $piecetype]
@@ -845,11 +845,11 @@ proc configure_style {} {
   }
 
   #Load light or dark icons (if the theme name contains "dark")
-  set icons_dir "icons_light"
+  set icons_dir "light"
   if {[string first "dark" [ttk::style theme use]] != -1} {
-    set icons_dir "icons_dark"
+    set icons_dir "dark"
   }
-  set dname [file join $::scidImgDir $icons_dir]
+  set dname [file join $::scidImgDir icons $icons_dir]
   foreach {fname} [glob -directory $dname *.png] {
     set iname [string range [file tail $fname] 0 end-4]
     image create photo ::icon::$iname -format png -file $fname
@@ -1071,7 +1071,7 @@ proc getFlagImage { countryID { returnUnknowFlag no } } {
     set country $cflag
   } else {
     # flag does not exist, try to load it
-    set dname [file join $::scidImgDir flags $cflag.gif]
+    set dname [file join $::scidImgDir icons flags $cflag.gif]
     if { [file exists $dname] } {
       image create photo $cflag -file $dname
       set country $cflag

@@ -95,7 +95,7 @@ proc SetBoardTextures {} {
 # Visibility:
 #   Public.
 # Inputs:
-#   - font: Piece-set directory name under `$::scidImgDir/pieces/`.
+#   - font: Piece-set directory name under `$::scidImgDir/sets/pieces/`.
 # Returns:
 #   - None.
 # Side effects:
@@ -105,8 +105,8 @@ proc SetBoardTextures {} {
 #   - May reset `::boardStyle` to `Merida` if no piece images are found.
 ################################################################################
 proc setPieceFont {font} {
-	set ::boardSizes {}
-	set dname [file join $::scidImgDir pieces $font]
+		set ::boardSizes {}
+		set dname [file join $::scidImgDir sets pieces $font]
 	set fnames [glob -nocomplain -directory $dname *.png]
 	append fnames " " [glob -nocomplain -directory $dname *.gif]
 	foreach {fname} $fnames {
