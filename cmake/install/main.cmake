@@ -19,7 +19,7 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/html"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/img"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/img"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/scripts"
