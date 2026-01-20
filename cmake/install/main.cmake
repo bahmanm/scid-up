@@ -16,7 +16,7 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/books"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/html"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/html"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/img"
