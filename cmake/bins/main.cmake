@@ -1,8 +1,8 @@
 file(
     GLOB SCIDUP_MAIN_SOURCES
     CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/*.h"
-    "${CMAKE_SOURCE_DIR}/src/*.cpp" )
+    "${CMAKE_SOURCE_DIR}/src/cxx/*.h"
+    "${CMAKE_SOURCE_DIR}/src/cxx/*.cpp" )
 
 	if( MSVC )
 	    add_executable(

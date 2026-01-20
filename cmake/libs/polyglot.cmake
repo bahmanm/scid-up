@@ -1,7 +1,7 @@
 file(
     GLOB SCIDUP_LIBS_POLYGLOT_SOURCES
     CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/polyglot/*.cpp" )
+    "${CMAKE_SOURCE_DIR}/src/cxx/polyglot/*.cpp" )
 add_library(
     scidup_libs_polyglot
     ${SCIDUP_LIBS_POLYGLOT_SOURCES} )
