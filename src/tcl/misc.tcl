@@ -1276,7 +1276,7 @@ namespace eval html {
     }
     set prefix [file rootname [file tail $fName] ]
     set dirtarget [file dirname $fName]
-    set sourcedir [file join $::scidExeDir html]
+    set sourcedir [file join $::scidShareDir html]
     catch {file copy -force [file join $sourcedir bitmaps] $dirtarget}
     catch {file copy -force [file join $sourcedir scid.js] $dirtarget}
     catch {file copy -force [file join $sourcedir scid.css] $dirtarget}
@@ -1360,7 +1360,7 @@ namespace eval html {
     if {$fName == ""} { return }
     set prefix [file rootname [file tail $fName] ]
     set dirtarget [file dirname $fName]
-    set sourcedir [file join $::scidExeDir html]
+    set sourcedir [file join $::scidShareDir html]
     catch { file copy -force [file join $sourcedir bitmaps] $dirtarget }
     catch { file copy -force [file join $sourcedir scid.js] $dirtarget }
     catch { file copy -force [file join $sourcedir scid.css] $dirtarget }

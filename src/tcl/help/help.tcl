@@ -1831,8 +1831,9 @@ set helpText(Export) {<h1>Exporting games</h1>
   <h3>HTML Export</h3>
   <p>
   ScidUp can export games to an HTML file. For diagrams to appear, you
-  will need the diagram images (distributed with ScidUp in the directory
-  "<b>bitmaps/</b>") to be in a subdirectory <b>bitmaps/</b> under the
+  will need the diagram images (distributed with ScidUp in <b>html/bitmaps/</b>,
+  and <b>html/bitmaps2/</b> if you use that diagram style) to be in a subdirectory
+  <b>bitmaps/</b> under the
   directory the HTML file is in.
   </p>
 
