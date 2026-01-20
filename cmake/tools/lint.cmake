@@ -8,7 +8,7 @@ if( NOT DEFINED CMAKE_SCRIPT_MODE_FILE )
         tcl_lint
         COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_LIST_FILE}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-        COMMENT "Running Tcl lint (tclint via uvx) on ../tcl"
+        COMMENT "Running Tcl lint (tclint via uvx) on ../src/tcl"
         VERBATIM
     )
     return()
@@ -20,7 +20,7 @@ find_program( UVX_EXECUTABLE uvx REQUIRED )
 
 get_filename_component(
     _tcl_dir
-    "${CMAKE_CURRENT_LIST_DIR}/../../tcl" ABSOLUTE )
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/tcl" ABSOLUTE )
 file(
     GLOB_RECURSE _tcl_files
     LIST_DIRECTORIES false

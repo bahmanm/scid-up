@@ -1,6 +1,6 @@
 set(
     TCL_TEST_RUNNER
-    "${CMAKE_SOURCE_DIR}/tcl/tests/run_all_tests.tcl" )
+    "${CMAKE_SOURCE_DIR}/src/tcl/tests/run_all_tests.tcl" )
 
 add_test(
     NAME tcl_test
@@ -19,4 +19,3 @@ set_tests_properties(
     PROPERTIES
     ENVIRONMENT "PATH=${_tcl_bin_dir}:$ENV{PATH};LD_LIBRARY_PATH=${_tcl_lib_dir}:$ENV{LD_LIBRARY_PATH}"
     LABELS "tcl" )
-

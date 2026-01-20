@@ -31,7 +31,7 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/sounds"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/tcl"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/src/tcl"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 
 file(
