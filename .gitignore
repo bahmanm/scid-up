@@ -54,3 +54,4 @@ compile_commands.json
 install_manifest.txt
 _tmp/
 CTestTestfile.cmake
+out/
