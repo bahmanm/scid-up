@@ -7,34 +7,31 @@ set(
     "${CMAKE_INSTALL_DATADIR}/scid-up" )
 
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/bitmaps"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/books"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/bitmaps2"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/html"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/books"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/help"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/html"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/images"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/img"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/scripts"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/scripts"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/sounds"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/sounds"
-    DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
-install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/tcl"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/src/tcl"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 
 file(
     GLOB ECO_FILES
     CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/*.eco" )
+    "${CMAKE_SOURCE_DIR}/resources/eco/*.eco" )
 install(
     FILES ${ECO_FILES}
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )

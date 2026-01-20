@@ -13,21 +13,21 @@ set( gtest_force_shared_crt ON CACHE BOOL "Always use msvcrt.dll" FORCE )
 
 set(
     SCIDUP_TESTS_LIBS_CPPSUPPORT_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/codec_scid4.cpp"
-    "${CMAKE_SOURCE_DIR}/src/scidbase.cpp"
-    "${CMAKE_SOURCE_DIR}/src/sortcache.cpp"
-    "${CMAKE_SOURCE_DIR}/src/stored.cpp"
-    "${CMAKE_SOURCE_DIR}/src/game.cpp"
-    "${CMAKE_SOURCE_DIR}/src/position.cpp"
-    "${CMAKE_SOURCE_DIR}/src/textbuf.cpp"
-    "${CMAKE_SOURCE_DIR}/src/misc.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/codec_scid4.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/scidbase.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/sortcache.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/stored.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/game.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/position.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/textbuf.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/misc.cpp"
 )
 add_library(
     scidup_tests_libs_cppsupport
     ${SCIDUP_TESTS_LIBS_CPPSUPPORT_SOURCES} )
 target_include_directories(
     scidup_tests_libs_cppsupport
-    PUBLIC "${CMAKE_SOURCE_DIR}/src" )
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/cxx" )
 target_link_libraries(
     scidup_tests_libs_cppsupport
     PUBLIC Threads::Threads )
@@ -38,13 +38,13 @@ add_library(
 file(
     GLOB SCIDUP_TESTS_BINS_CPPTEST_SOURCES
     CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/gtest/*.cpp" )
+    "${CMAKE_SOURCE_DIR}/tests/cxx/*.cpp" )
 add_executable(
     scidup_tests_bins_cpptest
     ${SCIDUP_TESTS_BINS_CPPTEST_SOURCES} )
 target_compile_definitions(
     scidup_tests_bins_cpptest
-    PRIVATE SCIDUP_TEST_RESOURCES_DIR=\"${CMAKE_SOURCE_DIR}/gtest/\" )
+    PRIVATE SCIDUP_TEST_RESOURCES_DIR=\"${CMAKE_SOURCE_DIR}/tests/cxx/\" )
 target_link_libraries(
     scidup_tests_bins_cpptest
     PRIVATE ScidUp::Tests::Libs::CppBase gtest_main )

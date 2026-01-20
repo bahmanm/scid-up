@@ -1,6 +1,6 @@
-# Enforce LF line endings for test fixtures.
+# Enforce LF line endings for C++ test fixtures.
 # This prevents stray '\r' bytes on Windows checkouts, which break tests that
 # intentionally read fixtures in binary mode.
 
-gtest/*.pgn text eol=lf
-gtest/*.txt text eol=lf
+tests/cxx/*.pgn text eol=lf
+tests/cxx/*.txt text eol=lf

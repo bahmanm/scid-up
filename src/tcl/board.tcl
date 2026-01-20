@@ -1,0 +1,3003 @@
+# board.tcl: part of Scid
+# Copyright (C) 2001-2003 Shane Hudson. All rights reserved.
+# Copyright (C) 2014-2021 Fulvio Benini
+# Copyright (C) 2021 Uwe Klimmek
+
+# letterToPiece
+#    Array that maps piece letters to their two-character value.
+#
+array set ::board::letterToPiece [list \
+    "R" wr "r" br "N" wn "n" bn "B" wb "b" bb \
+    "Q" wq "q" bq "K" wk "k" bk "P" wp "p" bp "." e \
+    ]
+
+# List of color schemes: each sublist contains a reference name (not used),
+# then lite, dark, highcolor, bestcolor, white, black, w border, b border.
+#
+set colorSchemes {
+  { "Blue-white" "#f3f3f3" "#7389b6" "#f3f484" "#b8cbf8" "#ffffff" "#000000" "#000000" "#ffffff" }
+  { "Green-Yellow" "#e0d070" "#70a070" "#b0d0e0" "#bebebe" }
+  { "Brown" "#d0c0a0" "#a08050" "#b0d0e0" "#bebebe" }
+  { "Blue-ish" "#d0e0d0" "#80a0a0" "#b0d0e0" "#f0f0a0" }
+  { "M. Thomas" "#e0d8b8" "#047c24" "#1c80e0" "#fe0000" }
+  { "KM. Skontorp" "#ffdb86" "#ffa200" "#b0d0e0" "#bebebe" }
+}
+array set newColors {}
+
+################################################################################
+# avgImgColor
+#   Computes an average square colour from a Tk photo image.
+# Visibility:
+#   Private.
+# Inputs:
+#   - file: Photo image name (e.g. `emptySquare`).
+# Returns:
+#   - A colour string in `#RRGGBB` format.
+# Side effects:
+#   - Reads pixels via `$file get`.
+################################################################################
+proc avgImgColor { file } {
+    set i 0; set r 0; set g 0; set b 0
+    set textureSize [image height $file]
+    for { set p 2 } { $p < $textureSize } {incr p 4; incr i } {
+        lassign [$file get $p $p] r1 g1 b1
+        incr r $r1
+        incr g $g1
+        incr b $b1
+    }
+    set r [expr {int(($r) / $i)}]
+    set g [expr {int(($g) / $i)}]
+    set b [expr {int(($b) / $i)}]
+    return [ format "#%02x%02x%02x" $r $g $b ]
+}
+
+################################################################################
+# SetBoardTextures
+#   Builds the per-size board square textures for all configured board sizes.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/resets Tk photo images `bgl<size>` and `bgd<size>`.
+#   - Reads `::boardfile_lite`, `::boardfile_dark`, and `::boardSizes`.
+#   - Mutates `::boardfile_lite`/`::boardfile_dark` if the configured textures
+#     cannot be loaded.
+################################################################################
+proc SetBoardTextures {} {
+  global boardfile_dark boardfile_lite
+  # handle cases of old configuration files
+  image create photo bgl20 -height 20 -width 20
+  image create photo bgd20 -height 20 -width 20
+  if { [ catch { bgl20 copy $boardfile_lite -from 0 0 20 20 ; bgd20 copy $boardfile_dark -from 0 0 20 20 } ] } {
+    set boardfile_dark emptySquare
+    set boardfile_lite emptySquare
+    bgl20 copy $boardfile_lite -from 0 0 20 20
+    bgd20 copy $boardfile_dark -from 0 0 20 20
+  }
+
+  set textureSize "[image height $boardfile_lite].0"
+  foreach size $::boardSizes {
+    # create lite and dark squares
+    image create photo bgl$size -width $size -height $size
+    image create photo bgd$size -width $size -height $size
+    set z [expr {int (ceil ($size / $textureSize))}]
+    bgl$size copy $boardfile_lite -zoom $z
+    bgd$size copy $boardfile_dark -zoom $z
+  }
+}
+
+################################################################################
+# setPieceFont
+#   Loads the requested piece-set images and (re)initialises board sizing.
+# Visibility:
+#   Public.
+# Inputs:
+#   - font: Piece-set directory name under `$::scidImgDir/sets/pieces/`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Rebuilds `::boardSizes` and sets `::boardSize`.
+#   - Creates per-piece images (`wp<size>`, `wn<size>`, …, `bk<size>`) and
+#     background square textures via `SetBoardTextures`.
+#   - May reset `::boardStyle` to `Merida` if no piece images are found.
+################################################################################
+proc setPieceFont {font} {
+		set ::boardSizes {}
+		set dname [file join $::scidImgDir sets pieces $font]
+	set fnames [glob -nocomplain -directory $dname *.png]
+	append fnames " " [glob -nocomplain -directory $dname *.gif]
+	foreach {fname} $fnames {
+		if {! [catch {image create photo tmpPieces -file "$fname"}]} {
+			set size [image height tmpPieces]
+			if {[lsearch -exact $::boardSizes $size] == -1} {
+				image create photo e$size -height $size -width $size
+				set x 0
+				foreach p {wp wn wb wr wq wk bp bn bb br bq bk} {
+					image create photo $p$size -width $size -height $size
+					$p$size copy tmpPieces -from $x 0 [expr {$x + $size}] $size
+					incr x $size
+				}
+				lappend ::boardSizes $size
+			}
+			image delete tmpPieces
+		}
+	}
+	if {[llength $::boardSizes] == 0 && $::boardStyle != "Merida"} {
+		set ::boardStyle "Merida"
+		setPieceFont "$::boardStyle"
+		return
+	}
+	set ::boardSizes [lsort -integer $::boardSizes]
+	foreach size $::boardSizes {
+		if {$size >= $::boardSize} { break }
+	}
+	set ::boardSize $size
+	SetBoardTextures
+}
+
+################################################################################
+# chooseBoardTextures
+#   Selects a board texture preset and refreshes the main board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - i: Index into `::textureSquare`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::boardfile_lite` and `::boardfile_dark`.
+#   - Rebuilds square textures via `SetBoardTextures`.
+#   - Recomputes `::squareColor_lite`/`::squareColor_dark` from the chosen
+#     textures.
+#   - Updates `.main.board` via `::board::innercoords` and `updateBoard`.
+################################################################################
+proc chooseBoardTextures {i} {
+  global boardfile_dark boardfile_lite
+
+  set prefix [lindex $::textureSquare $i]
+  set boardfile_dark ${prefix}-d
+  set boardfile_lite ${prefix}-l
+  SetBoardTextures
+  # create colors for coords on the board
+  # use variable lite and dark from colorschemes
+  set ::squareColor_lite [::avgImgColor $boardfile_lite]
+  set ::squareColor_dark [::avgImgColor $boardfile_dark]
+  ::board::innercoords .main.board
+  updateBoard
+}
+
+################################################################################
+# updateBoardColors
+#   Applies the currently-selected board colours to the board UI and preview.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Parent widget for the colours UI.
+#   - choice: Optional preset index into `colorSchemes`; when provided, updates
+#     `newColors(*)` from that preset.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates globals `squareColor_lite`, `squareColor_dark`, `highcolor`, and
+#     `bestcolor`.
+#   - Reconfigures widgets under `$w` and updates `.main.board`.
+################################################################################
+proc updateBoardColors { w {choice -1}} {
+  global squareColor_lite squareColor_dark highcolor bestcolor
+  global colorSchemes newColors
+  set colors {squareColor_lite squareColor_dark highcolor bestcolor}
+  # Just update the dialog box colors and return:
+  if {$choice >= 0} {
+    set list [lindex $colorSchemes $choice]
+    set newColors(squareColor_lite) [lindex $list 1]
+    set newColors(squareColor_dark) [lindex $list 2]
+    set newColors(highcolor) [lindex $list 3]
+    set newColors(bestcolor) [lindex $list 4]
+
+    # Remove board textures
+    set ::boardfile_dark emptySquare
+    set ::boardfile_lite emptySquare
+    ::SetBoardTextures
+  }
+  set nlite $newColors(squareColor_lite)
+  set ndark $newColors(squareColor_dark)
+
+  foreach i {wr bn wb bq wk bp} {
+    $w.bd.$i configure -background $ndark
+  }
+  foreach i {br wn bb wq bk wp} {
+    $w.bd.$i configure -background $nlite
+  }
+  $w.bd.bb configure -background $newColors(highcolor)
+  $w.bd.wk configure -background $newColors(bestcolor)
+  foreach i $colors {
+    $w.select.b$i configure -background $newColors($i)
+  }
+
+  foreach i {squareColor_lite squareColor_dark highcolor bestcolor} {
+    set $i $newColors($i)
+  }
+  foreach i {0 1 2 3} {
+    set c $w.border.c$i
+    $c itemconfigure dark -fill $squareColor_dark -outline $squareColor_dark
+    $c itemconfigure lite -fill $squareColor_lite -outline $squareColor_lite
+  }
+  foreach i {0 1 2 3 4} {
+    set c $w.coords.c$i
+    $c itemconfigure dark -fill $squareColor_dark -outline $squareColor_dark
+    $c itemconfigure lite -fill $squareColor_lite -outline $squareColor_lite
+  }
+  ::board::innercoords .main.board
+  updateBoard
+  return
+}
+
+################################################################################
+# chooseBoardColors
+#   Populates the preferences UI for configuring board colours and textures.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Container widget path provided by the preferences window.
+#   - choice: Optional preset index into `colorSchemes` (delegated to
+#     `updateBoardColors`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/configures numerous widgets under `$w`.
+#   - Initialises `newColors(*)` from the current colour globals.
+#   - May call `updateBoardColors`, which refreshes `.main.board`.
+################################################################################
+proc chooseBoardColors { w {choice -1}} {
+  global squareColor_lite squareColor_dark highcolor bestcolor
+  global colorSchemes newColors
+
+  set colors {squareColor_lite squareColor_dark highcolor bestcolor}
+
+  foreach i $colors { set newColors($i) [set $i] }
+  set bd $w.bd
+  pack [ttk::frame $bd] -side top -expand 1 -anchor w
+  addHorizontalRule $w
+  pack [ttk::frame $w.select] -side top -fill x -padx 5
+  addHorizontalRule $w
+  pack [ttk::frame $w.preset] -side top -fill x
+  pack [ttk::frame $w.texture] -side top -fill x -pady 2
+  addHorizontalRule $w
+  pack [ttk::frame $w.coords] -side top -fill x -pady 4
+  addHorizontalRule $w
+  pack [ttk::frame $w.border] -side top -anchor w -pady { 4 0 }
+
+  foreach psize $::boardSizes {
+    if {$psize >= 40} { break }
+  }
+  set column 0
+  foreach j {r n b q k p} {
+    ttk::label $bd.w$j -image w${j}$psize
+    ttk::label $bd.b$j -image b${j}$psize
+    grid $bd.b$j -row 0 -column $column
+    grid $bd.w$j -row 1 -column $column
+    incr column
+  }
+  ttk::frame $bd.p
+  ttk::label $bd.p.lb -text [tr OptionsBoardPieces]
+  ttk::combobox $bd.p.pieces -width 12 -textvar ::boardStyle -values $::boardStyles
+  bind $bd.p.pieces <<ComboboxSelected>> { setPieceFont $::boardStyle; updateBoard }
+  ttk::frame $bd.s
+  ttk::label $bd.s.lb -text [tr OptionsBoardSize]
+  ttk::checkbutton $bd.s.auto -text "Auto" -variable ::autoResizeBoard -command [list ::resizeMainBoard]
+  ttk::combobox $bd.s.size -width 4 -textvar ::boardSize  -values $::boardSizes
+  bind $bd.s.size <<ComboboxSelected>> { ::board::resize .main.board $::boardSize }
+  pack $bd.p.lb $bd.p.pieces -side left -anchor w -padx 5
+  pack $bd.s.lb $bd.s.auto $bd.s.size -side left -anchor w -padx 5
+  ttk::label $bd.empty -text "  "
+  grid $bd.empty -row 0 -column 7
+  grid $bd.p -row 0 -column 8
+  grid $bd.s -row 1 -column 8
+
+  set f $w.select
+  foreach row {0 1 0 1} column {0 0 2 2} c {
+    squareColor_lite squareColor_dark highcolor bestcolor
+  } n {
+    LightSquares DarkSquares SelectedSquares SuggestedSquares
+  } {
+    button $f.b$c -image e20 -background [set $c] -command [list apply {{w c} {
+      set x [tk_chooseColor -initialcolor $::newColors($c) -title [tr ScidUp]]
+      if {$x ne ""} { set ::newColors($c) $x; updateBoardColors $w }
+    }} $w $c]
+    ttk::label $f.l$c -text "$::tr($n)  "
+    grid $f.b$c -row $row -column $column
+    grid $f.l$c -row $row -column [expr {$column + 1} ] -sticky w
+  }
+
+  # Border width option:
+  set f $w.border
+  foreach i {0 1 2 3} {
+    if {$i != 0} { pack [ttk::frame $f.gap$i -width 20] -side left -padx 1 }
+    set b $f.b$i
+    ttk::radiobutton $b -text "$i:" -variable ::borderwidth -value $i -command [list ::board::setBorderWidthAndUpdate $i]
+    set c $f.c$i
+    canvas $c -height $psize -width $psize -background black
+    $c create rectangle 0 0 [expr {20 - $i}] [expr {20 - $i}] -tag dark
+    $c create rectangle [expr {20 + $i}] [expr {20 + $i}] $psize $psize -tag dark
+    $c create rectangle 0 [expr {20 + $i}] [expr {20 - $i}] $psize -tag lite
+    $c create rectangle [expr {20 + $i}] 0 $psize [expr {20 - $i}] -tag lite
+    pack $b $c -side left -padx 1
+    bind $c <Button-1> [list apply {{i} {
+        set ::borderwidth $i
+        ::board::border .main.board $i
+        updateBoard
+    } ::} $i]
+  }
+
+  # Coords option:
+  set f $w.coords
+  # bl: border left, bt: border top, ssi: squaresize
+  set slist [list 0 0 20 8 0 16 8 8 12 8 0 20 8 0 20]
+  foreach i {0 1 2 3 4} {bl bt ssi} $slist {
+    if {$i != 0} { pack [ttk::frame $f.gap$i -width 20] -side left -padx 1 }
+    set b $f.b$i
+    set fcom "set ::boardCoords $i
+              ::board::coords .main.board $i
+              ::board::resize .main.board redraw"
+    ttk::radiobutton $b -text "$i:" -variable ::boardCoords -value $i -command $fcom
+    set c $f.c$i
+    canvas $c -height $psize -width $psize -background white
+    if { $i >= 3 } {
+        set x0 0
+        set y0 0
+    } else {
+        set x0 [expr {$bl}]
+        set y0 [expr {$bt}]
+    }
+    set x1 [expr {$x0 + $ssi}]
+    set y1 [expr {$y0 + $ssi}]
+    set x2 [expr {$x1 + $ssi}]
+    set y2 [expr {$y1 + $ssi}]
+    $c create rectangle $x0 $y0 $x1 $y1 -tag dark
+    $c create rectangle $x1 $y1 $x2 $y2 -tag dark
+    $c create rectangle $x0 $y1 $x1 $y2 -tag lite
+    $c create rectangle $x1 $y0 $x2 $y1 -tag lite
+    if { $i > 0 } {
+        foreach { x y co } { 4 30 1 4 10 2 14 36 a 28 36 b } {
+            $c create text $x $y -text $co -fill black -font font_Small
+        }
+        if { $i == 2 || $i == 4 } {
+            foreach { x y co } { 38 30 1 38 10 2 14 4 a 28 4 b } {
+                $c create text $x $y -text $co -fill black -font font_Small
+            }
+        }
+    }
+    pack $b $c -side left -padx 1
+    bind $c <Button-1> $fcom
+  }
+
+  set count 0
+  foreach list $colorSchemes {
+    set f $w.preset.p$count
+    pack [ttk::frame $f] -side left -padx 5
+    ttk::label $f.blite -image bp$psize -background [lindex $list 1]
+    ttk::label $f.bdark -image bp$psize -background [lindex $list 2]
+    ttk::label $f.wlite -image wp$psize -background [lindex $list 1]
+    ttk::label $f.wdark -image wp$psize -background [lindex $list 2]
+    ttk::button $f.select -text [expr {$count + 1}] \
+        -command [list updateBoardColors $w $count]
+    bind $f.blite <1> [list ${f}.select invoke]
+    bind $f.bdark <1> [list ${f}.select invoke]
+    bind $f.wlite <1> [list ${f}.select invoke]
+    bind $f.wdark <1> [list ${f}.select invoke]
+    grid $f.blite -row 0 -column 0 -sticky e
+    grid $f.bdark -row 0 -column 1 -sticky w
+    grid $f.wlite -row 1 -column 1 -sticky w
+    grid $f.wdark -row 1 -column 0 -sticky e
+    grid $f.select -row 2 -column 0 -columnspan 2 ; # -sticky we
+    incr count
+  }
+
+  #########################################################
+  set f $w.texture
+  set count 0
+  set row 0
+  set col 0
+  foreach tex $::textureSquare {
+    set f $w.texture.p$count
+    grid [ ttk::frame $f ] -row $row -column $col -padx 5
+    canvas $f.c -width [expr {$psize*2}] -height [expr {$psize*2}] -background red
+    $f.c create image 0 0 -image ${tex}-l -anchor nw
+    $f.c create image $psize 0 -image ${tex}-d -anchor nw
+    $f.c create image 0 $psize -image ${tex}-d -anchor nw
+    $f.c create image $psize $psize -image ${tex}-l -anchor nw
+
+    $f.c create image 0 0 -image bp$psize -anchor nw
+    $f.c create image $psize 0 -image wp$psize -anchor nw
+    $f.c create image 0 $psize -image wp$psize -anchor nw
+    $f.c create image $psize $psize -image bp$psize -anchor nw
+    ttk::button $f.select -text [expr {$count + 1}] -command [list chooseBoardTextures $count]
+    bind $f.c <1> [list chooseBoardTextures $count]
+    pack $f.c $f.select -side top
+
+    incr count
+    incr col
+    if {$col > 5} { set col 0 ; incr row }
+  }
+  updateBoardColors $w
+}
+
+namespace eval ::board {
+
+  namespace export sq
+
+  # List of square names in order; used by sq procedure.
+  variable squareIndex [list a1 b1 c1 d1 e1 f1 g1 h1 a2 b2 c2 d2 e2 f2 g2 h2 \
+      a3 b3 c3 d3 e3 f3 g3 h3 a4 b4 c4 d4 e4 f4 g4 h4 \
+      a5 b5 c5 d5 e5 f5 g5 h5 a6 b6 c6 d6 e6 f6 g6 h6 \
+      a7 b7 c7 d7 e7 f7 g7 h7 a8 b8 c8 d8 e8 f8 g8 h8]
+}
+
+################################################################################
+# ::board::sq
+#   Converts a SAN square name (e.g. `e4`) to a 0..63 square index.
+# Visibility:
+#   Public.
+# Inputs:
+#   - sqname: Square name in `a1`..`h8` form.
+# Returns:
+#   - Square index (0..63), or `-1` if `sqname` is invalid.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::sq {sqname} {
+  variable squareIndex
+  return [lsearch -exact $squareIndex $sqname]
+}
+
+################################################################################
+# ::board::san
+#   Converts a square index (0..63) to a SAN square name (e.g. `e4`).
+# Visibility:
+#   Public.
+# Inputs:
+#   - sqno: Square index (0..63).
+# Returns:
+#   - Square name in `a1`..`h8` form, or an empty string if out of range.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::san {sqno} {
+  if {($sqno < 0) || ($sqno > 63)} { return }
+  return [format %c%c \
+      [expr {($sqno % 8) + [scan a %c]}] \
+      [expr {($sqno / 8) + [scan 1 %c]}]]
+
+}
+
+################################################################################
+# ::board::popup
+#   Displays (and positions) a transient popup board for a given position.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Popup toplevel path.
+#   - positionLongStr: 2-item list `{pos lastmove}`.
+#   - xc: Screen X coordinate for centring.
+#   - yc: Screen Y coordinate for placement.
+#   - h_offset: Optional vertical offset when placing below.
+#   - above: Optional preference for placing above `yc`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/configures the popup toplevel on first use.
+#   - Updates `$w.bd` via `::board::update` and may highlight `lastmove`.
+#   - Calls `wm geometry` to keep the popup on-screen.
+################################################################################
+proc ::board::popup {w positionLongStr xc yc {h_offset 20} {above true}} {
+    set psize 30
+    if {$psize > $::boardSize} { set psize $::boardSize }
+
+    if {! [winfo exists $w]} {
+        toplevel $w
+        wm overrideredirect $w 1
+        ::board::new $w.bd $psize
+        grid $w.bd
+        ::update idletasks
+        # Check if it was destroyed during the idletasks
+        if {! [winfo exists $w]} { return }
+    }
+
+    lassign $positionLongStr pos lastmove
+    ::board::update $w.bd $pos
+
+    if {$lastmove ne ""} {
+      ::board::lastMoveHighlight $w.bd $lastmove
+    }
+
+    # Make sure the popup window can fit on the screen:
+    set screen_w [winfo vrootwidth $w]
+    set screen_h [winfo vrootheight $w]
+    set top_y [winfo rooty .]
+    set dx [winfo reqwidth $w]
+    set dy [winfo reqheight $w]
+    set xc [expr {max(0, $xc - int($dx / 2))}]
+    set xc [expr {min($xc, $screen_w - $dx)}]
+    if {$yc < $dy + $top_y} { set above false }
+    if {$yc + $dy > $screen_h} { set above true }
+    if {$above} { set yc [expr {max(0, $yc - $dy)}] } { incr yc $h_offset }
+    wm geometry $w "+$xc+$yc"
+}
+
+################################################################################
+# ::board::new
+#   Creates and initialises a board widget under the given path.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - psize: Optional desired piece size (rounded up to the next entry in
+#     `::boardSizes`).
+# Returns:
+#   - The board widget path `w` when created; otherwise an empty string when the
+#     widget already exists.
+# Side effects:
+#   - Creates Tk widgets under `$w` (frame, canvases, coordinate labels).
+#   - Initialises `::board::_*($w)` state (size, borders, coords, flip, data,
+#     marks, material/eval-bar toggles).
+#   - Reads current position via `sc_pos board`.
+#   - Draws the initial board via `::board::coords` and `::board::update`.
+################################################################################
+proc ::board::new {w {psize 40} } {
+  if {[winfo exists $w]} { return }
+
+  foreach size $::boardSizes {
+    if {$size >= $psize} { break }
+  }
+  set psize $size
+
+  set ::board::_size($w) $psize
+  set ::board::_border($w) $::borderwidth
+  set ::board::_coords($w) 4
+  set ::board::_flip($w) 0
+  set ::board::_data($w) [sc_pos board]
+  set ::board::_showMarks($w) 0
+  set ::board::_mark($w) {}
+  set ::board::_drag($w) -1
+  set ::board::_showmat($w) 0
+  set ::board::_evalbarShow($w) 0
+  set ::board::_evalbarMaxScore($w) 4
+  set ::board::_evalbarScore($w) 0
+  set ::board::_evalbarHeight($w) 0
+  set ::board::_evalbarWidth($w) 0
+  set ::board::_evalbarScale($w) 1
+
+  set border $::board::_border($w)
+  set bsize [expr {$psize * 8 + $border * 9} ]
+
+  ttk::frame $w -class Board
+  canvas $w.bd -width $bsize -height $bsize -cursor crosshair -borderwidth 0 -highlightthickness 0
+  ::applyThemeColor_background $w.bd
+  catch { grid anchor $w center }
+
+  set startrow 5
+  grid $w.bd -row [expr {$startrow +1}] -column 3 -rowspan 8 -columnspan 8
+  set bd $w.bd
+
+  # Create empty board:
+  for {set i 0} {$i < 64} {incr i} {
+    set xi [expr {$i % 8} ]
+    set yi [expr {int($i/8)} ]
+    set x1 [expr {$xi * ($psize + $border) + $border } ]
+    set y1 [expr {(7 - $yi) * ($psize + $border) + $border } ]
+    set x2 [expr {$x1 + $psize }]
+    set y2 [expr {$y1 + $psize }]
+
+    $bd create rectangle $x1 $y1 $x2 $y2 -tag sq$i -outline ""
+  }
+
+  # Set up coordinate labels:
+  for {set i 1} {$i <= 8} {incr i} {
+    ttk::label $w.lrank$i -text [expr {9 - $i}]
+    grid $w.lrank$i -row [expr {$startrow + $i}] -column 2 -sticky e -padx 5
+    ttk::label $w.rrank$i -text [expr {9 - $i}]
+    grid $w.rrank$i -row [expr {$startrow + $i}] -column 11 -sticky w -padx 5
+  }
+  foreach i {1 2 3 4 5 6 7 8} file {a b c d e f g h} {
+    ttk::label $w.tfile$file -text $file
+    grid $w.tfile$file -row $startrow -column [expr {$i + 2}] -sticky s
+    ttk::label $w.bfile$file -text $file
+    grid $w.bfile$file -row [expr {$startrow + 9}] -column [expr {$i + 2}] -sticky n
+  }
+
+  canvas $w.score -width 8 -cursor hand2
+  grid $w.score -row 6 -column 12 -rowspan 8 -sticky ew
+  grid remove $w.score
+  canvas $w.mat -width 20 -height $bsize -highlightthickness 0
+  ::applyThemeColor_background $w.mat
+  grid $w.mat -row 6 -column 13 -rowspan 8 -pady 0
+  grid remove $w.mat
+
+  ::board::coords $w
+  ::board::update $w
+  return $w
+}
+
+################################################################################
+# ::board::addNamesBar
+#   Adds the player name/Elo/clock bars (White and Black) to a board widget.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - varname: Name of an array variable holding `nameW`, `eloW`, `clockW`,
+#     `nameB`, `eloB`, `clockB`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and grids widgets under `$w.playerW` and `$w.playerB`.
+#   - Binds label textvariables to `${varname}(...)`.
+################################################################################
+proc ::board::addNamesBar {w {varname}} {
+  ttk::frame $w.playerW -style fieldbg.TLabel
+  frame $w.playerW.color -background #EAE0C8 -width 6 -height 6
+  ttk_canvas $w.playerW.tomove -borderwidth 0 -highlightthickness 0 -width 9 -height 9
+  ttk::label $w.playerW.name -textvariable ${varname}(nameW) -font font_SmallBold -style fieldbg.TLabel
+  ttk::label $w.playerW.elo -textvariable ${varname}(eloW) -font font_Small -style fieldbg.TLabel
+  ttk::label $w.playerW.clock -textvariable ${varname}(clockW) -font font_Regular -style fieldbg.TLabel
+  grid $w.playerW.color -row 0 -column 0 -sticky news -padx 2 -pady 2
+  grid $w.playerW.name -row 0 -column 1 -sticky w
+  grid $w.playerW.elo -row 0 -column 2 -sticky w
+  grid $w.playerW.clock -row 0 -column 3 -sticky e
+  grid $w.playerW.tomove -row 0 -column 4 -sticky w -padx 4
+  grid columnconfigure $w.playerW 3 -weight 1
+  grid $w.playerW -row 16 -column 3 -columnspan 8 -sticky news -pady 4
+
+  ttk::frame $w.playerB -style fieldbg.TLabel
+  frame $w.playerB.color -background black -width 6 -height 6
+  ttk_canvas $w.playerB.tomove -borderwidth 0 -highlightthickness 0 -width 9 -height 9
+  ttk::label $w.playerB.name -textvariable ${varname}(nameB) -font font_SmallBold -style fieldbg.TLabel
+  ttk::label $w.playerB.elo -textvariable ${varname}(eloB) -font font_Small -style fieldbg.TLabel
+  ttk::label $w.playerB.clock -textvariable ${varname}(clockB) -font font_Regular -style fieldbg.TLabel
+  grid $w.playerB.color -row 0 -column 0 -sticky news -padx 2 -pady 2
+  grid $w.playerB.name -row 0 -column 1 -sticky w
+  grid $w.playerB.elo -row 0 -column 2 -sticky w
+  grid $w.playerB.clock -row 0 -column 3 -sticky e
+  grid $w.playerB.tomove -row 0 -column 4 -sticky w -padx 4
+  grid columnconfigure $w.playerB 3 -weight 1
+  grid $w.playerB -row 3 -column 3 -columnspan 8 -sticky news -pady 4
+}
+
+################################################################################
+# ::board::addInfoBar
+#   Adds the info/toolbar bar to a board widget.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - varname: Name of an array variable used by the toolbar (see
+#     `::board::newToolBar_`).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates and grids widgets under `$w.bar`.
+#   - Configures tag bindings on `$w.bar.info.t`.
+#   - Binds a `<Configure>` handler to show/hide navigation buttons based on
+#     available width.
+################################################################################
+proc ::board::addInfoBar {w varname} {
+  ttk::frame $w.bar
+  ttk::frame $w.bar.info
+  ttk_text $w.bar.info.t -style Toolbutton
+  autoscrollBars y $w.bar.info $w.bar.info.t
+  $w.bar.info.t tag bind click <Any-Enter> [list $w.bar.info.t configure -cursor hand2]
+  $w.bar.info.t tag bind click <Any-Leave> [list $w.bar.info.t configure -cursor {}]
+  grid propagate $w.bar.info 0
+  ttk::button $w.bar.leavevar -image tb_BD_BackStart -style Toolbutton
+  ttk::button $w.bar.back -image tb_BD_Back -style Toolbutton
+  ttk::button $w.bar.forward -image tb_BD_Forward -style Toolbutton
+  ttk::button $w.bar.endvar -image tb_BD_ForwardEnd -style Toolbutton
+  set menu [::board::newToolBar_ $w $varname]
+  ttk::button $w.bar.cmd -image tb_BD_ShowToolbar -style Toolbutton \
+    -command [list ::board::updateToolBar_ $menu $varname $w.bar.cmd]
+  grid $w.bar.cmd -in $w.bar -row 0 -column 0 -sticky news
+  grid $w.bar.info -in $w.bar -row 0 -column 1 -sticky news -padx 4
+  grid $w.bar.leavevar -row 0 -column 2 -sticky news
+  grid $w.bar.back -row 0 -column 3 -sticky news
+  grid $w.bar.forward -row 0 -column 4 -sticky news
+  grid $w.bar.endvar -row 0 -column 5 -sticky news
+  grid columnconfigure $w.bar 1 -weight 1
+  grid $w.bar -row 20 -column 3 -columnspan 8 -sticky news -pady 4
+  ::bind $w.bar <Configure> {+
+	grid remove %W.leavevar
+	grid remove %W.endvar
+	if {%w > 450} {
+	  grid %W.leavevar
+	  grid %W.endvar
+	}
+  }
+}
+
+################################################################################
+# ::board::addInfo
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - msg: String to append.
+# Returns:
+#   - None.
+# Side effects:
+#   - Appends to `$w.bar.info.t`.
+################################################################################
+proc ::board::addInfo {{w} {msg}} {
+  if {$msg eq ""} { return }
+  $w.bar.info.t configure -state normal
+  $w.bar.info.t insert end "\n$msg"
+  $w.bar.info.t configure -state disabled
+}
+
+################################################################################
+# ::board::setInfo
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - msg: Even-length list of `{text tag}` pairs.
+# Returns:
+#   - None.
+# Side effects:
+#   - Replaces the contents of `$w.bar.info.t`.
+################################################################################
+proc ::board::setInfo {{w} {msg}} {
+  $w.bar.info.t configure -state normal
+  $w.bar.info.t delete 1.0 end
+  foreach {elem tag} $msg {
+    $w.bar.info.t insert end $elem $tag
+  }
+  $w.bar.info.t configure -state disabled
+}
+
+################################################################################
+# ::board::setInfoAlert
+#   Displays an alert message in the board info bar, optionally making it
+#   clickable.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - header: Optional prefix header; when empty, the message is appended.
+#   - msg: Alert message text.
+#   - msgcolor: Foreground colour for the message.
+#   - cmd: Either a command to execute, or a widget path to be popped up.
+# Returns:
+#   - None.
+# Side effects:
+#   - Replaces or appends to `$w.bar.info.t`.
+#   - Configures tag colours and binds `<ButtonRelease-1>` on the `click` tag.
+################################################################################
+proc ::board::setInfoAlert {{w} {header} {msg} {msgcolor} {cmd}} {
+  $w.bar.info.t configure -state normal
+  if {$header ne ""} {
+    $w.bar.info.t delete 1.0 end
+    $w.bar.info.t insert end "$header " {header click}
+  } else {
+    $w.bar.info.t insert end "\n"
+  }
+  $w.bar.info.t insert end "$msg" {color click}
+  $w.bar.info.t configure -state disabled
+  $w.bar.info.t tag configure color -foreground $msgcolor
+  $w.bar.info.t tag bind click <ButtonRelease-1> [list apply {{cmd} {
+    if {[winfo exists $cmd]} {
+      after idle tk_popup $cmd %X [expr {-10 + %Y - [winfo reqheight $cmd]}]
+    } else {
+      after idle $cmd
+    }
+  }} $cmd]
+}
+
+set ::board::repeatDelayInitial 400
+array set ::board::repeatDelay {}
+array set ::board::repeatAfterId {}
+
+################################################################################
+# ::board::repeatStart
+#   Starts an auto-repeat action for a widget (press-and-hold behaviour).
+# Visibility:
+#   Private.
+# Inputs:
+#   - widget: Widget path whose repeat state is tracked.
+#   - cmdPrefix: Command prefix to execute on each repeat.
+# Returns:
+#   - None.
+# Side effects:
+#   - Schedules `after` callbacks and updates `::board::repeatDelay(*)`.
+################################################################################
+proc ::board::repeatStart {widget cmdPrefix} {
+  ::board::repeatCancel $widget
+  set ::board::repeatDelay($widget) $::board::repeatDelayInitial
+  ::board::repeatStep $widget $cmdPrefix
+}
+
+################################################################################
+# ::board::repeatStep
+#   Executes one repeat step and schedules the next step.
+# Visibility:
+#   Private.
+# Inputs:
+#   - widget: Widget path whose repeat state is tracked.
+#   - cmdPrefix: Command prefix to execute.
+# Returns:
+#   - None.
+# Side effects:
+#   - Executes `cmdPrefix`.
+#   - Schedules `after` callbacks and updates `::board::repeatAfterId(*)`.
+################################################################################
+proc ::board::repeatStep {widget cmdPrefix} {
+  if {![winfo exists $widget]} {
+    ::board::repeatCancel $widget
+    return
+  }
+  {*}$cmdPrefix
+  set ::board::repeatDelay($widget) [expr {max(20, int($::board::repeatDelay($widget) * 0.8))}]
+  set ::board::repeatAfterId($widget) [after $::board::repeatDelay($widget) [list ::board::repeatStep $widget $cmdPrefix]]
+}
+
+################################################################################
+# ::board::repeatCancel
+#   Cancels any outstanding auto-repeat schedule for the given widget.
+# Visibility:
+#   Private.
+# Inputs:
+#   - widget: Widget path whose repeat state is tracked.
+# Returns:
+#   - None.
+# Side effects:
+#   - Cancels a scheduled `after` callback.
+#   - Unsets `::board::repeatAfterId(*)` and `::board::repeatDelay(*)`.
+################################################################################
+proc ::board::repeatCancel {widget} {
+  if {[info exists ::board::repeatAfterId($widget)]} {
+    after cancel $::board::repeatAfterId($widget)
+    unset ::board::repeatAfterId($widget)
+  }
+  unset -nocomplain ::board::repeatDelay($widget)
+}
+
+################################################################################
+# ::board::setButtonCmd
+#   Configures a toolbar button to run a command prefix (with auto-repeat).
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - button: Button name under `$w.bar` (e.g. `back`).
+#   - cmdPrefix: Command prefix to execute; when empty, disables the button.
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures `$w.bar.$button` state and bindings.
+#   - Starts/cancels repeat scheduling via `::board::repeat*`.
+################################################################################
+proc ::board::setButtonCmd {{w} {button} {cmdPrefix}} {
+  set widget $w.bar.$button
+  if {$cmdPrefix eq ""} {
+    ::board::repeatCancel $widget
+    $widget configure -state disabled
+    ::bind $widget <ButtonPress-1> {}
+    ::bind $widget <Any-Leave> {}
+    ::bind $widget <ButtonRelease-1> {}
+    return
+  }
+
+  $widget configure -state normal
+  ::bind $widget <ButtonPress-1> [list ::board::repeatStart $widget $cmdPrefix]
+  ::bind $widget <Any-Leave> [list ::board::repeatCancel $widget]
+  ::bind $widget <ButtonRelease-1> [list ::board::repeatCancel $widget]
+}
+
+################################################################################
+# ::board::setButtonImg
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - button: Button name under `$w.bar`.
+#   - img: Tk image name.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `$w.bar.$button`’s `-image`.
+################################################################################
+proc ::board::setButtonImg {{w} {button} {img}} {
+  $w.bar.$button configure -image $img
+}
+
+################################################################################
+# ::board::bindEvalBar
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - event: Tk event sequence.
+#   - fn: Callback script.
+# Returns:
+#   - None.
+# Side effects:
+#   - Binds `event` on `$w.score`.
+################################################################################
+proc ::board::bindEvalBar {w event fn} {
+  ::bind $w.score $event $fn
+}
+
+################################################################################
+# ::board::toggleEvalBar
+#   Toggles visibility of the evaluation bar for a board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - Boolean (0/1) indicating whether the eval bar is now shown.
+# Side effects:
+#   - Grids or removes `$w.score`.
+#   - Draws the eval bar when enabling.
+################################################################################
+proc ::board::toggleEvalBar {w} {
+  set ::board::_evalbarShow($w) [expr {1 - $::board::_evalbarShow($w)}]
+  if {$::board::_evalbarShow($w)} {
+      grid $w.score
+      ::board::drawEvalBar_ $w
+  } else {
+      grid remove $w.score
+  }
+  return $::board::_evalbarShow($w)
+}
+
+################################################################################
+# ::board::drawEvalBar_
+#   (Re)creates the eval bar widgets for the current board size.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears and recreates items on `$w.score`.
+#   - Updates `::board::_evalbarHeight($w)`/`::board::_evalbarWidth($w)`.
+#   - Calls `::board::updateEvalBar`.
+################################################################################
+proc ::board::drawEvalBar_ { w } {
+    if { ! $::board::_evalbarShow($w) } { return }
+    set maxscore $::board::_evalbarMaxScore($w)
+    set h [expr {$::board::_size($w) * 8 + $::board::_border($w) * 6 - 2 }]
+    set width 14
+
+    $w.score delete nl barUp barDown
+    $w.score configure -background grey50 -width [expr {$width -2}] -height $h \
+        -borderwidth 1 -highlightthickness 0
+
+    set colorUp grey7
+    set colorDown grey94
+    set ::board::_evalbarScale($w) [expr {($h + 2) / ($maxscore * -2.0)}]
+    if { $::board::_flip($w) } {
+        set colorUp grey94
+        set colorDown grey7
+        set ::board::_evalbarScale($w) [expr {$::board::_evalbarScale($w) * -1}]
+    }
+    $w.score create rectangle 0 0 0 0 -tag barUp -width 0 -fill $colorUp
+    $w.score create rectangle 0 0 0 0 -tag barDown -width 0 -fill $colorDown
+
+    for { set i [expr {1 - $maxscore}] } { $i < $maxscore } { incr i } {
+        set h1 [expr {$h / 2 + $i * $::board::_evalbarScale($w)}]
+        if { $i == 0 } {
+            $w.score create rectangle 0 $h1 $width [expr {$h1 + 2}] -fill red -width 0 -tag nl
+        } else {
+            $w.score create line 0 $h1 $width $h1 -fill gray40 -tag nl
+        }
+    }
+    set ::board::_evalbarHeight($w) $h
+    set ::board::_evalbarWidth($w) $width
+    ::board::updateEvalBar $w $::board::_evalbarScore($w)
+}
+
+################################################################################
+# ::board::updateEvalBar
+#   Updates the evaluation bar display for the provided score.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - score: Evaluation from White’s perspective; empty string means “no score”.
+#     Mate notation like `+M12`/`-M5` is supported.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::board::_evalbarScore($w)`.
+#   - Updates canvas item coordinates on `$w.score` when the bar is visible.
+################################################################################
+proc ::board::updateEvalBar { w score } {
+    set ::board::_evalbarScore($w) $score
+    if { ! $::board::_evalbarShow($w) } { return }
+
+    if { $score eq "" } {
+        $w.score coords barUp 0 0 0 0
+        $w.score coords barDown 0 0 0 0
+    } else {
+        set width $::board::_evalbarWidth($w)
+        set h $::board::_evalbarHeight($w)
+
+        # Handle mate notation like +M12 or -M5
+        if {[string index $score 1] eq "M" && [string is integer [string range $score 2 end]]} {
+            if {[set sign [string index $score 0]] in {- +}} {
+                set score [expr {$::board::_evalbarMaxScore($w) * ($sign eq "+" ? 1 : -1)}]
+            }
+        }
+
+        set midY [expr {$h / 2 + $score * $::board::_evalbarScale($w)}]
+        $w.score coords barUp 0 0 $width $midY
+        $w.score coords barDown 0 $midY $width [expr {$h + 1}]
+    }
+}
+
+################################################################################
+# ::board::updateToolBar_
+#   Updates a toolbar menu’s enabled entries and optionally pops it up.
+# Visibility:
+#   Private.
+# Inputs:
+#   - menu: Menu widget path.
+#   - varname: Name of an array variable holding command prefixes keyed by image
+#     index.
+#   - mb: Optional menubutton widget path used for popup positioning.
+# Returns:
+#   - None.
+# Side effects:
+#   - Configures menu entry state/command based on `${varname}(...)`.
+#   - May invoke `tk_popup`.
+################################################################################
+proc ::board::updateToolBar_ {{menu} {varname} {mb ""} } {
+  global "$varname"
+  set i [$menu index end]
+  while {$i >= 0} {
+    set idx -1
+    catch { set idx [lindex [$menu entryconfigure $i -image] 4] }
+	    if {[info exists "${varname}($idx)"] } {
+	      $menu entryconfigure $i -state normal -command [list ::board::invokeToolBarCommand $varname $idx]
+	    } else {
+	      catch { $menu entryconfigure $i -state disabled -command {} }
+	    }
+    incr i -1
+  }
+  if {$mb != ""} {
+    set x [winfo rootx $mb]
+    set y [winfo rooty $mb]
+    set bh [winfo height $mb]
+    set mh [winfo reqheight $menu]
+    if {$y >= $mh} { incr y -$mh } { incr y $bh }
+    tk_popup $menu $x $y
+  }
+}
+
+################################################################################
+# ::board::invokeToolBarCommand
+#   Invokes a toolbar command stored in an array variable.
+# Visibility:
+#   Private.
+# Inputs:
+#   - varname: Name of an array variable (without leading `::`).
+#   - idx: Array key.
+# Returns:
+#   - None.
+# Side effects:
+#   - Executes the command prefix stored in `::${varname}($idx)`.
+################################################################################
+proc ::board::invokeToolBarCommand {varname idx} {
+  set qualifiedVarName "::${varname}"
+  if {![info exists ${qualifiedVarName}($idx)]} {
+    return
+  }
+  set cmdPrefix [set ${qualifiedVarName}($idx)]
+  {*}$cmdPrefix
+}
+
+################################################################################
+# ::board::newToolBar_
+#   Creates the context menus for the board navigation toolbar.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+#   - varname: Name of an array variable used to store command prefixes.
+# Returns:
+#   - The main menu widget path.
+# Side effects:
+#   - Creates several `menu` widgets under `$w`.
+#   - Binds right-click actions on `$w.bar.back` and `$w.bar.forward`.
+#   - Populates `${varname}(...)` with default toolbar commands.
+################################################################################
+proc ::board::newToolBar_ {{w} {varname}} {
+  global "$varname"
+
+  set m [menu $w.menu_back]
+  $m add command -label "  [tr BackToMainline]" -image tb_BD_BackToMainline -compound left
+  $m add command -label "  [tr EditDelete]" -image tb_BD_VarDelete -compound left
+  $m add command -label "  [tr LeaveVariant]" -image tb_BD_VarLeave -compound left
+  $m add command -label "  [tr GameStart]" -image tb_BD_Start -compound left -accelerator "<home>"
+  ::bind $w.bar.back <ButtonRelease-$::MB3> [list ::board::updateToolBar_ $m $varname %W]
+
+  set m [menu $w.menu_forw]
+  $m add command -label "  [tr Autoplay]" -image tb_BD_Autoplay -compound left
+  $m add command -label "  [tr GameEnd]" -image tb_BD_End -compound left -accelerator "<end>"
+  ::bind $w.bar.forward <ButtonRelease-$::MB3> [list ::board::updateToolBar_ $m $varname %W]
+
+  set m [menu $w.menu]
+  $m add command -label "  [tr EditSetup]" -image tb_BD_SetupBoard -compound left
+  $m add command -label "  [tr IERotate]" -image tb_BD_Flip -compound left
+  $m add command -label "  [tr SelectMarker]" -image tb_BD_SelectMarker -compound left
+  $m add command -label "  [tr ShowHideMaterial]" -image tb_BD_Material -compound left
+  $m add command -label "  [tr ShowHideEvalBar]" -image tb_BD_Scorebar -compound left
+  $m add command -label "  [tr ConfigureScid]" -image tb_BD_Layout -compound left
+
+  set ${varname}(tb_BD_Flip) "::board::flip $w"
+  set ${varname}(tb_BD_Material) "::board::toggleMaterial $w"
+  set ${varname}(tb_BD_Scorebar) "::board::toggleEvalBar $w"
+  set ${varname}(tb_BD_Layout) {::preferences::Open toggle}
+
+  return $m
+}
+
+################################################################################
+# ::board::flipNames_
+#   Repositions the names bars based on board orientation.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+#   - white_on_top: Boolean (1 => White at the top).
+# Returns:
+#   - None.
+# Side effects:
+#   - Reconfigures grid rows for `$w.playerW` and `$w.playerB`.
+################################################################################
+proc ::board::flipNames_ { {w} {white_on_top} } {
+  if {![winfo exist $w.playerW] } { return }
+  if {$white_on_top} {
+    grid $w.playerW -row 3
+    grid $w.playerB -row 16
+  } else {
+    grid configure $w.playerW -row 16
+    grid configure $w.playerB -row 3
+  }
+}
+
+################################################################################
+# ::board::sideToMove_
+#   Updates the “side to move” indicator and clock emphasis in the names bar.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+#   - side: `w` or `b`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Draws a small indicator on `$w.playerW.tomove` / `$w.playerB.tomove`.
+#   - Updates clock label fonts for emphasis.
+################################################################################
+proc ::board::sideToMove_ { {w} {side} } {
+  if {![winfo exist $w.playerW] } { return }
+  if {$side == "w"} {
+    $w.playerB.tomove delete -tag tomove
+    $w.playerW.tomove create rectangle 0 0 100 100 -fill blue -tag tomove
+    $w.playerW.clock configure -font font_Bold
+    $w.playerB.clock configure -font font_Regular
+  } elseif {$side == "b"} {
+    $w.playerW.tomove delete -tag tomove
+    $w.playerB.tomove create rectangle 0 0 100 100 -fill blue -tag tomove
+    $w.playerB.clock configure -font font_Bold
+    $w.playerW.clock configure -font font_Regular
+  }
+}
+
+################################################################################
+# ::board::defaultColor
+#   Returns the default light/dark square colour for a square index.
+# Visibility:
+#   Public.
+# Inputs:
+#   - sq: Square index (0..63).
+# Returns:
+#   - `::squareColor_lite` or `::squareColor_dark`.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::defaultColor {sq} {
+  return [expr {($sq + ($sq / 8)) % 2 ? "$::squareColor_lite" : "$::squareColor_dark"}]
+}
+
+################################################################################
+# ::board::size
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - Current piece size (one entry from `::boardSizes`).
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::size {w} {
+  return $::board::_size($w)
+}
+
+################################################################################
+# ::board::resizeAuto
+#   Chooses the largest configured board size that fits within a bounding box.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - bbox: 4-item list `{x y width height}`.
+# Returns:
+#   - New piece size (as returned by `::board::resize`).
+# Side effects:
+#   - Calls `::board::resize`.
+################################################################################
+proc ::board::resizeAuto {w bbox} {
+  set availw  [lindex $bbox 2]
+  set availh  [lindex $bbox 3]
+  set reqw [winfo reqwidth $w]
+  set reqh [winfo reqheight $w]
+  set extraw [expr {$reqw - $::board::_size($w) * 8}]
+  set extrah [expr {$reqh - $::board::_size($w) * 8}]
+  set availw  [expr {$availw - $extraw}]
+  set availh  [expr {$availh - $extrah}]
+  set maxSize [expr {$availh < $availw ? $availh : $availw}]
+  set maxSize [expr {$maxSize / 8}]
+
+  set newSize 0
+  foreach size $::boardSizes {
+    if {$size <= $maxSize && $size > $newSize} { set newSize $size }
+  }
+
+  return [::board::resize $w $newSize]
+}
+
+################################################################################
+# ::board::resize
+#   Resizes the board to the requested piece size.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - psize: Either an explicit size from `::boardSizes`, `+1`/`-1` to step, or
+#     `redraw`.
+# Returns:
+#   - The resulting piece size (may be unchanged).
+# Side effects:
+#   - Reconfigures `$w.bd` and square coordinates.
+#   - Resizes `$w.mat`.
+#   - Redraws coordinates, pieces, and eval bar.
+################################################################################
+proc ::board::resize {w psize} {
+  global boardSizes
+
+  set oldsize $::board::_size($w)
+  if {$psize == $oldsize} { return $oldsize }
+  if {$psize == "redraw"} { set psize $oldsize }
+  if {$psize == "-1"} {
+    set index [lsearch -exact $boardSizes $oldsize]
+    if {$index == 0} { return $oldsize }
+    incr index -1
+    set psize [lindex $boardSizes $index]
+  } elseif {$psize == "+1"} {
+    set index [lsearch -exact $boardSizes $oldsize]
+    incr index
+    if {$index == [llength $boardSizes]} { return $oldsize }
+    set psize [lindex $boardSizes $index]
+  }
+
+  # Verify that we have a valid size:
+  if {[lsearch -exact $boardSizes $psize] < 0} { return $oldsize }
+
+  set border $::board::_border($w)
+  set bsize [expr {$psize * 8 + $border * 9} ]
+
+  $w.bd configure -width $bsize -height $bsize
+  set ::board::_size($w) $psize
+
+  # Resize each square:
+  for {set i 0} {$i < 64} {incr i} {
+    set xi [expr {$i % 8}]
+    set yi [expr {int($i/8)}]
+    set x1 [expr {$xi * ($psize + $border) + $border }]
+    set y1 [expr {(7 - $yi) * ($psize + $border) + $border }]
+    set x2 [expr {$x1 + $psize }]
+    set y2 [expr {$y1 + $psize }]
+    set pos $i
+    if {$::board::_flip($w)} { set pos [expr {63 - $i}] }
+    $w.bd coords sq$pos $x1 $y1 $x2 $y2
+  }
+
+  # resize the material canvas
+  $w.mat configure -height $bsize
+
+  ::board::coords $w $::board::_coords($w)
+  ::board::update $w
+  ::board::drawEvalBar_ $w
+
+  return $psize
+}
+
+################################################################################
+# ::board::border
+#   Gets or sets the square border width for a board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - border: Optional border width (pixels). When omitted/empty, this is a
+#     query.
+# Returns:
+#   - When querying, returns the current border width.
+# Side effects:
+#   - When setting, updates `::board::_border($w)` and triggers a redraw via
+#     `::board::resize $w redraw`.
+################################################################################
+proc ::board::border {w {border ""}} {
+  if {$border == ""} {
+    return $::board::_border($w)
+  } else {
+    set ::board::_border($w) $border
+    ::board::resize $w redraw
+  }
+}
+
+################################################################################
+# ::board::setBorderWidthAndUpdate
+#   Sets the global border width and refreshes the main board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - width: Border width (pixels).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::borderwidth`.
+#   - Calls `::board::border .main.board` and `updateBoard`.
+################################################################################
+proc ::board::setBorderWidthAndUpdate {width} {
+  set ::borderwidth $width
+  ::board::border .main.board $width
+  updateBoard
+}
+
+################################################################################
+# ::board::getSquare
+#   Converts screen coordinates to a board square index.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - x: Screen X coordinate.
+#   - y: Screen Y coordinate.
+# Returns:
+#   - Square index (0..63), or `-1` if outside the board.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::getSquare {w x y} {
+  if {[winfo containing $x $y] != "$w.bd"} {
+    return -1
+  }
+  set x [expr {$x - [winfo rootx $w.bd]}]
+  set y [expr {$y - [winfo rooty $w.bd]}]
+  set psize $::board::_size($w)
+  set border $::board::_border($w)
+  set x [expr {int($x / ($psize+$border))}]
+  set y [expr {int($y / ($psize+$border))}]
+
+  if {$x < 0  ||  $y < 0  ||  $x > 7  ||  $y > 7} {
+    set sq -1
+  } else {
+    set sq [expr {(7-$y)*8 + $x}]
+    if {$::board::_flip($w)} { set sq [expr {63 - $sq}] }
+  }
+  return $sq
+}
+
+################################################################################
+# ::board::showMarks
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - value: Boolean (0/1).
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::board::_showMarks($w)`.
+################################################################################
+proc ::board::showMarks {w value} {
+  set ::board::_showMarks($w) $value
+}
+
+################################################################################
+# ::board::colorSquare
+#   Colours a board square, optionally applying threat/mark overlays.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - i: Square index (0..63).
+#   - color: Optional override colour; when empty, uses the default square
+#     colour, and may apply Gloss-of-Danger and full-square marks.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `$w.bd` item colours for the square.
+################################################################################
+proc ::board::colorSquare {w i {color ""}} {
+  if {$i < 0  ||  $i > 63} { return }
+  if {$color != ""} {
+    $w.bd itemconfigure br$i -state hidden
+  } else {
+    set color [::board::defaultColor $i]
+    set brstate "normal"
+    if { $::glossOfDanger } {
+      array set attacks [sc_pos attacks]
+      if {[info exists attacks($i)]} {
+        set color $attacks($i)
+      }
+    }
+    foreach mark $::board::_mark($w) {
+      if {[lindex $mark 1] == $i && [lindex $mark 0] == "full"} {
+        set color [lindex $mark 3]
+        set brstate "hidden"
+      }
+    }
+    $w.bd itemconfigure br$i -state $brstate
+  }
+  $w.bd itemconfigure sq$i -fill $color -outline ""
+}
+
+################################################################################
+# ::board::midSquare
+#   Returns the canvas midpoint coordinates for a board square.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - sq: Square index (0..63).
+# Returns:
+#   - 2-item list `{x y}` in canvas coordinates.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::midSquare {w sq} {
+  set c [$w.bd coords sq$sq]
+  #Klimmek: calculation change, because some sizes are odd and then some squares are shifted by 1 pixel
+  # set x [expr {([lindex $c 0] + [lindex $c 2]) / 2} ]
+  # set y [expr {([lindex $c 1] + [lindex $c 3]) / 2} ]
+  set psize $::board::_size($w)
+  if { $psize % 2 } { set psize [expr {$psize - 1}] }
+  set x [expr {[lindex $c 0] + $psize/2} ]
+  set y [expr {[lindex $c 1] + $psize/2} ]
+  return [list $x $y]
+}
+
+
+################################################################################
+# ::board::setmarks
+#   Parses embedded mark commands and stores them for later drawing.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - cmds: Comment/command string containing embedded mark directives.
+# Returns:
+#   - None.
+# Side effects:
+#   - Replaces `::board::_mark($w)`.
+#   - Does not draw immediately; marks are rendered by `::board::update`.
+################################################################################
+proc ::board::setmarks {w cmds} {
+  set ::board::_mark($w) {}
+  if {$cmds eq ""} { return }
+
+  set ::board::_mark($w) [lmap elem [mark::getEmbeddedCmds $cmds] {
+    lassign $elem type arg1 arg2 color
+
+    # Normalize the mark type
+    switch -glob $type {
+        ""     {set type [expr {[string length $arg2] ? "arrow" : "circle"}]}
+        "mark" {set type "full"}
+        ?      {set arg2 $type ; set type "text" }
+    }
+
+    # Normalize square coordinates
+    set arg1 [::board::sq $arg1]
+    set sq2 [::board::sq $arg2]
+    if {$sq2 != -1} { set arg2 $sq2 }
+
+    # Map color codes to color names
+    switch -nocase $color {
+      "" -
+      "R" {set color "red"   }
+      "G" {set color "green" }
+      "Y" {set color "yellow"}
+      "B" {set color "blue"  }
+      "O" {set color "orange"}
+      "C" {set color "cyan"  }
+    }
+    list $type $arg1 $arg2 $color
+  }]
+}
+
+### Namespace ::board::mark
+
+namespace eval ::board::mark {
+  namespace import [namespace parent]::sq
+
+  # Regular expression constants for
+  # matching Scid's embedded commands in PGN files.
+
+  variable ScidKey  {mark|arrow}
+  variable Command  {draw}
+  variable Type     {full|square|arrow|circle|disk|tux}
+  variable Text     {[-+=?!A-Za-z0-9]}
+  variable Square   {[a-h][1-8]\M}
+  variable Color    {[\w#][^]]*\M}	;# FIXME: too lax for #nnnnnn!
+
+  variable regex
+
+  # Current (non-standard) version:
+  set regex(mark) \
+  "(?:($ScidKey)\\\ +)?  # (old) command name + space chars (may be omitted)
+  ($Square)              # mandatory square (e.g. 'a4')
+  (?:\\ +($Square))?     # optional: another (destination) square
+  (?:\\ *($Color))?      # optional: color name
+  "
+  set regex(arrow) $regex(mark)
+
+  # Proposed new version, according to the
+  # PGN Specification and Implementation Guide (Supplement):
+  set regex($Command) \
+  "(?:(${Type}|$Text),)? # keyword, e.g. 'arrow' (may be omitted)
+                         # or single char (indicating type 'text')
+  ($Square)              # mandatory square (e.g. 'a4')
+  (?:,($Square))?        # optional: (destination) square
+  (?:,($Color))?         # optional: color name
+  "
+
+  # ChessBase' syntax for markers and arrows
+  variable CBSquare    {csl}
+  variable CBarrow     {cal}
+  variable CBColor     {[BGRYOC]}
+  variable Square      {[a-h][1-8]\M}
+  variable sqintern    {[a-h][1-8]}
+
+  # A sequence of color and square separated by commas, allowing for optional whitespace at the beginning and end.
+  # e.g. "Rd4" " Rd4 , Gc3 "
+  set regex($CBSquare) "^(\\s*$CBColor$Square\\s*,?)+$"
+  set regex($CBarrow)  "^(\\s*$CBColor$sqintern$sqintern\\s*,?)+$"
+}
+
+################################################################################
+# ::board::mark::getEmbeddedCmds
+#   Extracts embedded board mark commands from a comment string.
+# Visibility:
+#   Public.
+# Inputs:
+#   - comment: Comment string potentially containing `[%draw ...]`, `[%mark ...]`,
+#     `[%arrow ...]`, `[%csl ...]`, and `[%cal ...]` directives.
+# Returns:
+#   - List of mark specifications: `{type arg1 arg2 color}`.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::mark::getEmbeddedCmds {comment} {
+  set result {}
+  # Extracts embedded commands with the [%command args] syntax.
+  # Without the weird {1,1}? the non-greedy (.*?) does not work (see re_syntax tcl documentation).
+  # TODO: there are other function that extract the embedded commands with a similar regex.
+  #       It would be better to receive the list {{cmd args} ... } instead of re-running the regex on the full comment.
+  foreach {fullcmd cmd args} [regexp -all -inline {\[%([A-Za-z]+){1,1}?\s+(.*?)\s*\]} $comment] {
+    set cmd [string tolower $cmd]
+    if {$cmd in {draw arrow mark}} {
+      if {[regexp -expanded $::board::mark::regex($cmd) $args -> type arg1 arg2 color]} {
+        lappend result [list $type $arg1 $arg2 $color]
+      }
+    } elseif {$cmd in [list $::board::mark::CBSquare $::board::mark::CBarrow]} {
+      if {[regexp $::board::mark::regex($cmd) $args]} {
+        # Convert the string to a list of embedded commands.
+        # e.g. Rd4,Gc3e4,Ya2 -> {"" d4 "" R} {"" c3 e4 G} {"" a2 "" Y}
+        foreach {mark} [split $args ","] {
+          set mark [string trim $mark]
+          set color [string index $mark 0]
+          set sq1 [string range $mark 1 2]
+          set sq2 [string range $mark 3 end]
+          lappend result [list "" $sq1 $sq2 $color]
+        }
+      }
+    }
+  }
+  return $result
+}
+
+################################################################################
+# ::board::mark::remove
+#   Removes marks for one square, or an arrow between two squares.
+# Visibility:
+#   Public.
+# Inputs:
+#   - win: Board frame path.
+#   - args: Either `{square}` or `{fromSquare toSquare}`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Delegates to `::board::mark::add` with sentinel values.
+################################################################################
+proc ::board::mark::remove {win args} {
+  if {[llength $args] == 2} {
+    add $win arrow {*}$args nocolor 1
+  } else {
+    add $win DEL [lindex $args 0] "" nocolor 1
+  }
+}
+
+################################################################################
+# ::board::mark::add
+#   Adds a mark (square/circle/text/arrow/etc.) to the board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - win: Board frame path.
+#   - args: Mark specification. The supported forms are backwards-compatible and
+#     include a short single-character form (text marks).
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates canvas items on `$win.bd` (and/or colours squares).
+#   - Updates `::board::_mark($win)` when `new` is true.
+################################################################################
+proc ::board::mark::add {win args} {
+  # Rearrange list if "type" is simple character:
+  if {[string length [lindex $args 0]] == 1} {
+    # ... e.g.,  {c e4 red} --> {text e4 c red}
+    set args [linsert $args 1 "text"]
+    set args [linsert [lrange $args 1 end] 2 [lindex $args 0]]
+  }
+  # Add default arguments:
+  if {[lindex $args end] ni [list "true" "false" "1" "0"]} {
+    lappend args "true"
+  }
+  if {[llength $args] == 4} { set args [linsert $args 2 ""]}
+
+  # Here we (should) have: args == <type> <square> ?<arg>? <color> <new>
+  foreach {type square dest color new} $args {break}	;# assign
+  if {[llength $args] != 5 } { return }
+
+  set board $win.bd
+  set type  [lindex $args 0]
+
+  # Remove existing marks:
+  if {$type == "arrow"} {
+    $board delete "mark${square}:${dest}" "mark${dest}:${square}"
+    if {[string equal $color "nocolor"]} { set type DEL }
+  } else {
+    $board delete "mark${square}"
+    #not needed anymore
+    #    ::board::colorSquare $win $square [::board::defaultColor $square]
+  }
+
+  switch -- $type {
+    full    { ::board::colorSquare $win $square $color }
+    DEL     { set new 1 }
+    default {
+      # Find a subroutine to draw the canvas object:
+      set drawingScript "Draw[string totitle $type]"
+      if {![llength [info procs $drawingScript]]} { return }
+
+      # ... and try it:
+      if {[catch {$drawingScript $board $square $dest $color}]} {
+        return
+      }
+    }
+  }
+  if {$new} { lappend ::board::_mark($win) [lrange $args 0 end-1] }
+}
+
+# ::board::mark::DrawXxxxx --
+#
+#	Draws specified canvas object,
+#	where "Xxxxx" is some required type, e.g. "Circle".
+#
+# Arguments:
+#	pathName	Name of the canvas widget.
+#	args		Type-specific arguments, e.g.
+#				<square> <color>,
+#				<square> <square> <color>,
+#				<square> <char> <color>.
+# Results:
+#	Constructs and evaluates the proper canvas command
+#	    "pathName create type coordinates options"
+#	for the specified object.
+#
+
+################################################################################
+# ::board::mark::DrawCircle
+#   Draws a hollow circle marker on a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board canvas widget path.
+#   - square: Square index (0..63).
+#   - color: Marker colour.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates canvas items tagged for later removal.
+################################################################################
+proc ::board::mark::DrawCircle {pathName square color} {
+  # Some "constants":
+  set size  0.94 ;# inner (enclosing) box size, 0.0 <  $size < 1.0
+  set width 0.06 ;# outline around circle, 0.0 < $width < 1.0
+
+  set box [GetBox $pathName $square $size]
+  set boxWidth [lindex $box 4]
+  set width [expr {int($width * $boxWidth / $size)}]
+  $pathName create oval [lrange $box 0 3] \
+      -fill "" -outline $color -width $width \
+      -tag [list mark circle mark$square p$square]
+}
+
+################################################################################
+# ::board::mark::DrawDisk
+#   Draws a filled disk marker on a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board canvas widget path.
+#   - square: Square index (0..63).
+#   - color: Marker colour.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates canvas items tagged for later removal.
+################################################################################
+proc ::board::mark::DrawDisk {pathName square color} {
+  # Size of the inner (enclosing) box within the square:
+  set size 0.6	;# 0.0 <  $size < 1.0 = size of rectangle
+
+  set box [GetBox $pathName $square $size]
+  $pathName create oval {*}[lrange $box 0 3] \
+      -fill $color \
+      -tag [list mark disk mark$square p$square]
+}
+
+################################################################################
+# ::board::mark::DrawText
+#   Draws a single-character text marker on a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board canvas widget path.
+#   - square: Square index (0..63).
+#   - char: Character to draw.
+#   - color: Foreground colour.
+#   - size: Optional font size.
+#   - shadowColor: Optional shadow colour for contrast.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates canvas text items (and may delete prior items for the square).
+################################################################################
+proc ::board::mark::DrawText {pathName square char color {size 0} {shadowColor ""}} {
+  set box [GetBox $pathName $square 0.8]
+  set len [expr {($size > 0) ? $size : int([lindex $box 4])}]
+  set x   [lindex $box 5]
+  set y   [lindex $box 6]
+  $pathName delete text$square mark$square
+  if {$shadowColor!=""} {
+    $pathName create text [expr {$x+1}] [expr {$y+1}] \
+        -fill $shadowColor \
+        -font [list helvetica $len bold] \
+        -text [string index $char 0] \
+        -anchor c \
+        -tag [list mark text text$square mark$square p$square]
+
+  }
+  $pathName create text $x $y \
+      -fill $color \
+      -font [list helvetica $len bold] \
+      -text [string index $char 0] \
+      -anchor c \
+      -tag [list mark text text$square mark$square p$square]
+}
+
+################################################################################
+# ::board::mark::DrawArrowEx
+#   Draws an arrow marker between two squares with custom styling.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+#   - from: From-square index (0..63).
+#   - to: To-square index (0..63).
+#   - color: Arrow colour.
+#   - thickness: Thickness in pixels (>=1) or as a fraction of square width (<1).
+#   - arrowshape: 3-item list scaled by thickness.
+#   - tag: Canvas tag for the arrow.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a canvas line on `$w.bd` tagged with `tag`.
+################################################################################
+proc ::board::mark::DrawArrowEx {w from to color thickness arrowshape tag} {
+  set pathName $w.bd
+  $pathName delete $tag
+
+  if {$from < 0  ||  $from > 63} { return }
+  if {$to   < 0  ||  $to   > 63} { return }
+
+  lassign [GetBox $pathName $from] left top right bottom length x0 y0
+  lassign [lrange [GetBox $pathName $to] 5 6] x1 y1
+
+  # Drawing from middle point to middle point is confusing when there are multiple arrows.
+  # Solve equation: "midpoint + (lambda * vector) = edge point":
+  set dX [expr {$x1 - $x0}]
+  set dY [expr {$y1 - $y0}]
+  if {abs($dX) > abs($dY)} {
+    set edge [expr {($dX > 0) ? $right : $left}]
+    set offX [expr {($edge - $x0) * 0.1}]
+    set offY [expr {$offX * $dY / $dX}]
+  } else {
+    set edge [expr {($dY > 0) ? $bottom : $top}]
+    set offY [expr {($edge - $y0) * 0.1}]
+    set offX [expr {$offY * $dX / $dY}]
+  }
+  set coord [list [expr {$x0 + $offX}] [expr {$y0 + $offY}] [expr {$x1 - $offX}] [expr {$y1 - $offY}]]
+
+  # If the squares are occupied, apply a bigger offset.
+  if {[string index $::board::_data($w) $from] ne "."} {
+    lset coord 0 [expr {$x0 + $offX * 5}]
+    lset coord 1 [expr {$y0 + $offY * 5}]
+  }
+  if {[string index $::board::_data($w) $to] ne "."} {
+    lset coord 2 [expr {$x1 - $offX * 5}]
+    lset coord 3 [expr {$y1 - $offY * 5}]
+  }
+
+  if {$thickness < 1} {
+    set thickness [expr {$length * $thickness}]
+  }
+  $pathName create line $coord -fill $color -arrow last -width $thickness \
+    -arrowshape [lmap elem $arrowshape { expr {$elem * $thickness} }] \
+    -tag [list mark arrows $tag]
+}
+
+################################################################################
+# ::board::mark::DrawArrow
+#   Draws a default-style arrow marker between two squares.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board canvas widget path.
+#   - from: From-square index (0..63).
+#   - to: To-square index (0..63).
+#   - color: Arrow colour.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a canvas arrow on the parent board.
+################################################################################
+proc ::board::mark::DrawArrow {pathName from to color} {
+  ::board::mark::DrawArrowEx [winfo parent $pathName] $from $to $color 0.1 {3.3 3.3 1.0} "mark${from}:${to}"
+}
+
+################################################################################
+# ::board::mark::DrawBestMove
+#   Draws a “best move” arrow, replacing any existing best-move arrow.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - moveUCI: UCI move string (e.g. `e2e4`). When empty, removes any existing
+#     best-move arrow.
+# Returns:
+#   - None.
+# Side effects:
+#   - Deletes and recreates the `bestmove` marker on `$w.bd`.
+################################################################################
+proc ::board::mark::DrawBestMove {w moveUCI} {
+  set from [ ::board::sq [ string range $moveUCI 0 1 ] ]
+  set to [ ::board::sq [ string range $moveUCI 2 3 ] ]
+  ::board::mark::DrawArrowEx $w $from $to "#FF5E0E" 0.066 {3.6 4.8 2.0} "bestmove"
+}
+
+################################################################################
+# ::board::mark::DrawRectangle
+#   Draws a rectangle marker around a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board canvas widget path.
+#   - square: Square index (0..63).
+#   - color: Outline colour.
+#   - pattern: Dash pattern.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a canvas rectangle tagged `highlightLastMove`.
+################################################################################
+proc ::board::mark::DrawRectangle { pathName square color pattern } {
+  if {$square < 0  ||  $square > 63} { return }
+  set box [::board::mark::GetBox $pathName $square]
+  $pathName create rectangle [lindex $box 0] [lindex $box 1] [lindex $box 2] [lindex $box 3] \
+      -outline $color -width $::highlightLastMoveWidth -dash $pattern -tag highlightLastMove
+}
+
+################################################################################
+# ::board::mark::DrawNag
+#   Draws a small NAG label in the corner of a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board frame path.
+#   - square: Square index (0..63).
+#   - nag: NAG text (e.g. `!`, `??`).
+#   - color: Background/outline colour.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates canvas items tagged `highlightLastMove`.
+################################################################################
+proc ::board::mark::DrawNag { pathName square nag color} {
+  if {$square < 0  ||  $square > 63} { return }
+  set box [::board::mark::GetBox $pathName.bd $square]
+  set bsize $::board::_size($pathName)
+  set size [expr {$bsize / 5}]
+  set boxX2 [lindex $box 2]
+  set boxY1 [lindex $box 1]
+  set p(0) [expr {$boxX2 - $size}]
+  set p(1) [expr {$boxY1 - $size}]
+  set p(2) [expr {$p(0) + 2 * $size}]
+  set p(3) [expr {$p(1) + 2 * $size}]
+  set offsetX 0
+  set offsetY 0
+  #check for outside board
+  if { $p(2) > [expr {8 * $bsize}] } {
+      set p(0) [expr {$p(0) - $size}]
+      set p(2) [expr {$p(2) - $size}]
+      set offsetX $size
+  }
+  if { $p(1) < 0 } {
+      set p(1) [expr {$p(1) + $size}]
+      set p(3) [expr {$p(3) + $size}]
+      set offsetY $size
+  }
+  $pathName.bd create oval $p(0) $p(1) $p(2) $p(3) -outline $color -fill $color -tag highlightLastMove
+  $pathName.bd create text [expr {$boxX2 - $offsetX}] [expr {$boxY1 + $offsetY}] -text $nag \
+      -tag highlightLastMove -fill white -font [list font_Bold $size bold]
+}
+
+# ::board::mark::DrawTux --
+#
+image create photo tux16x16 -data \
+    {R0lGODlhEAAQAPUyAAAAABQVFiIcBi0tLTc0Kj4+PkQ3CU9ADVVFD1hJFV1X
+      P2pXFWJUKHttLnttOERERVVWWWRjYWlqcYNsGJR5GrSUIK6fXsKdGMCdI8er
+      ItCuNtm2KuS6KebAKufBOvjJIfnNM/3TLP/aMP/lM+/We//lQ//jfoGAgJaU
+      jpiYmqKipczBmv/wk97e3v//3Ojo6f/96P7+/v///wAAAAAAAAAAAAAAAAAA
+      AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAEBADIALAAAAAAQABAAAAbm
+      QJlMJpMBAAAAQCaTyWQymUwmAwQAAQAAIJPJZDKZTCYDQCInCQAgk8lkMplM
+      JgMwOBoHACCTyYAymUwmkwEao5IFAADIZDKZTCaTAVQu2GsAAMhkMplMJgMU
+      YrFY7AQAAGQymUwmA6RisVjsFQAAATKZTCYDBF6xWCwWewAAAJlMJjMoYrFY
+      LBaDAAAAmUwW+oBWsVgsxlokFgCZTBYChS6oWCxmAn5CHYNMJhOJQiFS7JXS
+      iEQjCkAmw3BCow0hAMiMNggAQCYDAAyTAwAASEwEAABAJpPJAAAAAACUAQAA
+      gEwmCwIAOw==}
+set ::board::mark::tux16x16 tux16x16
+
+image create photo tux32x32 -data \
+    {R0lGODlhIAAgAPU0AAAAABANAxERESAaBiwkCDAnCSQkJEM2DEA3GVBBDllJ
+      EFNKLG5aFHBbFHpkFnZoMkBAQFBQUGBgYHBwcIBpF4xyGZ+DHZ+GKqmKHq+T
+      Lb+hNsynJNSuJtu0J9+6NeW8Kc+wQPnMLPTJMP7QLv/UO//aVf/dYv/ifIiI
+      hp+fn6+vr7+/v//lif/ol//rpM/Pz9/f3//22O/u6v/55f///////wAAAAAA
+      AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAEBADUALAAAAAAgACAAAAb+
+      wFqtVqvVarVarQYAAAAAAABQq9VqtVqtVqvVarVarVar1Wq1Wg0AAAAAAAAA
+      AKjVarVarVar1YC1Wq1Wq9VqtVqtBgAAAAAAAAAAAGq1Wq1Wq9VqtVqtVqvV
+      arVaDQAAAAAAAAAAAABqtVqtVqsBa7VarVar1Wq1Wq0GMMgighdtAgAAALVa
+      rVar1Wq1Wq1Wq9VqtVqtBphEUpCUQQUAAAC1Wq1WA9ZqtVqtVqvVarVarVYD
+      RBYejwahAgAAgFqtVqvVarVarVar1Wq1Wq1WAxRIIdFolAEAAABArQas1Wq1
+      Wq1Wq9VqtVqtVqvVGqPRaDTSAAAAAKBWq9VqtVr+rVar1Wq1Wq1Wq9UMp9Fo
+      xJIJAAAAAFir1Wq1Wq1Wq9VqtVqtVqvVABGaqzWj0SYAAAAAqNVqtVqtVqvV
+      arVarVarAQQyGo1Go9FgAAAQAAAAarVarVar1Wq1Wq1WqwEAExqNRqPRaDSD
+      AAAAAGq1Wq1Wq9VqtVqtVqsBAC8ajUaj0Wg0oAoAAAAAgFqtVqvVarVarVar
+      AQACGo1Go9FoNBpNAAAAAIBarVar1Wq1Wq1WqwEAKhqNRqPRaEAajYYCAAAA
+      AKBWq9VqtVqtVqvVAAIajUaj0Wg0Go22AgAAAACgVqvVarVarVarAQARGo1G
+      o9GANBqNRpMBAAAAAAD+qNVqtVqtVqvVAAAUjUaj0Wg0Go1GowkAAAAAAKjV
+      arVarVar1QgUFI1GowFpNBqNRqPRDAZDAAAA1Gq1Wq1Wq9VGo1HpRaPRaDQa
+      jUY7iQAAwUMBANRqtVqtVhuFRqPR6LIC0mg0Go1Go5lGiYBlVAEAarVarVar
+      jUaj0Wg0KqRoNBqNRqOZRqPRaPQBAGq1Wq1Wq41Go9FoBBxtADIajUaj0Uyj
+      0Wg0Gn0YgFqtVqvVRqPRaDQajVw0Go1Go6VGo9FoNBqNOABArVar1Uaj0Qg4
+      Go1GoxiNRntFBqPRaDQajT4KAKBWq9Vqo9FoNBqNRiOHASIAAAqj0Wg0CmGW
+      AAAAoFar1WoYDlAUGo1Go1FFAAAAAInRaDT6EAAAAABQq9VqNQAAAHB0QqNO
+      AQAAAACA0Gi0AQAAAECtVqvVajUgAAAAAAAAAAAAAAAAAAAAAAAAAIBarVar
+      1Wq1Wq1WqwEAAAAAAKjVarUaAAAAAAC1Wq1Wq9VqwFqtVqvVarVarVar1Wq1
+      Wq1Wq9VqtVqtVqvVarUgADs=
+    }
+set ::board::mark::tux32x32 tux32x32
+
+################################################################################
+# ::board::mark::DrawTux
+#   Draws a Tux icon marker on a square.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board canvas widget path.
+#   - square: Square index (0..63).
+#   - discard: Unused.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a canvas image item tagged for later removal.
+################################################################################
+proc ::board::mark::DrawTux {pathName square discard} {
+  variable tux16x16
+  variable tux32x32
+  set box [::board::mark::GetBox $pathName $square]
+  for {set len [expr {int([lindex $box 4])}]} {$len > 0} {incr len -1} {
+    if {[info exists tux${len}x${len}]} break
+  }
+  if {!$len} return
+  $pathName create image [lrange $box 5 6] \
+      -image tux${len}x${len} \
+      -tag [list mark "mark$square" tux]
+}
+
+################################################################################
+# ::board::mark::GetBox
+#   Computes the bounding box (and midpoint) for a square on a board canvas.
+# Visibility:
+#   Private.
+# Inputs:
+#   - pathName: Board canvas widget path.
+#   - square: Square index (0..63).
+#   - portion: Optional fraction (0..1) of the square size.
+# Returns:
+#   - List `{x1 y1 x2 y2 len midX midY}`.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::mark::GetBox {pathName square {portion 1.0}} {
+  set coord [$pathName coords sq$square]
+  set len [expr {[lindex $coord 2] - [lindex $coord 0]}]
+  if {$portion < 1.0} {
+    set dif [expr {$len * (1.0 -$portion) * 0.5}]
+    foreach i {0 1} { lappend box [expr {[lindex $coord $i] + $dif}] }
+    foreach i {2 3} { lappend box [expr {[lindex $coord $i] - $dif}] }
+  } else {
+    set box $coord
+  }
+  lappend box [expr { [lindex $box 2] - [lindex $box 0]     }]
+  lappend box [expr {([lindex $box 0] + [lindex $box 2]) / 2}]
+  lappend box [expr {([lindex $box 1] + [lindex $box 3]) / 2}]
+  return $box
+}
+
+### End of namespace ::board::mark
+
+################################################################################
+# ::board::piece
+#   Returns the normalised piece identifier for a square.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - sq: Square index (0..63).
+# Returns:
+#   - Piece identifier (e.g. `wp`, `bk`, or `e` for empty).
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::piece {w sq} {
+  set p [string index $::board::_data($w) $sq]
+  return $::board::letterToPiece($p)
+}
+
+################################################################################
+# ::board::setDragSquare
+#   Sets the square whose piece is being dragged.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - sq: Square index (0..63), or `-1` to disable dragging.
+# Returns:
+#   - Previous drag square index.
+# Side effects:
+#   - May redraw the previously-dragged piece back onto its square.
+################################################################################
+proc ::board::setDragSquare {w sq} {
+  set oldSq $::board::_drag($w)
+  if {$oldSq >= 0  &&  $oldSq <= 63} {
+    ::board::drawPiece $w $oldSq [string index $::board::_data($w) $oldSq]
+    $w.bd raise arrows
+  }
+  set ::board::_drag($w) $sq
+  return $oldSq
+}
+
+################################################################################
+# ::board::getDragSquare
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - Current drag square index (or `-1`).
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::getDragSquare {w} {
+  return $::board::_drag($w)
+}
+
+
+################################################################################
+# ::board::dragPiece
+#   Moves the currently-dragged piece image to the given screen coordinates.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - x: Screen X coordinate.
+#   - y: Screen Y coordinate.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates the canvas coordinates for the dragged piece image on `$w.bd`.
+################################################################################
+proc ::board::dragPiece {w x y} {
+  set sq $::board::_drag($w)
+  if {$sq < 0} { return }
+  set x [expr {$x - [winfo rootx $w.bd]} ]
+  set y [expr {$y - [winfo rooty $w.bd]} ]
+  $w.bd coords p$sq $x $y
+  $w.bd raise p$sq
+}
+
+################################################################################
+# ::board::bind
+#   Binds an event on a piece image (or all piece images) to an action.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - sq: Square index (0..63) or `all`.
+#   - event: Tk event sequence.
+#   - cmdPrefix: Callback script.
+# Returns:
+#   - None.
+# Side effects:
+#   - Installs bindings on `$w.bd` items.
+################################################################################
+proc ::board::bind {w sq event cmdPrefix} {
+  if {$sq == "all"} {
+    for {set i 0} {$i < 64} {incr i} {
+      $w.bd bind p$i $event $cmdPrefix
+    }
+  } else {
+    $w.bd bind p$sq $event $cmdPrefix
+  }
+}
+
+################################################################################
+# ::board::drawPiece
+#   Draws a piece image on a square.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - sq: Square index (0..63).
+#   - piece: Piece character from the board string (e.g. `P`, `k`, `.`).
+#   - tag_name: Optional canvas tag name; defaults to `p$sq`.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates/deletes canvas items on `$w.bd`.
+################################################################################
+proc ::board::drawPiece {w sq piece {tag_name ""}} {
+  if {$tag_name eq ""} {
+    set tag_name p$sq
+  }
+  $w.bd delete $tag_name
+  lassign [::board::midSquare $w $sq] xc yc
+  $w.bd create image $xc $yc -tag $tag_name \
+    -image $::board::letterToPiece($piece)$::board::_size($w)
+}
+
+################################################################################
+# ::board::clearText
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Removes all text annotations from `$w.bd`.
+################################################################################
+proc ::board::clearText {w} {
+  $w.bd delete texts
+}
+
+################################################################################
+# ::board::drawText
+#   Draws a single-character text marker on a square.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - sq: Square index (0..63).
+#   - text: Text/character to draw.
+#   - color: Foreground colour.
+#   - args: Unused.
+#   - shadow: Optional shadow colour.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates text marker canvas items on `$w.bd`.
+################################################################################
+proc ::board::drawText {w sq text color args {shadow ""} } {
+  mark::DrawText ${w}.bd $sq $text $color \
+      [expr {[catch {font actual font_Bold -size} size] ? 11 : $size}] \
+      $shadow
+  #if {[llength $args] > 0} {
+  #  catch {eval $w.bd itemconfigure text$sq $args}
+  #}
+}
+
+################################################################################
+# ::board::lastMoveHighlight
+#   Highlights the last move by drawing rectangles and/or an arrow.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - moveuci: UCI move string (e.g. `e2e4`).
+#   - nag: Optional NAG string; used when `::highlightLastMoveNag` is enabled.
+# Returns:
+#   - None.
+# Side effects:
+#   - Deletes and recreates `highlightLastMove` canvas items on `$w.bd`.
+################################################################################
+proc  ::board::lastMoveHighlight {w moveuci {nag ""}} {
+  $w.bd delete highlightLastMove
+  if {[string length $moveuci] >= 4} {
+    set moveuci [ string range $moveuci 0 3 ]
+    set square1 [ ::board::sq [string range $moveuci 0 1 ] ]
+    set square2 [ ::board::sq [string range $moveuci 2 3 ] ]
+    if { $::highlightLastMove } {
+        ::board::mark::DrawRectangle $w.bd $square1 $::highlightLastMoveColor $::highlightLastMovePattern
+        ::board::mark::DrawRectangle $w.bd $square2 $::highlightLastMoveColor $::highlightLastMovePattern
+    }
+    if { $::arrowLastMove } {
+        ::board::mark::DrawArrow $w.bd $square1 $square2 $::highlightLastMoveColor
+    }
+    if { $::highlightLastMoveNag && [regexp {[!?]+} $nag nag] } {
+        # green background for ! !! !?  red background for ? ?? ?!
+        set color [expr {[string index $nag 0] eq "!" ? "#30c030" : "#ff3030"}]
+        ::board::mark::DrawNag $w $square2 $nag $color
+    }
+  }
+}
+
+################################################################################
+# ::board::update
+#   Redraws the board to match the provided board string.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - board: Optional 64-character board string (as returned by `sc_pos board`).
+#     When empty, uses the current cached value.
+#   - animate: Optional boolean to animate simple move transitions.
+# Returns:
+#   - None.
+# Side effects:
+#   - Updates `::board::_data($w)` when `board` is provided.
+#   - Redraws pieces, square textures, marks, highlights, and (optionally)
+#     triggers animation.
+################################################################################
+proc ::board::update {w {board ""} {animate 0}} {
+  set oldboard $::board::_data($w)
+  if {$board == ""} {
+    set board $::board::_data($w)
+  } else {
+    set ::board::_data($w) $board
+  }
+  set psize $::board::_size($w)
+
+  # Cancel any current animation:
+  after cancel "::board::_animate $w"
+
+  # Remove all marks (incl. arrows) from the board:
+  $w.bd delete mark
+
+  $w.bd delete tmp_animate
+
+  # Draw each square:
+  for {set sq 0} { $sq < 64 } { incr sq } {
+    set piece [string index $board $sq]
+    # Compute the XY coordinates for the centre of the square:
+    set midpoint [::board::midSquare $w $sq]
+    set xc [lindex $midpoint 0]
+    set yc [lindex $midpoint 1]
+    #update every square with color and texture
+    set color [::board::defaultColor $sq]
+    $w.bd itemconfigure sq$sq -fill $color -outline "" ; #-outline $color
+
+    set boc bgd$psize
+    if { ($sq + ($sq / 8)) % 2 } { set boc bgl$psize }
+    $w.bd delete br$sq
+    $w.bd create image $xc $yc -image $boc -tag br$sq
+
+    # Delete any old image for this square, and add the new one:
+    $w.bd delete p$sq
+    $w.bd create image $xc $yc -image $::board::letterToPiece($piece)$psize -tag p$sq
+  }
+  if {$::board::_coords($w) >= 3 } {
+      $w.bd raise innercoords
+  }
+
+  # Update side-to-move icon:
+  ::board::sideToMove_ $w [string index $::board::_data($w) 65]
+
+  # Gloss Of Danger:
+  if { $::glossOfDanger } {
+    foreach {sq col} [sc_pos attacks] {
+      ::board::colorSquare $w $sq $col
+    }
+  }
+
+  # Redraw marks and arrows if required:
+  if {$::board::_showMarks($w)} {
+    foreach mark $::board::_mark($w) {
+      set type  [lindex $mark 0]
+      if {$type == "full"}    {
+        ::board::colorSquare $w [lindex $mark 1] [lindex $mark 3]
+      } else {
+        # Find a subroutine to draw the canvas object:
+        set drawingScript "mark::Draw[string totitle $type]"
+        if {[llength [info procs $drawingScript]]} {
+          catch {$drawingScript $w.bd {*}[lrange $mark 1 3]}
+        }
+      }
+    }
+  }
+
+  # Redraw last move highlight if mainboard
+  if { $w == ".main.board"} {
+    ::board::lastMoveHighlight $w [sc_game info previousMoveUCI] [sc_pos getNags]
+  }
+
+  # Redraw material values
+  if {$::board::_showmat($w)} {
+      ::board::material $w
+  }
+
+  # Animate board changes if requested:
+  if {$animate  &&  $board != $oldboard} {
+    ::board::animate $w $oldboard $board
+  }
+}
+
+################################################################################
+# ::board::isFlipped
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - Boolean (0/1) indicating whether the board is currently flipped.
+# Side effects:
+#   - None.
+################################################################################
+proc ::board::isFlipped {w} {
+  return $::board::_flip($w)
+}
+
+################################################################################
+# ::board::flipAuto
+#   Applies an automatic board flip while preserving the user’s preferred state.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - newstate: 0 => White at the bottom; 1 => Black at the bottom; -1 =>
+#     restore the previous user-selected state.
+# Returns:
+#   - None.
+# Side effects:
+#   - Calls `::board::flip`.
+#   - Updates `::board::flipAuto_($w)`.
+################################################################################
+proc ::board::flipAuto {w {newstate -1}} {
+  if {$newstate == -1} {
+    if {[info exists ::board::flipAuto_($w)]} {::board::flip $w $::board::flipAuto_($w)}
+    return
+  }
+  set tmp $::board::_flip($w)
+  if {[info exists ::board::flipAuto_($w)]} { set tmp $::board::flipAuto_($w) }
+  ::board::flip $w $newstate
+  set ::board::flipAuto_($w) $tmp
+}
+
+################################################################################
+# ::board::flip
+#   Rotates the board 180 degrees.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - newstate: Optional explicit flip state; defaults to toggling.
+# Returns:
+#   - The board widget path `w` when a flip is performed; otherwise an empty
+#     string when no change occurs.
+# Side effects:
+#   - Updates `::board::_flip($w)` and clears `::board::flipAuto_($w)`.
+#   - Swaps square coordinates and updates coordinate labels.
+#   - Redraws board contents and eval bar.
+################################################################################
+proc ::board::flip {w {newstate -1}} {
+  if {! [info exists ::board::_flip($w)]} { return }
+  catch {unset ::board::flipAuto_($w)}
+  if {$newstate == $::board::_flip($w)} { return }
+  set flip [expr {1 - $::board::_flip($w)} ]
+  set ::board::_flip($w) $flip
+
+  # Swap squares:
+  for {set i 0} {$i < 32} {incr i} {
+    set swap [expr {63 - $i}]
+    set coords(South) [$w.bd coords sq$i]
+    set coords(North) [$w.bd coords sq$swap]
+    $w.bd coords sq$i    $coords(North)
+    $w.bd coords sq$swap $coords(South)
+  }
+
+  # Change coordinate labels:
+  for {set i 1} {$i <= 8} {incr i} {
+    set value [expr {9 - [$w.lrank$i cget -text]} ]
+    $w.lrank$i configure -text $value
+    $w.rrank$i configure -text $value
+  }
+  if {$flip} {
+    foreach file {a b c d e f g h} newvalue {h g f e d c b a} {
+      $w.tfile$file configure -text $newvalue
+      $w.bfile$file configure -text $newvalue
+    }
+  } else {
+    foreach file {a b c d e f g h} {
+      $w.tfile$file configure -text $file
+      $w.bfile$file configure -text $file
+    }
+  }
+  ::board::flipNames_ $w $flip
+  ::board::coords $w $::board::_coords($w)
+  ::board::update $w
+  ::board::drawEvalBar_ $w
+  return $w
+}
+################################################################################
+# ::board::material
+#   Renders the material balance panel for a board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Clears and redraws `$w.mat`.
+################################################################################
+proc ::board::material {w} {
+  set f $w.mat
+
+  $f delete material
+
+  set board [string range $::board::_data($w) 0 63]
+  set p 0
+  set n 0
+  set b 0
+  set r 0
+  set q 0
+  for {set i 0} {$i < [string length $board]} {incr i} {
+    set ch [string index $board $i]
+    switch -- $ch {
+      p {incr p -1}
+      P {incr p}
+      n {incr n -1}
+      N {incr n}
+      b {incr b -1}
+      B {incr b}
+      r {incr r -1}
+      R {incr r}
+      q {incr q -1}
+      Q {incr q}
+    }
+  }
+  set sum [expr {abs($p) + abs($n) +abs($b) +abs($r) +abs($q) }]
+  set rank 0
+
+  foreach pType {q r b n p} {
+    set count [expr {"\$$pType"}]
+    if {$count < 0} {
+      addMaterial $count $pType $f $rank $sum
+      incr rank [expr {abs($count) }]
+    }
+  }
+  foreach pType {q r b n p} {
+    set count [expr {"\$$pType"}]
+    if {$count > 0} {
+      addMaterial $count $pType $f $rank $sum
+      incr rank [expr {abs($count) }]
+    }
+  }
+}
+################################################################################
+# ::board::addMaterial
+#   Helper for `::board::material` to render a run of identical pieces.
+# Visibility:
+#   Private.
+# Inputs:
+#   - count: Signed count; sign indicates side.
+#   - piece: One of `q`, `r`, `b`, `n`, `p`.
+#   - parent: Material canvas widget path.
+#   - rank: Vertical rank offset.
+#   - sum: Total piece count used for centring.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates image items on the material canvas.
+################################################################################
+proc ::board::addMaterial {count piece parent rank sum} {
+  if {$count == 0} {return}
+  if {$count <0} {
+    set col "b"
+    set count [expr {0 - $count }]
+  } else  {
+    set col "w"
+  }
+  set w [$parent cget -width]
+  set h [$parent cget -height]
+  set offset [expr {($h - ($sum * 20)) / 2}]
+  if {$offset <0} { set offset 0 }
+  set x [expr {$w / 2}]
+  for {set i 0} {$i<$count} {incr i} {
+    set y [expr {$rank * 20 +10 + $offset + $i * 20}]
+    $parent create image $x $y -image $col${piece}20 -tag material
+  }
+}
+################################################################################
+# ::board::toggleMaterial
+#   Toggles visibility of the material panel for a board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - Boolean (0/1) indicating whether the material panel is now shown.
+# Side effects:
+#   - Grids or removes `$w.mat`.
+#   - Calls `::board::update`.
+################################################################################
+proc ::board::toggleMaterial {w} {
+  set ::board::_showmat($w) [expr {1 - $::board::_showmat($w)}]
+  if {$::board::_showmat($w)} {
+    grid $w.mat
+  } else {
+    grid remove $w.mat
+  }
+  ::board::update $w
+  return $::board::_showmat($w)
+}
+
+################################################################################
+# ::board::drawInnerCoords
+#   Draws one coordinate glyph onto the board canvas.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+#   - sq: Square index (0..63).
+#   - c: Coordinate character (file/rank).
+#   - pos: Placement selector (0 => bottom/left; 1 => top/right).
+#   - fontsize: Font size.
+#   - color: Text colour.
+# Returns:
+#   - None.
+# Side effects:
+#   - Creates a canvas text item tagged `innercoords`.
+################################################################################
+proc ::board::drawInnerCoords { w sq c pos fontsize color} {
+    set box [::board::mark::GetBox $w.bd $sq 1.0]
+    set boxLen [lindex $box 4]
+    set len [expr {int($boxLen)}]
+    set box0 [lindex $box 0]
+    set box1 [lindex $box 1]
+    set box3 [lindex $box 3]
+    if { [string is digit $c] } {
+        set x [expr {$box0 + $pos * ($len - $fontsize)}]
+        set y [expr {$box1 + $fontsize}]
+    } else {
+        set x $box0
+        set y [expr {$box3 - $fontsize - $pos * ($len - 2 * $fontsize)}]
+        # avoid collision a1 and h8 in the upper right square
+        if { $pos && (($::board::_flip($w) && $c eq "h") || (!$::board::_flip($w) && $c eq "a")) } {
+            set x [expr {$x + $fontsize}]
+        }
+    }
+    $w.bd create text $x $y -fill $color \
+        -font [list font_Regular $fontsize ] \
+        -text $c \
+        -anchor w \
+        -tag innercoords
+}
+
+################################################################################
+# ::board::innercoords
+#   Updates coordinate labels rendered on top of the board squares.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Deletes and recreates `innercoords` items on `$w.bd`.
+################################################################################
+proc ::board::innercoords {w} {
+    $w.bd delete innercoords
+    if {$::board::_coords($w) < 3 } {
+        return
+    }
+    # Use 20% of square for fontsize, but not larger than font_small
+    set fontSize [expr {int($::board::_size($w) / 5) }]
+    set size [font configure font_Small -size]
+    if { $fontSize > $size } { set fontSize $size }
+    if { ! $::board::_flip($w) } {
+        set ch_l [list a c e g 1 3 5 7]
+        set ch_d [list b d f h 2 4 6 8]
+        set sq_bl_l [list 0 2 4 6 0 16 32 48]
+        set sq_tr_d [list 56 58 60 62 7 23 39 55]
+        set sq_bl_d [list 1 3 5 7 8 24 40 56]
+        set sq_tr_l [list 57 59 61 63 15 31 47 63]
+    } else {
+        set ch_d [list 1 3 5 7 a c e g]
+        set ch_l [list h f d b 8 6 4 2]
+        set sq_bl_d [list 7 23 39 55 56 58 60 62]
+        set sq_tr_l [list 0 16 32 48 0 2 4 6]
+        set sq_bl_l [list 63 61 59 57 63 47 31 15]
+        set sq_tr_d [list 7 5 3 1 56 40 24 8]
+    }
+    if {$::board::_coords($w) >= 3 } {
+        foreach sq $sq_bl_l ch $ch_l {
+            drawInnerCoords $w $sq $ch 0 $fontSize $::squareColor_lite
+        }
+        foreach sq $sq_bl_d ch  $ch_d {
+            drawInnerCoords $w $sq $ch 0 $fontSize $::squareColor_dark
+        }
+    }
+    if {$::board::_coords($w) == 4 } {
+        foreach sq $sq_tr_l ch $ch_d {
+            drawInnerCoords $w $sq $ch 1 $fontSize $::squareColor_lite
+        }
+        foreach sq $sq_tr_d ch  $ch_l {
+            drawInnerCoords $w $sq $ch 1 $fontSize $::squareColor_dark
+        }
+    }
+}
+
+################################################################################
+# ::board::coords
+#   Configures which coordinate labels are shown around/on the board.
+# Visibility:
+#   Public.
+# Inputs:
+#   - w: Board frame path.
+#   - coordstype: Optional explicit mode (0..4). When empty, toggles to the next
+#     mode.
+# Returns:
+#   - The resulting coordstype value (0..4).
+# Side effects:
+#   - Updates `::board::_coords($w)`.
+#   - Grids/removes the outer coordinate labels.
+#   - Calls `::board::innercoords`.
+################################################################################
+proc ::board::coords {w {coordstype ""}} {
+  # if coordstype is set then use it, else toggle between options
+  if { $coordstype eq "" } {
+    set coordstype [expr {1 + $::board::_coords($w)} ]
+    if { $coordstype > 4 } { set coordstype 0 }
+  }
+  if { $coordstype >= 0 && $coordstype <= 4 } {
+    set ::board::_coords($w) $coordstype
+  }
+
+  if {$coordstype == 1 } {
+    for {set i 1} {$i <= 8} {incr i} {
+      grid configure $w.lrank$i
+      grid remove $w.rrank$i
+    }
+    foreach i {a b c d e f g h} {
+      grid remove $w.tfile$i
+      grid configure $w.bfile$i
+    }
+  } elseif {$coordstype == 2 } {
+    for {set i 1} {$i <= 8} {incr i} {
+      grid configure $w.lrank$i
+      grid configure $w.rrank$i
+    }
+    foreach i {a b c d e f g h} {
+      grid configure $w.tfile$i
+      grid configure $w.bfile$i
+    }
+  } else {
+    for {set i 1} {$i <= 8} {incr i} {
+        grid remove $w.lrank$i
+        grid remove $w.rrank$i
+    }
+    foreach i {a b c d e f g h} {
+        grid remove $w.tfile$i
+        grid remove $w.bfile$i
+    }
+  }
+  ::board::innercoords $w
+
+  return $coordstype
+}
+
+################################################################################
+# ::board::animate
+#   Attempts to detect a single move between two board states and animate it.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+#   - oldboard: Previous board string.
+#   - newboard: New board string.
+# Returns:
+#   - None.
+# Side effects:
+#   - Initialises `::board::_animate($w)` and schedules animation steps.
+################################################################################
+proc ::board::animate {w oldboard newboard} {
+  global animateDelay
+  if {$animateDelay <= 0} { return }
+
+  # Find which squares differ between the old and new boards:
+  set diffcount 0
+  set difflist [list]
+  for {set i 0} {$i < 64} {incr i} {
+    if {[string index $oldboard $i] != [string index $newboard $i]} {
+      incr diffcount
+      lappend difflist $i
+    }
+  }
+
+  # Check the number of differences could mean a valid move:
+  if {$diffcount < 2  ||  $diffcount > 4} { return }
+
+  for {set i 0} {$i < $diffcount} {incr i} {
+    set sq($i) [lindex $difflist $i]
+    set old($i) [string index $oldboard $sq($i)]
+    set new($i) [string index $newboard $sq($i)]
+  }
+
+  set from -1
+  set to -1
+  set from2 -1
+  set to2 -1
+  set captured -1
+  set capturedPiece "."
+
+  if {$diffcount == 4} {
+    # Check for making/unmaking a castling move:
+    set castlingList [list 4 6 7 5 60 62 63 61 4 2 0 3 60 58 56 59]
+
+    foreach {kfrom kto rfrom rto} $castlingList {
+      if {[lsort $difflist] == [lsort [list $kfrom $kto $rfrom $rto]]} {
+        if {[string tolower [string index $oldboard $kfrom]] == "k"  &&
+          [string tolower [string index $oldboard $rfrom]] == "r"  &&
+          [string tolower [string index $newboard $kto]] == "k"  &&
+          [string tolower [string index $newboard $rto]] == "r"} {
+          # A castling move animation.
+          # Move the rook back to initial square until animation is complete:
+          $w.bd coords p$rto {*}[::board::midSquare $w $rfrom]
+          set from $kfrom
+          set to $kto
+          set from2 $rfrom
+          set to2 $rto
+        } elseif {[string tolower [string index $newboard $kfrom]] == "k"  &&
+          [string tolower [string index $newboard $rfrom]] == "r"  &&
+          [string tolower [string index $oldboard $kto]] == "k"  &&
+          [string tolower [string index $oldboard $rto]] == "r"} {
+          $w.bd coords p$rfrom {*}[::board::midSquare $w $rto]
+          set from $kto
+          set to $kfrom
+          set from2 $rto
+          set to2 $rfrom
+        }
+      }
+    }
+  }
+
+  if {$diffcount == 3} {
+    # Three squares are different, so check for an En Passant capture:
+    foreach i {0 1 2} {
+      foreach j {0 1 2} {
+        foreach k {0 1 2} {
+          if {$i == $j  ||  $i == $k  ||  $j == $k} { continue }
+          # Check for an en passant capture from i to j with the enemy
+          # pawn on k:
+          if {$old($i) == $new($j) && $old($j) == "." && $new($k) == "."  &&
+            (($old($i) == "p" && $old($k) == "P") ||
+            ($old($i) == "P" && $old($k) == "p"))} {
+            set from $sq($i)
+            set to $sq($j)
+          }
+          # Check for undoing an en-passant capture from j to i with
+          # the enemy pawn on k:
+          if {$old($i) == $new($j) && $old($k) == "." && $new($i) == "."  &&
+            (($old($i) == "p" && $new($k) == "P") ||
+            ($old($i) == "P" && $new($k) == "p"))} {
+            set from $sq($i)
+            set to $sq($j)
+            set captured $sq($k)
+            set capturedPiece $new($k)
+          }
+        }
+      }
+    }
+  }
+
+  if {$diffcount == 2} {
+    # Check for a regular move or capture: one old square should have the
+    # same (non-empty) piece as the other new square, and at least one
+    # of the old or new squares should be empty.
+
+    if {$old(0) != "." && $old(1) != "." && $new(0) != "." && $new(1) != "."} {
+      return
+    }
+
+    foreach i {0 1} {
+      foreach j {0 1} {
+        if {$i == $j} { continue }
+        if {$old($i) == $new($j)  &&  $old($i) != "."} {
+          set from $sq($i)
+          set to $sq($j)
+          set captured $sq($j)
+          set capturedPiece $old($j)
+        }
+
+        # Check for a (white or black) pawn promotion from i to j:
+        if {($old($i) == "P"  &&  [string is upper $new($j)]  &&
+          $sq($j) >= [sq a8]  &&  $sq($j) <= [sq h8])  ||
+          ($old($i) == "p"  &&  [string is lower $new($j)]  &&
+          $sq($j) >= [sq a1]  &&  $sq($j) <= [sq h1])} {
+          set from $sq($i)
+          set to $sq($j)
+        }
+
+        # Check for undoing a pawn promotion from j to i:
+        if {($new($j) == "P"  &&  [string is upper $old($i)]  &&
+          $sq($i) >= [sq a8]  &&  $sq($i) <= [sq h8])  ||
+          ($new($j) == "p"  &&  [string is lower $old($i)]  &&
+          $sq($i) >= [sq a1]  &&  $sq($i) <= [sq h1])} {
+          set from $sq($i)
+          set to $sq($j)
+          set captured $sq($j)
+          set capturedPiece $old($j)
+        }
+      }
+    }
+  }
+
+  # Check that we found a valid-looking move to animate:
+  if {$from < 0  ||  $to < 0} { return }
+
+  # Redraw the captured piece during the animation if necessary:
+  if {$capturedPiece != "."  &&  $captured >= 0} {
+    ::board::drawPiece $w $captured $capturedPiece tmp_animate
+  }
+
+  # Move the animated piece back to its starting point:
+  $w.bd coords p$to {*}[::board::midSquare $w $from]
+  $w.bd raise p$to
+
+  # Start the animation:
+  set start [clock clicks -milli]
+  set ::board::_animate($w) [list $start [expr {$start + $::animateDelay}] $from $to $from2 $to2]
+  ::board::_animate $w
+}
+
+################################################################################
+# ::board::_animate
+#   Advances an in-progress board animation.
+# Visibility:
+#   Private.
+# Inputs:
+#   - w: Board frame path.
+# Returns:
+#   - None.
+# Side effects:
+#   - Moves animated piece images on `$w.bd` and schedules further steps.
+################################################################################
+proc ::board::_animate {w} {
+  if {! [winfo exists $w]} { return }
+
+  lassign $::board::_animate($w) start end from to from2 to2
+  set now [clock clicks -milli]
+
+  # Compute where the moving piece should be displayed and move it:
+  set ratio [expr { min(1, double($now - $start) / double($end - $start)) } ]
+  set fromMid [::board::midSquare $w $from]
+  set toMid [::board::midSquare $w $to]
+  set fromX [lindex $fromMid 0]
+  set fromY [lindex $fromMid 1]
+  set toX [lindex $toMid 0]
+  set toY [lindex $toMid 1]
+  set x [expr {$fromX + round(($toX - $fromX) * $ratio)} ]
+  set y [expr {$fromY + round(($toY - $fromY) * $ratio)} ]
+  $w.bd coords p$to $x $y
+  $w.bd raise p$to
+  if {$from2 >= 0} {
+      # move second piece
+      set fromMid [::board::midSquare $w $from2]
+      set toMid [::board::midSquare $w $to2]
+      set fromX [lindex $fromMid 0]
+      set fromY [lindex $fromMid 1]
+      set toX [lindex $toMid 0]
+      set toY [lindex $toMid 1]
+      set x [expr {$fromX + round(($toX - $fromX) * $ratio)} ]
+      set y [expr {$fromY + round(($toY - $fromY) * $ratio)} ]
+      $w.bd coords p$to2 $x $y
+      $w.bd raise p$to2
+  }
+
+  # Schedule another animation update in a few milliseconds:
+  if {$now < $end} {
+    after 5 [list ::board::_animate $w]
+  } else {
+    $w.bd delete tmp_animate
+  }
+}
+
+################################################################################
+# InitBoard
+#   Initialises piece and texture assets for the current board style.
+# Visibility:
+#   Private.
+# Inputs:
+#   - None.
+# Returns:
+#   - None.
+# Side effects:
+#   - Validates/normalises `::boardStyle` against `::boardStyles`.
+#   - Calls `setPieceFont`, which initialises `::boardSizes` and board textures.
+################################################################################
+proc InitBoard {} {
+  # Ensure that the current board style is valid:
+  if {[lsearch -exact "$::boardStyles" "$::boardStyle"] == -1} {
+    set ::boardStyle [lindex $::boardStyles 0]
+  }
+
+  setPieceFont "$::boardStyle"
+}
+InitBoard
+
+
+###
+### End of file: board.tcl
+###
