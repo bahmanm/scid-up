@@ -177,3 +177,11 @@ cmake --preset dev
 cmake --build --preset dev
 ctest --preset dev --output-on-failure
 ```
+
+---
+
+# License
+
+ScidUp is distributed under the GNU GPL v2 (see `COPYING`). 
+Unless stated otherwise, modifications and additions in this fork are © their respective 
+contributors (see Git history) and licensed under the same terms.
