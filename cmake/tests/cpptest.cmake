@@ -38,13 +38,13 @@ add_library(
 file(
     GLOB SCIDUP_TESTS_BINS_CPPTEST_SOURCES
     CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/gtest/*.cpp" )
+    "${CMAKE_SOURCE_DIR}/tests/cxx/*.cpp" )
 add_executable(
     scidup_tests_bins_cpptest
     ${SCIDUP_TESTS_BINS_CPPTEST_SOURCES} )
 target_compile_definitions(
     scidup_tests_bins_cpptest
-    PRIVATE SCIDUP_TEST_RESOURCES_DIR=\"${CMAKE_SOURCE_DIR}/gtest/\" )
+    PRIVATE SCIDUP_TEST_RESOURCES_DIR=\"${CMAKE_SOURCE_DIR}/tests/cxx/\" )
 target_link_libraries(
     scidup_tests_bins_cpptest
     PRIVATE ScidUp::Tests::Libs::CppBase gtest_main )
