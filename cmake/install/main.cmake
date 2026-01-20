@@ -13,7 +13,7 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/bitmaps2"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/books"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/books"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/html"
