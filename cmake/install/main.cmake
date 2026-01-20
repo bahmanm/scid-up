@@ -37,7 +37,7 @@ install(
 file(
     GLOB ECO_FILES
     CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/*.eco" )
+    "${CMAKE_SOURCE_DIR}/resources/eco/*.eco" )
 install(
     FILES ${ECO_FILES}
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
