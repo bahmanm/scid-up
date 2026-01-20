@@ -25,7 +25,7 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/img"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/scripts"
+    DIRECTORY "${CMAKE_SOURCE_DIR}/resources/scripts"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/resources/sounds"
