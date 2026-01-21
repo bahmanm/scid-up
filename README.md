@@ -1,4 +1,5 @@
-[![Multi-platform CI](https://github.com/bahmanm/scid-up/actions/workflows/ci.yml/badge.svg)](https://github.com/bahmanm/scid-up/actions/workflows/ci.yml)
+[![Build, Lint and Test](https://github.com/bahmanm/scid-up/actions/workflows/ci.yml/badge.svg)](https://github.com/bahmanm/scid-up/actions/workflows/ci.yml) ![Static Badge](https://img.shields.io/badge/license-gplv2-blue?style=flat&label=license) [![FOSSA Status](https://app.fossa.com/api/projects/custom%2B49633%2Fscid-up.svg?type=shield&issueType=license)](https://app.fossa.com/projects/custom%2B49633%2Fscid-up?ref=badge_shield&issueType=license)
+
 <p align="center">
   <img src="docs/assets/img/ScidUp-16x9.png" alt="ScidUp Logo - A Winged Pawn"/>
 </p>
