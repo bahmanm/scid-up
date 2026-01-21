@@ -8,12 +8,12 @@ set(
     SCIDUP_TCL_TK_PREFIX
     "${_scidup_default_tcl_tk_prefix}"
     CACHE PATH
-    "Prefix where Tcl/Tk are installed; used when SCIDUP_BUNDLE_TCL_TK is enabled." )
+    "Prefix where Tcl/Tk are installed; used for portable archive bundling." )
 
 if( SCIDUP_TCL_TK_PREFIX STREQUAL "" )
     message(
         FATAL_ERROR
-        "SCIDUP_BUNDLE_TCL_TK is enabled, but SCIDUP_TCL_TK_PREFIX is empty.\n"
+        "SCIDUP_PORTABLE_ARCHIVE is enabled, but SCIDUP_TCL_TK_PREFIX is empty.\n"
     )
 endif()
 
@@ -27,7 +27,7 @@ endif()
 if( NOT DEFINED TCL_LIBRARY OR TCL_LIBRARY STREQUAL "" )
     message(
         FATAL_ERROR
-        "SCIDUP_BUNDLE_TCL_TK is enabled, but TCL_LIBRARY is empty.\n"
+        "SCIDUP_PORTABLE_ARCHIVE is enabled, but TCL_LIBRARY is empty.\n"
         "Please ensure find_package(TCL) succeeded.\n"
     )
 endif()
@@ -35,7 +35,7 @@ endif()
 if( NOT DEFINED TK_LIBRARY OR TK_LIBRARY STREQUAL "" )
     message(
         FATAL_ERROR
-        "SCIDUP_BUNDLE_TCL_TK is enabled, but TK_LIBRARY is empty.\n"
+        "SCIDUP_PORTABLE_ARCHIVE is enabled, but TK_LIBRARY is empty.\n"
         "Please ensure find_package(TCL) succeeded.\n"
     )
 endif()
@@ -43,14 +43,14 @@ endif()
 if( NOT DEFINED TCL_TCLSH OR TCL_TCLSH STREQUAL "" )
     message(
         FATAL_ERROR
-        "SCIDUP_BUNDLE_TCL_TK is enabled, but TCL_TCLSH is empty.\n"
+        "SCIDUP_PORTABLE_ARCHIVE is enabled, but TCL_TCLSH is empty.\n"
         "Please ensure find_package(TCL) succeeded.\n"
     )
 endif()
 if( NOT EXISTS "${TCL_TCLSH}" )
     message(
         FATAL_ERROR
-        "SCIDUP_BUNDLE_TCL_TK is enabled, but TCL_TCLSH does not exist: ${TCL_TCLSH}\n"
+        "SCIDUP_PORTABLE_ARCHIVE is enabled, but TCL_TCLSH does not exist: ${TCL_TCLSH}\n"
     )
 endif()
 
