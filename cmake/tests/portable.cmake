@@ -7,10 +7,10 @@ if( NOT SCIDUP_TEST_PORTABLE_ARCHIVE )
     return()
 endif()
 
-if( NOT SCIDUP_PORTABLE_ARCHIVE OR NOT SCIDUP_BUNDLE_TCL_TK )
+if( NOT SCIDUP_PORTABLE_ARCHIVE )
     message(
         STATUS
-        "SCIDUP_TEST_PORTABLE_ARCHIVE is enabled, but SCIDUP_PORTABLE_ARCHIVE and/or SCIDUP_BUNDLE_TCL_TK are off; skipping portable archive smoke-tests." )
+        "SCIDUP_TEST_PORTABLE_ARCHIVE is enabled, but SCIDUP_PORTABLE_ARCHIVE is off; skipping portable archive smoke-tests." )
     return()
 endif()
 

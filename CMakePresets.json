@@ -49,8 +49,7 @@
         "CMAKE_PREFIX_PATH": "$env{DEPS_INSTALL_PREFIX};$env{CMAKE_PREFIX_PATH}",
         "SCIDUP_PORTABLE_ARCHIVE": "ON",
         "BUILD_TESTING": "OFF",
-        "SCIDUP_BUILD_LINTING": "OFF",
-        "SCIDUP_BUNDLE_TCL_TK": "ON"
+        "SCIDUP_BUILD_LINTING": "OFF"
       }
     },
     {

@@ -1,11 +1,6 @@
 include_guard( GLOBAL )
 
-option(
-    SCIDUP_BUNDLE_TCL_TK
-    "Bundle Tcl/Tk into the installation tree (intended for portable archives)."
-    OFF )
-
-if( NOT SCIDUP_BUNDLE_TCL_TK )
+if( NOT SCIDUP_PORTABLE_ARCHIVE )
     return()
 endif()
 
