@@ -37,7 +37,7 @@ proc ::recentFiles::save {{reportError 0}} {
     }
     return
   }
-  puts $f "# ScidUp $::scidVersion recent files list"
+  puts $f "# ScidUp $::scidReleaseVersion recent files list"
   puts $f ""
   foreach i {limit menu extra data} {
     puts $f "set recentFiles($i) [list [set recentFiles($i)]]"

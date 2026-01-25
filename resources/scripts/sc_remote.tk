@@ -198,7 +198,7 @@ proc getScidList {} {
 #
 # validScidInterp tests that an interpreter found on the display is
 # indeed a contactable Scid.  First the name is matched against the
-# pattern "scid*", then a send is tried with the "sc_info version"
+# pattern "scid*", then a send is tried with the "sc_info release version"
 # command.  Finally, a variable (scidExeDir) which is set within the 
 # scid script is tested for existence. If all three of these tests
 # succeed we assume we have a Scid.
@@ -208,7 +208,7 @@ proc validScidInterp { scid } {
 	return 0
 	# we "catch" the first [send] since we don't yet know if [send]
 	# works
-    } elseif { [catch {send $scid sc_info version} res] } {
+    } elseif { [catch {send $scid sc_info release version} res] } {
 	return 0
     } elseif { ! [send $scid info exists scidExeDir] } {
 	return 0

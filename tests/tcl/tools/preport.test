@@ -53,7 +53,7 @@ proc ::preport_test::setup {} {
 
     # Arrange
     set ::curr_db 1
-    set ::scidVersion "test"
+    set ::scidReleaseVersion "test"
 
     array unset ::tr
     array set ::tr {
@@ -139,7 +139,7 @@ proc ::preport_test::setup {} {
 proc ::preport_test::cleanup {} {
     ::preport_test::restoreStubs
     unset -nocomplain ::curr_db
-    unset -nocomplain ::scidVersion
+    unset -nocomplain ::scidReleaseVersion
     array unset ::tr
     array unset ::preport
 }

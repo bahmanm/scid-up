@@ -46,8 +46,8 @@ proc ::pinfo_test::setup {} {
 
     # Arrange
     set ::language "E"
-    set ::scidVersion "test"
-    set ::scidVersionDate "1970-01-01"
+    set ::scidReleaseVersion "test"
+    set ::scidReleaseDate "1970-01-01"
 
     namespace eval ::unsafe {}
     catch {array unset ::unsafe::idlink}
@@ -59,8 +59,8 @@ proc ::pinfo_test::cleanup {} {
 
     catch {array unset ::unsafe::idlink}
     unset -nocomplain ::language
-    unset -nocomplain ::scidVersion
-    unset -nocomplain ::scidVersionDate
+    unset -nocomplain ::scidReleaseVersion
+    unset -nocomplain ::scidReleaseDate
 }
 
 test pinfo-splitName-1.0 {splitName splits "Last, First" into {First Last}} -setup {

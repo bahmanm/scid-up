@@ -678,7 +678,7 @@ proc options.write {} {
         -message "Unable to write options file: [scidConfigFile options]\n$optionF"
   } else {
     puts $optionF "# ScidUp options file"
-    puts $optionF "# Version: $scidVersion"
+    puts $optionF "# Version: $::scidReleaseVersion"
     puts $optionF "# This file contains commands in the Tcl language format."
     puts $optionF "# If you edit this file, you must preserve valid its Tcl"
     puts $optionF "# format or it will not set your ScidUp options properly."

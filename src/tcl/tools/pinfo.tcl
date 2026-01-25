@@ -26,7 +26,7 @@ proc setupDefaultResolvers { } {
          -message "Unable to write options file: [scidConfigFile resolvers]\n$optionF"
    } else {
       puts $optionF "# Scid resolver configuration"
-      puts $optionF "# Version: $::scidVersion, $::scidVersionDate"
+      puts $optionF "# Version: $::scidReleaseVersion, $::scidReleaseDate"
       puts $optionF "# This file contains commands in the Tcl language format."
       puts $optionF "# If you edit this file, you must preserve valid Tcl"
       puts $optionF "# format or it will not set your Scid options properly."

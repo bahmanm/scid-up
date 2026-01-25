@@ -10,7 +10,7 @@ namespace eval ::utils::history {}
 # Ensure the config file does not leak state across runs.
 catch {file delete -force [scidConfigFile history]}
 
-set ::scidVersion "test"
+set ::scidReleaseVersion "test"
 
 # Source the module under test.
 source [file join [::scid_test::tclDir] utils history.tcl]

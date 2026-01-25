@@ -1275,7 +1275,7 @@ proc helpAbout {} {
   ::utils::sound::PlaySound sound_move
   set str {}
   append str "[tr ScidUp]: Shane's chess information database\n\n"
-  append str "Version $::scidVersion, $::scidVersionDate\n"
+  append str "Version $::scidReleaseVersion, $::scidReleaseDate\n"
   append str "Copyright (C) 1999-2004 Shane Hudson\n"
   append str "Copyright (C) 2006-2009 Pascal Georges\n"
   append str "Copyright (C) 2008-2011 Alexander Wagner\n"

@@ -29,7 +29,7 @@ proc ::enginecfg_test::setup {} {
     set ::enginecfg_test::saveCalls {}
 
     # Keep file output deterministic for tests that call ::enginecfg::write.
-    set ::scidVersion "test"
+    set ::scidReleaseVersion "test"
 
     # Default empty engine list.
     if {![info exists ::engines(list)]} { set ::engines(list) {} }
@@ -42,7 +42,7 @@ proc ::enginecfg_test::setup {} {
 proc ::enginecfg_test::cleanup {} {
     ::enginecfg_test::restoreStubs
 
-    unset -nocomplain ::scidVersion
+    unset -nocomplain ::scidReleaseVersion
     unset -nocomplain ::engines(list)
     unset -nocomplain ::scid_test::tk_messageBox_answer
 }
@@ -206,7 +206,7 @@ test enginecfg-write-creates-engine-list-file-1.0 {::enginecfg::write writes the
     ::enginecfg_test::setup
 } -body {
     # Arrange
-    set ::scidVersion "9.9"
+    set ::scidReleaseVersion "9.9"
     set ::engines(list) [list [list "E" cmd {--uci} /tmp 2500 99 {white 1 word false normal {}} 1 {{Skill 10}}]]
 
     set enginesFile [scidConfigFile engines]
