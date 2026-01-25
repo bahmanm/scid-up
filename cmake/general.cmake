@@ -15,6 +15,12 @@ set(
     CACHE STRING
     "Release date (YYYY-MM-DD) embedded into ScidUp." )
 
+set(
+    SCIDUP_RELEASE_PLATFORM
+    ""
+    CACHE STRING
+    "Release platform label embedded into ScidUp artefacts (e.g. Windows, macOS (Apple Silicon), Linux)." )
+
 set( SCIDUP_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated" )
 file( MAKE_DIRECTORY "${SCIDUP_GENERATED_INCLUDE_DIR}" )
 configure_file(
