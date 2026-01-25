@@ -42,6 +42,7 @@
 #include "tree.h"
 #include "dbasepool.h"
 #include "ui.h"
+#include "scidup_release.h"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -4267,12 +4268,12 @@ sc_info (ClientData cd, Tcl_Interp * ti, int argc, const char ** argv)
     static const char * options [] = {
         "clipbase", "decimal", "priority",
         "html", "limit", "ratings",
-        "suffix", "validDate", "version", "language", NULL
+        "suffix", "validDate", "version", "release", "language", NULL
     };
     enum {
         INFO_CLIPBASE, INFO_DECIMAL, INFO_PRIORITY,
         INFO_HTML, INFO_LIMIT, INFO_RATINGS,
-        INFO_SUFFIX, INFO_VALIDDATE, INFO_VERSION, INFO_LANGUAGE
+        INFO_SUFFIX, INFO_VALIDDATE, INFO_VERSION, INFO_RELEASE, INFO_LANGUAGE
     };
     int index = -1;
 
@@ -4325,6 +4326,24 @@ sc_info (ClientData cd, Tcl_Interp * ti, int argc, const char ** argv)
             setResult (ti, __DATE__);
         } else {
             setResult (ti, SCID_VERSION_STRING);
+        }
+        break;
+
+    case INFO_RELEASE:
+        if (argc != 3) {
+            return errorResult (ti, "Usage: sc_info release <version|date|is_prerelease>");
+        }
+        if (strIsPrefix (argv[2], "version")) {
+            setResult (ti, scidup::release::kVersion);
+        } else if (strIsPrefix (argv[2], "date")) {
+            setResult (ti, scidup::release::kDate);
+        } else if (strIsPrefix (argv[2], "is_prerelease")) {
+            const char* version = scidup::release::kVersion;
+            const int isPrerelease =
+                (version != nullptr && version[0] != 0 && std::strstr(version, "-testing-") != nullptr) ? 1 : 0;
+            return setIntResult(ti, isPrerelease);
+        } else {
+            return errorResult (ti, "Usage: sc_info release <version|date|is_prerelease>");
         }
         break;
     case INFO_LANGUAGE:
