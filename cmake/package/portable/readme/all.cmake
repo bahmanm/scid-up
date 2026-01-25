@@ -13,8 +13,7 @@ set(
 if( SCIDUP_RELEASE_VERSION STREQUAL "" )
     message(
         FATAL_ERROR
-        "SCIDUP_PORTABLE_ARCHIVE is enabled, but SCIDUP_RELEASE_VERSION is empty.\n"
-        "Please set SCIDUP_RELEASE_VERSION (e.g. -DSCIDUP_RELEASE_VERSION=v1-testing-2026-01-18).\n" )
+        "SCIDUP_PORTABLE_ARCHIVE is enabled, but SCIDUP_RELEASE_VERSION is empty.\n" )
 endif()
 
 set(
@@ -29,10 +28,13 @@ set(
     CACHE STRING
     "Release date string embedded into the portable README.txt (e.g. 2026-01-18)." )
 
-set( SCIDUP_RELEASE_DATE_LINE "" )
-if( NOT SCIDUP_RELEASE_DATE STREQUAL "" )
-    set( SCIDUP_RELEASE_DATE_LINE "${SCIDUP_RELEASE_DATE}" )
+if( SCIDUP_RELEASE_DATE STREQUAL "" )
+    message(
+        FATAL_ERROR
+        "SCIDUP_PORTABLE_ARCHIVE is enabled, but SCIDUP_RELEASE_DATE is empty.\n" )
 endif()
+
+set( SCIDUP_RELEASE_DATE_LINE "${SCIDUP_RELEASE_DATE}" )
 
 if( SCIDUP_RELEASE_PLATFORM STREQUAL "" )
     if( WIN32 )
