@@ -232,7 +232,7 @@ proc ::enginelist::read {} {
 #   - int (0|1): 1 on success, 0 on failure.
 # Side effects:
 #   - Writes the engines configuration file and rotates a backup (`engines.bak`).
-#   - Reads globals: `::scidVersion`, `engines(list)`.
+#   - Reads globals: `::scidReleaseVersion`, `engines(list)`.
 ################################################################################
 proc ::enginelist::write {} {
     global engines
@@ -246,7 +246,7 @@ proc ::enginelist::write {} {
         return 0
     }
     
-    puts $f "\# Analysis engines list file for ScidUp $::scidVersion with UCI support"
+    puts $f "\# Analysis engines list file for ScidUp $::scidReleaseVersion with UCI support"
     puts $f ""
     foreach e $engines(list) {
         set name [lindex $e 0]

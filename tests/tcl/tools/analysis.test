@@ -35,7 +35,7 @@ proc ::analysis_test::setup {} {
     set engines(list) {}
     set engines(sort) Name
 
-    set ::scidVersion "test"
+    set ::scidReleaseVersion "test"
 
     set ::scid_test::sc_game_extra {}
     unset -nocomplain ::scid_test::tk_messageBox_answer
@@ -67,7 +67,7 @@ proc ::analysis_test::cleanup {} {
     set engines(list) {}
     set engines(sort) Name
 
-    set ::scidVersion "test"
+    set ::scidReleaseVersion "test"
 
     set ::scid_test::sc_game_extra {}
     unset -nocomplain ::scid_test::tk_messageBox_answer

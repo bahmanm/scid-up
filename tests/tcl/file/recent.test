@@ -82,7 +82,7 @@ proc ::recent_test::setup {} {
     unset -nocomplain ::helpMessage
     unset -nocomplain ::recentSort
 
-    set ::scidVersion "test"
+    set ::scidReleaseVersion "test"
 
     # Reset defaults.
     set ::recentFiles(limit) 10
@@ -323,7 +323,7 @@ test recent-save-writes-config-1.0 {save writes recent-files config including re
     ::recent_test::setup
 } -body {
     # Arrange
-    set ::scidVersion "X"
+    set ::scidReleaseVersion "X"
     set ::recentFiles(limit) 7
     set ::recentFiles(menu) 3
     set ::recentFiles(extra) 2

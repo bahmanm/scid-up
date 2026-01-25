@@ -70,7 +70,7 @@ proc ::bookmark_test::setup {} {
     set ::curr_db 1
     set ::clipbase_db 9
 
-    set ::scidVersion "test"
+    set ::scidReleaseVersion "test"
 
     set ::bookmarks(data) {}
     set ::bookmarks(subMenus) 0
@@ -152,7 +152,7 @@ proc ::bookmark_test::cleanup {} {
 
     unset -nocomplain ::curr_db
     unset -nocomplain ::clipbase_db
-    unset -nocomplain ::scidVersion
+    unset -nocomplain ::scidReleaseVersion
 
     catch {file delete -force [scidConfigFile bookmarks]}
 
@@ -426,7 +426,7 @@ test bookmark-save-1.0 {Save writes the bookmarks config file} -setup {
     ::bookmark_test::setup
 } -body {
     # Arrange
-    set ::scidVersion "X"
+    set ::scidReleaseVersion "X"
     set ::bookmarks(subMenus) 1
     set ::bookmarks(data) [list [list f "F1"] [list g "G1"]]
 

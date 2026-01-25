@@ -413,7 +413,7 @@ if {$mode == "html"} {
   puts {<body bgcolor="#FFFFFF">}
   puts {<h1><font color="#000070">Tablebase endgame frequency statistics</font></h1>}
   puts {}
-  puts "<p>Tablebase endgame frequency statistics by Scid [sc_info version]"
+  puts "<p>Tablebase endgame frequency statistics by Scid [sc_info release version]"
   puts {(<a href="http://scid.sourceforge.net/">scid.sourceforge.net</a>)<br>}
   puts "Generated from the database \"$db\" ($nGames games) on $date"
   if {$perMillion} {
@@ -422,7 +422,7 @@ if {$mode == "html"} {
   }
   puts "</p>"
 } else {
-  puts "# Tablebase endgame frequency statistics by Scid [sc_info version] (scid.sourceforge.net)"
+  puts "# Tablebase endgame frequency statistics by Scid [sc_info release version] (scid.sourceforge.net)"
   puts "# Generated from the database \"$db\" ($nGames games) on $date"
   if {$perMillion} {
     puts "# Values are occurrences per million games."

@@ -137,7 +137,7 @@ proc ::options_test::setup {} {
     unset -nocomplain ::options_test::scalar
     catch {unset ::options_test::arr}
 
-    set ::scidVersion "test"
+    set ::scidReleaseVersion "test"
 
     # options.write references some globals that are normally initialised in the
     # full application runtime.

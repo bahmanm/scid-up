@@ -39,8 +39,6 @@ set useLocalTooltip [catch {package require tooltip 2.0}]
 set scidReleaseVersion [sc_info release version]
 set scidReleaseDate [sc_info release date]
 
-set scidVersion $scidReleaseVersion
-set scidVersionDate $scidReleaseDate
 
 # Helper function for issuing debug messages:
 # trace add execution some_fn {enter leave} trace_log

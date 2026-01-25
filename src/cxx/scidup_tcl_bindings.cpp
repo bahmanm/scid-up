@@ -4268,12 +4268,12 @@ sc_info (ClientData cd, Tcl_Interp * ti, int argc, const char ** argv)
     static const char * options [] = {
         "clipbase", "decimal", "priority",
         "html", "limit", "ratings",
-        "suffix", "validDate", "version", "release", "language", NULL
+        "suffix", "validDate", "release", "language", NULL
     };
     enum {
         INFO_CLIPBASE, INFO_DECIMAL, INFO_PRIORITY,
         INFO_HTML, INFO_LIMIT, INFO_RATINGS,
-        INFO_SUFFIX, INFO_VALIDDATE, INFO_VERSION, INFO_RELEASE, INFO_LANGUAGE
+        INFO_SUFFIX, INFO_VALIDDATE, INFO_RELEASE, INFO_LANGUAGE
     };
     int index = -1;
 
@@ -4321,13 +4321,6 @@ sc_info (ClientData cd, Tcl_Interp * ti, int argc, const char ** argv)
         }
         return UI_Result(ti, OK, date_ValidString (argv[2]));
 
-    case INFO_VERSION:
-        if (argc >= 3  &&  strIsPrefix (argv[2], "date")) {
-            setResult (ti, __DATE__);
-        } else {
-            setResult (ti, SCID_VERSION_STRING);
-        }
-        break;
 
     case INFO_RELEASE:
         if (argc != 3) {
