@@ -28,6 +28,18 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/src/tcl"
     DESTINATION "${SCIDUP_DATA_INSTALL_DIR}" )
 
+if( WIN32 )
+    install(
+        FILES "${CMAKE_SOURCE_DIR}/src/tools/check-newer-release/script.ps1"
+        DESTINATION "${SCIDUP_DATA_INSTALL_DIR}/tools"
+        RENAME "check-newer-release.ps1" )
+else()
+    install(
+        PROGRAMS "${CMAKE_SOURCE_DIR}/src/tools/check-newer-release/script.sh"
+        DESTINATION "${SCIDUP_DATA_INSTALL_DIR}/tools"
+        RENAME "check-newer-release" )
+endif()
+
 file(
     GLOB ECO_FILES
     CONFIGURE_DEPENDS
