@@ -36,18 +36,11 @@ source [file join [file dirname [info script]] scidup dirs.tcl]
 package require Tk  9
 set useLocalTooltip [catch {package require tooltip 2.0}]
 
-set scidVersion [sc_info version]
-set scidVersionDate [sc_info version date]
-set scidVersionExpected "5.1.0"
+set scidReleaseVersion [sc_info release version]
+set scidReleaseDate [sc_info release date]
 
-# Check that the version of c++ code matches the version of tcl code
-#
-if {[string compare $::scidVersion $::scidVersionExpected]} {
-  set msg "This is ScidUp version $::scidVersion, but the ScidUp GUI (tcl/tk code)\n"
-  append msg "has the version number $scidVersionExpected.\n"
-  tk_messageBox -type ok -icon error -title "ScidUp: Version Error" -message $msg
-  exit 1
-}
+set scidVersion $scidReleaseVersion
+set scidVersionDate $scidReleaseDate
 
 # Helper function for issuing debug messages:
 # trace add execution some_fn {enter leave} trace_log
