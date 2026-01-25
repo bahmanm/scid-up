@@ -61,6 +61,9 @@ endif()
 set_property(
     TARGET scidup_main
     PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE True )
+target_include_directories(
+    scidup_main
+    PRIVATE "${SCIDUP_GENERATED_INCLUDE_DIR}" )
 target_link_libraries(
     scidup_main
     PRIVATE ScidUp::Libs::Polyglot Threads::Threads ScidUp::Libs::Tcl )

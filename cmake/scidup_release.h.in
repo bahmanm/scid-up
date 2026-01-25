@@ -1,0 +1,18 @@
+// This file is configured by CMake. Do not edit the generated output file.
+//
+// It provides ScidUp release identity as embedded, runtime-queryable strings.
+// These values are expected to be provided by the release pipeline.
+//
+// Notes:
+// - For non-release builds, the variables may be empty.
+// - For portable archive (release) builds, the build system should enforce that
+//   these values are present.
+#pragma once
+
+namespace scidup::release {
+
+inline constexpr const char* kVersion = "@SCIDUP_RELEASE_VERSION@";
+inline constexpr const char* kDate = "@SCIDUP_RELEASE_DATE@";
+
+} // namespace scidup::release
+
