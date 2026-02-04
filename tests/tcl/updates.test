@@ -1,0 +1,164 @@
+namespace import ::tcltest::*
+
+source [file join [file dirname [info script]] _support support.tcl]
+source [file join [::scid_test::tclDir] scidup updates.tcl]
+
+namespace eval ::updates_test {
+    variable createdFiles {}
+}
+
+proc ::updates_test::setup {} {
+    variable createdFiles
+    set createdFiles {}
+}
+
+proc ::updates_test::cleanup {} {
+    variable createdFiles
+    foreach f $createdFiles {
+        catch {file delete -force $f}
+    }
+    set createdFiles {}
+}
+
+proc ::updates_test::trackFile {path} {
+    variable createdFiles
+    lappend createdFiles $path
+    return $path
+}
+
+proc ::updates_test::writeExecutableTclScript {path bodyLines} {
+    set ch [open $path w]
+    puts $ch "#!/usr/bin/env tclsh"
+    foreach line $bodyLines {
+        puts $ch $line
+    }
+    close $ch
+
+    catch {file attributes $path -permissions u+x}
+    return $path
+}
+
+proc ::updates_test::awaitResult {scriptPath args} {
+    set ::updates_test::result {}
+    set ::updates_test::done 0
+
+    set rid [::scidup::updates::checkNewerRelease \
+        -scriptPath $scriptPath \
+        -onResult [list ::updates_test::onResult] \
+        {*}$args]
+
+    vwait ::updates_test::done
+    return [list $rid $::updates_test::result]
+}
+
+proc ::updates_test::onResult {resultDict} {
+    set ::updates_test::result $resultDict
+    set ::updates_test::done 1
+}
+
+test updates-parse-accepts-release-1.0 {Parses a valid release TSV line} -body {
+    ::scidup::updates::_parseScriptOutput "release\t2\thttps://github.com/bahmanm/scid-up/releases/tag/v2\n"
+} -result [dict create kind release version 2 url https://github.com/bahmanm/scid-up/releases/tag/v2]
+
+test updates-parse-accepts-none-1.0 {Parses a valid none TSV line} -body {
+    ::scidup::updates::_parseScriptOutput "none\t-\t-\n"
+} -result [dict create kind none version - url -]
+
+test updates-parse-rejects-multi-line-1.0 {Rejects multiple non-empty output lines} -body {
+    ::scidup::updates::_parseScriptOutput "none\t-\t-\nnone\t-\t-\n"
+} -returnCodes error -result "Expected exactly one non-empty output line, got 2."
+
+test updates-parse-rejects-bad-kind-1.0 {Rejects unknown kind} -body {
+    ::scidup::updates::_parseScriptOutput "bogus\t-\t-\n"
+} -returnCodes error -result "Unsupported kind: bogus"
+
+test updates-runner-reports-prerequisites-missing-when-script-missing-1.0 {Missing script yields prerequisites_missing} -setup {
+    ::updates_test::setup
+} -body {
+    set missing [file join [::scid_test::tempDir] updates_test_missing_script]
+    lassign [::updates_test::awaitResult $missing -localVersion v1] rid result
+    list [dict get $result status] [dict get $result attempts]
+} -cleanup {
+    ::updates_test::cleanup
+} -result [list prerequisites_missing 1]
+
+test updates-runner-success-on-exit-0-1.0 {Exit 0 parses stdout and returns ok} -setup {
+    ::updates_test::setup
+} -body {
+    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_ok.tcl]]
+    ::updates_test::writeExecutableTclScript $script [list \
+        {puts "release\t2\thttps://github.com/bahmanm/scid-up/releases/tag/v2"} \
+        {exit 0}]
+
+    lassign [::updates_test::awaitResult $script -localVersion v1] rid result
+    list [dict get $result status] [dict get $result kind] [dict get $result version] [dict get $result attempts]
+} -cleanup {
+    ::updates_test::cleanup
+} -result [list ok release 2 1]
+
+test updates-runner-prerequisites-missing-on-exit-2-1.0 {Exit 2 yields prerequisites_missing and does not retry} -setup {
+    ::updates_test::setup
+} -body {
+    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_prereq_missing.tcl]]
+    ::updates_test::writeExecutableTclScript $script [list \
+        {puts "curl is required"} \
+        {exit 2}]
+
+    lassign [::updates_test::awaitResult $script -localVersion v1 -retryDelayMs 1 -maxAttempts 5] rid result
+    list [dict get $result status] [dict get $result attempts] [dict get $result message]
+} -cleanup {
+    ::updates_test::cleanup
+} -result [list prerequisites_missing 1 "curl is required"]
+
+test updates-runner-retries-transient-failures-1.0 {Non-zero exit retries up to maxAttempts} -setup {
+    ::updates_test::setup
+} -body {
+    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_transient_fail.tcl]]
+    ::updates_test::writeExecutableTclScript $script [list \
+        {puts "boom"} \
+        {exit 1}]
+
+    lassign [::updates_test::awaitResult $script -localVersion v1 -retryDelayMs 1 -maxAttempts 3] rid result
+    list [dict get $result status] [dict get $result attempts]
+} -cleanup {
+    ::updates_test::cleanup
+} -result [list transient_failure 3]
+
+test updates-runner-retries-until-success-1.0 {Retries and returns ok when a later attempt succeeds} -setup {
+    ::updates_test::setup
+} -body {
+    set counterFile [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_counter.txt]]
+    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_eventual_ok.tcl]]
+
+    ::updates_test::writeExecutableTclScript $script [list \
+        "set f \"$counterFile\"" \
+        {set n 0} \
+        {if {[file exists $f]} { set ch [open $f r]; set n [string trim [read $ch]]; close $ch }} \
+        {incr n} \
+        {set ch [open $f w]; puts -nonewline $ch $n; close $ch} \
+        {if {$n < 3} { puts "transient"; exit 1 }} \
+        {puts "none\t-\t-"} \
+        {exit 0}]
+
+    lassign [::updates_test::awaitResult $script -localVersion v1 -retryDelayMs 1 -maxAttempts 5] rid result
+    list [dict get $result status] [dict get $result kind] [dict get $result attempts]
+} -cleanup {
+    ::updates_test::cleanup
+} -result [list ok none 3]
+
+if {$::tcl_platform(platform) eq "windows"} {
+    test updates-runner-windows-executes-ps1-1.0 {On Windows, invokes PowerShell .ps1 scripts} -setup {
+        ::updates_test::setup
+    } -body {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_ok.ps1]]
+        set ch [open $script w]
+        puts $ch {Write-Output "release`t2`thttps://github.com/bahmanm/scid-up/releases/tag/v2"}
+        puts $ch {exit 0}
+        close $ch
+
+        lassign [::updates_test::awaitResult $script -localVersion v1] rid result
+        list [dict get $result status] [dict get $result kind] [dict get $result version]
+    } -cleanup {
+        ::updates_test::cleanup
+    } -result [list ok release 2]
+}
