@@ -1538,5 +1538,48 @@ after 1 {
   }
 }
 
+################################################################################
+# ScidUp update check (startup).
+#   Checks for a newer ScidUp release shortly after application startup and
+#   notifies the user when an update is available.
+################################################################################
+
+namespace eval ::scidup::updates {}
+
+proc ::scidup::updates::_onStartupUpdateCheck {resultDict} {
+  if {![dict exists $resultDict status] || [dict get $resultDict status] ne "ok"} {
+    return
+  }
+  if {![dict exists $resultDict kind] || [dict get $resultDict kind] eq "none"} {
+    return
+  }
+
+  set kind [dict get $resultDict kind]
+  set version [dict get $resultDict version]
+  set url [dict get $resultDict url]
+
+  set available "v$version"
+  set summary "A newer ScidUp ${kind} is available."
+  set details "Installed: $::scidReleaseVersion\nAvailable: $available\n\nOpen the download page?"
+
+  set answer [tk_messageBox \
+      -title [tr ScidUp] \
+      -type yesno \
+      -icon info \
+      -message $summary \
+      -detail $details]
+  if {$answer ne "yes"} {
+    return
+  }
+
+  if {[llength [info commands openURL]]} {
+    catch {openURL $url}
+  }
+}
+
+after 200 [list ::scidup::updates::checkNewerRelease \
+    -localVersion $::scidReleaseVersion \
+    -onResult ::scidup::updates::_onStartupUpdateCheck]
+
 
 ### End of file: end.tcl

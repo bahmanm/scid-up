@@ -74,6 +74,14 @@ if printf '%s' "$local_version" | grep -Eq '^v[0-9]+-testing-[0-9]{4}-[0-9]{2}-[
     exit 0
   fi
 
+  # If there is a newer stable release, prefer it over prereleases.
+  next_n=$((n + 1))
+  next_stable_tag="v${next_n}"
+  if contains_tag "$next_stable_tag"; then
+    printf 'release\t%s\t%s\n' "$next_n" "$(release_url "$next_stable_tag")"
+    exit 0
+  fi
+
   newest_date="$(
     printf '%s\n' "$tags" \
       | sed -n "s/^v${n}-testing-\\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\\)$/\\1/p" \
@@ -85,7 +93,21 @@ if printf '%s' "$local_version" | grep -Eq '^v[0-9]+-testing-[0-9]{4}-[0-9]{2}-[
     candidate_tag="v${n}-testing-${newest_date}"
     printf 'prerelease\t%s-testing-%s\t%s\n' "$n" "$newest_date" "$(release_url "$candidate_tag")"
   else
-    printf 'none\t-\t-\n'
+    # If the next prerelease stream exists (e.g. local v0-testing but v1-testing
+    # is published), treat it as newer.
+    newest_next_date="$(
+      printf '%s\n' "$tags" \
+        | sed -n "s/^v${next_n}-testing-\\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\\)$/\\1/p" \
+        | sort \
+        | tail -n 1
+    )" || true
+
+    if [ -n "$newest_next_date" ]; then
+      candidate_tag="v${next_n}-testing-${newest_next_date}"
+      printf 'prerelease\t%s-testing-%s\t%s\n' "$next_n" "$newest_next_date" "$(release_url "$candidate_tag")"
+    else
+      printf 'none\t-\t-\n'
+    fi
   fi
   exit 0
 fi

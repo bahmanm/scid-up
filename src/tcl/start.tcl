@@ -1087,6 +1087,7 @@ set tcl_files {
 language.tcl
 errors.tcl
 utils.tcl
+scidup/updates.tcl
 utils/date.tcl
 utils/font.tcl
 utils/graph.tcl

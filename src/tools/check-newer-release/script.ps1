@@ -89,6 +89,13 @@ if ($localVersion -match '^v(\d+)-testing-(\d{4}-\d{2}-\d{2})$') {
     exit 0
   }
 
+  $nextN = $n + 1
+  $nextStableTag = "v$nextN"
+  if (HasTag $nextStableTag) {
+    Write-Output ("release`t{0}`t{1}" -f $nextN, (ReleaseUrl $nextStableTag))
+    exit 0
+  }
+
   $prefix = "v$n-testing-"
   $newestDate = $null
   foreach ($tag in $tags) {
@@ -105,6 +112,25 @@ if ($localVersion -match '^v(\d+)-testing-(\d{4}-\d{2}-\d{2})$') {
   if ($null -ne $newestDate -and [string]::CompareOrdinal($newestDate, $localDate) -gt 0) {
     $candidateTag = "v$n-testing-$newestDate"
     Write-Output ("prerelease`t{0}-testing-{1}`t{2}" -f $n, $newestDate, (ReleaseUrl $candidateTag))
+    exit 0
+  }
+
+  $nextPrefix = "v$nextN-testing-"
+  $newestNextDate = $null
+  foreach ($tag in $tags) {
+    if ($tag.StartsWith($nextPrefix)) {
+      $datePart = $tag.Substring($nextPrefix.Length)
+      if ($datePart -match '^\d{4}-\d{2}-\d{2}$') {
+        if ($null -eq $newestNextDate -or [string]::CompareOrdinal($datePart, $newestNextDate) -gt 0) {
+          $newestNextDate = $datePart
+        }
+      }
+    }
+  }
+
+  if ($null -ne $newestNextDate) {
+    $candidateTag = "v$nextN-testing-$newestNextDate"
+    Write-Output ("prerelease`t{0}-testing-{1}`t{2}" -f $nextN, $newestNextDate, (ReleaseUrl $candidateTag))
   } else {
     Write-Output "none`t-`t-"
   }
