@@ -38,6 +38,15 @@ proc ::updates_test::writeExecutableTclScript {path bodyLines} {
     return $path
 }
 
+proc ::updates_test::writePowerShellScript {path bodyLines} {
+    set ch [open $path w]
+    foreach line $bodyLines {
+        puts $ch $line
+    }
+    close $ch
+    return $path
+}
+
 proc ::updates_test::awaitResult {scriptPath args} {
     set ::updates_test::result {}
     set ::updates_test::done 0
@@ -85,10 +94,17 @@ test updates-runner-reports-prerequisites-missing-when-script-missing-1.0 {Missi
 test updates-runner-success-on-exit-0-1.0 {Exit 0 parses stdout and returns ok} -setup {
     ::updates_test::setup
 } -body {
-    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_ok.tcl]]
-    ::updates_test::writeExecutableTclScript $script [list \
-        {puts "release\t2\thttps://github.com/bahmanm/scid-up/releases/tag/v2"} \
-        {exit 0}]
+    if {$::tcl_platform(platform) eq "windows"} {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_ok.ps1]]
+        ::updates_test::writePowerShellScript $script [list \
+            {Write-Output "release`t2`thttps://github.com/bahmanm/scid-up/releases/tag/v2"} \
+            {exit 0}]
+    } else {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_ok.tcl]]
+        ::updates_test::writeExecutableTclScript $script [list \
+            {puts "release\t2\thttps://github.com/bahmanm/scid-up/releases/tag/v2"} \
+            {exit 0}]
+    }
 
     lassign [::updates_test::awaitResult $script -localVersion v1] rid result
     list [dict get $result status] [dict get $result kind] [dict get $result version] [dict get $result attempts]
@@ -99,10 +115,17 @@ test updates-runner-success-on-exit-0-1.0 {Exit 0 parses stdout and returns ok} 
 test updates-runner-prerequisites-missing-on-exit-2-1.0 {Exit 2 yields prerequisites_missing and does not retry} -setup {
     ::updates_test::setup
 } -body {
-    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_prereq_missing.tcl]]
-    ::updates_test::writeExecutableTclScript $script [list \
-        {puts "curl is required"} \
-        {exit 2}]
+    if {$::tcl_platform(platform) eq "windows"} {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_prereq_missing.ps1]]
+        ::updates_test::writePowerShellScript $script [list \
+            {Write-Output "curl is required"} \
+            {exit 2}]
+    } else {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_prereq_missing.tcl]]
+        ::updates_test::writeExecutableTclScript $script [list \
+            {puts "curl is required"} \
+            {exit 2}]
+    }
 
     lassign [::updates_test::awaitResult $script -localVersion v1 -retryDelayMs 1 -maxAttempts 5] rid result
     list [dict get $result status] [dict get $result attempts] [dict get $result message]
@@ -113,10 +136,17 @@ test updates-runner-prerequisites-missing-on-exit-2-1.0 {Exit 2 yields prerequis
 test updates-runner-retries-transient-failures-1.0 {Non-zero exit retries up to maxAttempts} -setup {
     ::updates_test::setup
 } -body {
-    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_transient_fail.tcl]]
-    ::updates_test::writeExecutableTclScript $script [list \
-        {puts "boom"} \
-        {exit 1}]
+    if {$::tcl_platform(platform) eq "windows"} {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_transient_fail.ps1]]
+        ::updates_test::writePowerShellScript $script [list \
+            {Write-Output "boom"} \
+            {exit 1}]
+    } else {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_transient_fail.tcl]]
+        ::updates_test::writeExecutableTclScript $script [list \
+            {puts "boom"} \
+            {exit 1}]
+    }
 
     lassign [::updates_test::awaitResult $script -localVersion v1 -retryDelayMs 1 -maxAttempts 3] rid result
     list [dict get $result status] [dict get $result attempts]
@@ -128,17 +158,32 @@ test updates-runner-retries-until-success-1.0 {Retries and returns ok when a lat
     ::updates_test::setup
 } -body {
     set counterFile [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_counter.txt]]
-    set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_eventual_ok.tcl]]
-
-    ::updates_test::writeExecutableTclScript $script [list \
-        "set f \"$counterFile\"" \
-        {set n 0} \
-        {if {[file exists $f]} { set ch [open $f r]; set n [string trim [read $ch]]; close $ch }} \
-        {incr n} \
-        {set ch [open $f w]; puts -nonewline $ch $n; close $ch} \
-        {if {$n < 3} { puts "transient"; exit 1 }} \
-        {puts "none\t-\t-"} \
-        {exit 0}]
+    if {$::tcl_platform(platform) eq "windows"} {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_eventual_ok.ps1]]
+        set counterFilePs [string map {' ''} $counterFile]
+        ::updates_test::writePowerShellScript $script [list \
+            "\$f = '$counterFilePs'" \
+            {$raw = ""} \
+            {if (Test-Path -Path $f) { $raw = (Get-Content -Raw -Path $f).Trim() }} \
+            {$n = 0} \
+            {if ($raw -ne "") { [void][int]::TryParse($raw, [ref]$n) }} \
+            {$n = $n + 1} \
+            {Set-Content -NoNewline -Path $f -Value $n} \
+            {if ($n -lt 3) { Write-Output "transient"; exit 1 }} \
+            {Write-Output "none`t-`t-"} \
+            {exit 0}]
+    } else {
+        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_eventual_ok.tcl]]
+        ::updates_test::writeExecutableTclScript $script [list \
+            "set f \"$counterFile\"" \
+            {set n 0} \
+            {if {[file exists $f]} { set ch [open $f r]; set n [string trim [read $ch]]; close $ch }} \
+            {incr n} \
+            {set ch [open $f w]; puts -nonewline $ch $n; close $ch} \
+            {if {$n < 3} { puts "transient"; exit 1 }} \
+            {puts "none\t-\t-"} \
+            {exit 0}]
+    }
 
     lassign [::updates_test::awaitResult $script -localVersion v1 -retryDelayMs 1 -maxAttempts 5] rid result
     list [dict get $result status] [dict get $result kind] [dict get $result attempts]
@@ -146,19 +191,5 @@ test updates-runner-retries-until-success-1.0 {Retries and returns ok when a lat
     ::updates_test::cleanup
 } -result [list ok none 3]
 
-if {$::tcl_platform(platform) eq "windows"} {
-    test updates-runner-windows-executes-ps1-1.0 {On Windows, invokes PowerShell .ps1 scripts} -setup {
-        ::updates_test::setup
-    } -body {
-        set script [::updates_test::trackFile [file join [::scid_test::tempDir] updates_test_ok.ps1]]
-        set ch [open $script w]
-        puts $ch {Write-Output "release`t2`thttps://github.com/bahmanm/scid-up/releases/tag/v2"}
-        puts $ch {exit 0}
-        close $ch
-
-        lassign [::updates_test::awaitResult $script -localVersion v1] rid result
-        list [dict get $result status] [dict get $result kind] [dict get $result version]
-    } -cleanup {
-        ::updates_test::cleanup
-    } -result [list ok release 2]
-}
+# Note: Platform-specific script execution is exercised by the runner tests above,
+# which generate `.ps1` scripts on Windows and `.tcl` scripts on other platforms.

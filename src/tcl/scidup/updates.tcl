@@ -173,10 +173,7 @@ proc ::scidup::updates::_attempt {requestId} {
   }
 
   if {$::tcl_platform(platform) eq "windows"} {
-    set psExe [auto_execok powershell]
-    if {$psExe eq ""} {
-      set psExe [auto_execok pwsh]
-    }
+    set psExe [::scidup::updates::_findPowerShellExecutable]
     if {$psExe eq ""} {
       ::scidup::updates::_finish $requestId [dict create \
         status prerequisites_missing \
@@ -193,6 +190,34 @@ proc ::scidup::updates::_attempt {requestId} {
   set _requests($requestId,channel) $channel
   fconfigure $channel -blocking 0 -buffering none -translation binary
   fileevent $channel readable [list ::scidup::updates::_onReadable $requestId $channel]
+}
+
+proc ::scidup::updates::_findPowerShellExecutable {} {
+  # Prefer PATH lookup, then fall back to common system locations.
+  foreach candidate {pwsh pwsh.exe powershell powershell.exe} {
+    set exe [auto_execok $candidate]
+    if {$exe ne ""} {
+      return $exe
+    }
+  }
+
+  set candidates {}
+  if {[info exists ::env(ProgramFiles)]} {
+    lappend candidates [file join $::env(ProgramFiles) PowerShell 7 pwsh.exe]
+  }
+  if {[info exists ::env(ProgramW6432)]} {
+    lappend candidates [file join $::env(ProgramW6432) PowerShell 7 pwsh.exe]
+  }
+  if {[info exists ::env(SystemRoot)]} {
+    lappend candidates [file join $::env(SystemRoot) System32 WindowsPowerShell v1.0 powershell.exe]
+  }
+
+  foreach exe $candidates {
+    if {[file exists $exe]} {
+      return $exe
+    }
+  }
+  return ""
 }
 
 proc ::scidup::updates::_openPipe {tokens} {
