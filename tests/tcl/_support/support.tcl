@@ -12,5 +12,6 @@ source [file join $_supportDir scid_test_mocks.tcl]
 source [file join $_supportDir scid_test_widgets.tcl]
 source [file join $_supportDir scid_test_menu_capture.tcl]
 source [file join $_supportDir scid_test_baseline_io.tcl]
+source [file join $_supportDir scid_test_menu_structure.tcl]
 
 unset _supportDir

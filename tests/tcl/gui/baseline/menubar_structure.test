@@ -1,0 +1,52 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir _support support.tcl]
+
+namespace eval ::gui_menubar_baseline_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_menubar_baseline_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_menubar_baseline_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_menubar_baseline_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1 \
+        -setGlobals 1
+
+    # Force token-based labels regardless of any translation tables that may be
+    # initialised by sourced modules.
+    ::scid_test::mocks::stubCommand ::gui_menubar_baseline_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+}
+
+proc ::gui_menubar_baseline_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_menubar_baseline_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+}
+
+test gui-menubar-baseline-prototype-1.0 {Extracts the main menu bar structure for baseline review} -setup {
+    ::gui_menubar_baseline_test::setup
+} -body {
+    # Arrange/Act: source the menu definitions under the harness.
+    source [file join [::scid_test::tclDir] menus.tcl]
+
+    set snapshot [::scid_test::menu_structure::snapshot .menu \
+        -dynamicMenus [::scid_test::menu_structure::defaultDynamicMenus]]
+
+    # Emit the snapshot for interactive review (Milestone 3).
+    puts "SCIDUP_UI_MENUBAR_BASELINE_DRAFT_BEGIN"
+    puts $snapshot
+    puts "SCIDUP_UI_MENUBAR_BASELINE_DRAFT_END"
+
+    # Assert: sanity-check that the menu has entries.
+    expr {[llength [lindex $snapshot 5]] > 0}
+} -cleanup {
+    ::gui_menubar_baseline_test::cleanup
+} -result 1
+
+cleanupTests
