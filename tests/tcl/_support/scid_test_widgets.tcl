@@ -13,41 +13,41 @@ namespace eval ::scid_test::widgets {
     #   state(.w,-maximum) = 100
     array set state {}
 
-	# Store appended text per widget (for text-like doubles).
-	array set text {}
+    # Store appended text per widget (for text-like doubles).
+    array set text {}
 
-	# Store `tag configure`/`tag config` calls per widget, indexed by ($path).
-	array set tagConfigureCalls {}
+    # Store `tag configure`/`tag config` calls per widget, indexed by ($path).
+    array set tagConfigureCalls {}
 
-	# Store `tag bind` calls per widget, indexed by ($path).
-	array set tagBindCalls {}
+    # Store `tag bind` calls per widget, indexed by ($path).
+    array set tagBindCalls {}
 
-	# Store `tag remove` calls per widget, indexed by ($path).
-	array set tagRemoveCalls {}
+    # Store `tag remove` calls per widget, indexed by ($path).
+    array set tagRemoveCalls {}
 
-	# Store `tag add` calls per widget, indexed by ($path).
-	array set tagAddCalls {}
+    # Store `tag add` calls per widget, indexed by ($path).
+    array set tagAddCalls {}
 
-	# Store `tag nextrange` calls per widget, indexed by ($path).
-	array set tagNextRangeCalls {}
+    # Store `tag nextrange` calls per widget, indexed by ($path).
+    array set tagNextRangeCalls {}
 
-	# Store configurable `tag nextrange` results, indexed by ($path,$tagName).
-	array set tagNextRangeResults {}
+    # Store configurable `tag nextrange` results, indexed by ($path,$tagName).
+    array set tagNextRangeResults {}
 
-	# Store `see` calls per widget, indexed by ($path).
-	array set seeCalls {}
+    # Store `see` calls per widget, indexed by ($path).
+    array set seeCalls {}
 
-	# Store `yview` calls per widget, indexed by ($path).
-	array set yviewCalls {}
+    # Store `yview` calls per widget, indexed by ($path).
+    array set yviewCalls {}
 
-	# Store `index` calls per widget, indexed by ($path).
-	array set indexCalls {}
+    # Store `index` calls per widget, indexed by ($path).
+    array set indexCalls {}
 
-	# Store `mark set` calls per widget, indexed by ($path).
-	array set markSetCalls {}
+    # Store `mark set` calls per widget, indexed by ($path).
+    array set markSetCalls {}
 
-	# Store `window create` calls per widget, indexed by ($path).
-	array set windowCreateCalls {}
+    # Store `window create` calls per widget, indexed by ($path).
+    array set windowCreateCalls {}
 }
 
 # Resets all widget doubles created via this helper.
