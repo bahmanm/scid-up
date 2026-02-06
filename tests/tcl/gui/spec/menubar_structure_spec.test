@@ -1,0 +1,141 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir _support support.tcl]
+
+namespace eval ::gui_menubar_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_menubar_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_menubar_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_menubar_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1 \
+        -setGlobals 1
+
+    # Force token-based labels regardless of any translation tables that may be
+    # initialised by sourced modules.
+    ::scid_test::mocks::stubCommand ::gui_menubar_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+}
+
+proc ::gui_menubar_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_menubar_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+}
+
+proc ::gui_menubar_spec_test::asDict {kvList} {
+    dict create {*}$kvList
+}
+
+proc ::gui_menubar_spec_test::menuAttrs {snapshot} {
+    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
+        error "Invalid menu snapshot: $snapshot"
+    }
+
+    set attrs [dict create path [lindex $snapshot 1]]
+    foreach {k v} [lrange $snapshot 2 end] {
+        dict set attrs $k $v
+    }
+    return $attrs
+}
+
+proc ::gui_menubar_spec_test::entries {menuSnapshot} {
+    set attrs [::gui_menubar_spec_test::menuAttrs $menuSnapshot]
+    if {[dict get $attrs dynamic]} {
+        return {}
+    }
+    return [dict get $attrs entries]
+}
+
+proc ::gui_menubar_spec_test::findEntryByLabel {menuSnapshot label} {
+    foreach entry [::gui_menubar_spec_test::entries $menuSnapshot] {
+        set d [::gui_menubar_spec_test::asDict $entry]
+        if {[dict get $d label] eq $label} {
+            return $d
+        }
+    }
+    error "Menu [dict get [::gui_menubar_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
+}
+
+proc ::gui_menubar_spec_test::submenuOfCascade {menuSnapshot label} {
+    set entry [::gui_menubar_spec_test::findEntryByLabel $menuSnapshot $label]
+    if {[dict get $entry type] ne "cascade"} {
+        error "Entry '$label' is not a cascade (got: [dict get $entry type])"
+    }
+    return [dict get $entry submenu]
+}
+
+proc ::gui_menubar_spec_test::assertCommandAcc {menuSnapshot label expectedAcc} {
+    set entry [::gui_menubar_spec_test::findEntryByLabel $menuSnapshot $label]
+    if {[dict get $entry type] ne "command"} {
+        error "Entry '$label' is not a command (got: [dict get $entry type])"
+    }
+    set actual [dict get $entry acc]
+    if {$actual ne $expectedAcc} {
+        error "Entry '$label' accelerator mismatch (expected '$expectedAcc', got '$actual')"
+    }
+}
+
+test gui-menubar-spec-structure-1.0 {Menu bar exposes stable access paths for key features} -setup {
+    ::gui_menubar_spec_test::setup
+} -body {
+    # Arrange/Act: build menus under the harness.
+    source [file join [::scid_test::tclDir] menus.tcl]
+    set menubar [::scid_test::menu_structure::snapshot .menu \
+        -dynamicMenus [::scid_test::menu_structure::defaultDynamicMenus]]
+
+    # Assert: top-level menus exist.
+    foreach top {File Database Edit Game Search Windows Tools Options Help} {
+        set submenu [::gui_menubar_spec_test::submenuOfCascade $menubar $top]
+        if {[dict get [::gui_menubar_spec_test::menuAttrs $submenu] path] eq ""} {
+            error "Top-level menu '$top' has no submenu"
+        }
+    }
+
+    # Assert: critical File menu entries.
+    set fileMenu [::gui_menubar_spec_test::submenuOfCascade $menubar File]
+    ::gui_menubar_spec_test::assertCommandAcc $fileMenu FileOpen "Ctrl+O"
+    ::gui_menubar_spec_test::assertCommandAcc $fileMenu FileExit "Ctrl+Q"
+
+    set bookmarksMenu [::gui_menubar_spec_test::submenuOfCascade $fileMenu FileBookmarks]
+    set bookmarksAttrs [::gui_menubar_spec_test::menuAttrs $bookmarksMenu]
+    if {![dict get $bookmarksAttrs dynamic]} {
+        error "Bookmarks submenu should be dynamic"
+    }
+
+    set recentTreesMenu [::gui_menubar_spec_test::submenuOfCascade $fileMenu ToolsOpenRecentBaseAsTree]
+    set recentTreesAttrs [::gui_menubar_spec_test::menuAttrs $recentTreesMenu]
+    if {![dict get $recentTreesAttrs dynamic]} {
+        error "Recent trees submenu should be dynamic"
+    }
+
+    # Assert: critical Database menu entries.
+    set dbMenu [::gui_menubar_spec_test::submenuOfCascade $menubar Database]
+    ::gui_menubar_spec_test::assertCommandAcc $dbMenu FileClose "Ctrl+W"
+
+    set copyAllGamesMenu [::gui_menubar_spec_test::submenuOfCascade $dbMenu CopyAllGames]
+    if {![dict get [::gui_menubar_spec_test::menuAttrs $copyAllGamesMenu] dynamic]} {
+        error "CopyAllGames submenu should be dynamic"
+    }
+
+    set importFileMenu [::gui_menubar_spec_test::submenuOfCascade $dbMenu ToolsImportFile]
+    if {![dict get [::gui_menubar_spec_test::menuAttrs $importFileMenu] dynamic]} {
+        error "ToolsImportFile submenu should be dynamic"
+    }
+
+    # Assert: key Help entry.
+    set helpMenu [::gui_menubar_spec_test::submenuOfCascade $menubar Help]
+    ::gui_menubar_spec_test::assertCommandAcc $helpMenu HelpContents "F1"
+
+    return 1
+} -cleanup {
+    ::gui_menubar_spec_test::cleanup
+} -result 1
+
+cleanupTests

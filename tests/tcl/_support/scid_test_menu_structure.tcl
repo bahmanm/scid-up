@@ -22,7 +22,7 @@ proc ::scid_test::menu_structure::defaultDynamicMenus {} {
         .menu.file.recenttrees \
         .menu.db.copygames \
         .menu.db.importfile \
-        .menu.options.lang \
+        .menu.options.language \
         .menu.options.theme \
     ]
 }
@@ -39,6 +39,12 @@ proc ::scid_test::menu_structure::snapshot {menuPath args} {
     }
 
     return [::scid_test::menu_structure::_snapshotMenu $menuPath $dynamicSet]
+}
+
+proc ::scid_test::menu_structure::format {snapshot} {
+    # Produces a stable, diff-friendly multi-line representation of a snapshot.
+    # The output is a valid Tcl list string (with newlines for readability).
+    return [join [::scid_test::menu_structure::_formatSnapshotLines $snapshot 0] "\n"]
 }
 
 proc ::scid_test::menu_structure::_snapshotMenu {menuPath dynamicSetDict} {
@@ -88,3 +94,70 @@ proc ::scid_test::menu_structure::_snapshotMenu {menuPath dynamicSetDict} {
     return [list menu $menuPath dynamic 0 entries $outEntries]
 }
 
+proc ::scid_test::menu_structure::_formatSnapshotLines {snapshot depth} {
+    set indent [string repeat "  " $depth]
+
+    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
+        error "Invalid menu snapshot: $snapshot"
+    }
+
+    set menuPath [lindex $snapshot 1]
+    set attrs [dict create]
+    foreach {k v} [lrange $snapshot 2 end] {
+        dict set attrs $k $v
+    }
+
+    set dynamic [dict get $attrs dynamic]
+    if {$dynamic} {
+        return [list "${indent}menu $menuPath dynamic 1"]
+    }
+
+    if {![dict exists $attrs entries]} {
+        error "Non-dynamic menu snapshot missing entries: $snapshot"
+    }
+
+    set lines {}
+    lappend lines "${indent}menu $menuPath dynamic 0 entries \{"
+
+    foreach entry [dict get $attrs entries] {
+        set entryLines [::scid_test::menu_structure::_formatEntryLines $entry [expr {$depth + 1}]]
+        foreach line $entryLines {
+            lappend lines $line
+        }
+    }
+
+    lappend lines "${indent}\}"
+    return $lines
+}
+
+proc ::scid_test::menu_structure::_formatEntryLines {entry depth} {
+    set indent [string repeat "  " $depth]
+
+    set attrs [dict create]
+    foreach {k v} $entry {
+        dict set attrs $k $v
+    }
+
+    set type [dict get $attrs type]
+    set label [dict get $attrs label]
+    set acc [dict get $attrs acc]
+    set state [dict get $attrs state]
+    set underline [dict get $attrs underline]
+    set submenu [dict get $attrs submenu]
+
+    set head [list type $type label $label acc $acc state $state underline $underline]
+
+    if {$submenu eq {}} {
+        return [list "${indent}\{${head} submenu \{\}\}"]
+    }
+
+    set lines {}
+    lappend lines "${indent}\{${head} submenu \{"
+
+    foreach line [::scid_test::menu_structure::_formatSnapshotLines $submenu [expr {$depth + 1}]] {
+        lappend lines $line
+    }
+
+    lappend lines "${indent}\}\}"
+    return $lines
+}
