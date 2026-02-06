@@ -1,15 +1,13 @@
+# Entry point for running ScidUp GUI structural tests under plain `tclsh`.
 #
-# Entry point for running a subset of Scid Tcl tests under plain `tclsh`.
-#
-# These tests are intentionally executed in a fresh interpreter per test suite
-# to maximise isolation (and to reduce the chance of cross-suite state bleed).
-#
+# This runner intentionally executes each suite in a fresh interpreter (via
+# `run_one_test.tcl`) to maximise isolation.
 
 set testsDir [file dirname [info script]]
 set runner [file join $testsDir run_one_test.tcl]
 set tclsh [info nameofexecutable]
 
-set patterns [list "*.test" "tools/*.test" "file/*.test" "search/*.test" "utils/*.test" "windows/*.test"]
+set patterns [list "gui/baseline/*.test" "gui/spec/*.test"]
 set suiteFiles {}
 
 foreach pattern $patterns {
@@ -22,9 +20,11 @@ foreach pattern $patterns {
         } else {
             set rel [file tail $file]
         }
+
         if {[string match "l.*.test" [file tail $rel]]} {
             continue
         }
+
         lappend suiteFiles $rel
     }
 }
@@ -38,8 +38,6 @@ foreach rel $suiteFiles {
     if {$rc != 0} {
         set anyFailed 1
 
-        # `exec` throws on non-zero exit status. Preserve the signal that a test
-        # suite failed but keep running subsequent suites.
         if {[dict exists $opts -errorcode] && [lindex [dict get $opts -errorcode] 0] eq "CHILDSTATUS"} {
             set status [lindex [dict get $opts -errorcode] 2]
             puts stderr "Suite failed ($status): $rel"
@@ -51,3 +49,4 @@ foreach rel $suiteFiles {
 }
 
 exit $anyFailed
+

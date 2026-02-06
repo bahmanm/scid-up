@@ -14,8 +14,15 @@ proc ::gui_menubar_baseline_test::setup {} {
 
     ::scid_test::menu_capture::install ::gui_menubar_baseline_test::stubbedCommands \
         -defaultTearoff 1 \
-        -stubBind 1 \
-        -setGlobals 1
+        -stubBind 1
+
+    # Minimal globals expected during file-scope menu initialisation.
+    set ::macOS 0
+    set ::windowsOS 0
+    set ::languages {E}
+    set ::language E
+    set ::langName(E) "English"
+    set ::langUnderline(E) 0
 
     # Force token-based labels regardless of any translation tables that may be
     # initialised by sourced modules.

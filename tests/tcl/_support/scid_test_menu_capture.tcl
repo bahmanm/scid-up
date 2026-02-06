@@ -49,30 +49,16 @@ proc ::scid_test::menu_capture::reset {} {
 #   - `-stubBind 0|1`:
 #       When enabled, stubs `bind` as a no-op (useful when sourcing menu code
 #       that registers bindings at file scope).
-#   - `-setGlobals 0|1`:
-#       When enabled, initialises a minimal set of globals commonly assumed by
-#       `src/tcl/menus.tcl` during initialisation.
 proc ::scid_test::menu_capture::install {registryVar args} {
     variable defaultTearoff
 
     array set opts {
         -defaultTearoff 1
         -stubBind 1
-        -setGlobals 1
     }
     array set opts $args
 
     set defaultTearoff $opts(-defaultTearoff)
-
-    if {$opts(-setGlobals)} {
-        # Minimal globals expected during file-scope menu initialisation.
-        if {![info exists ::macOS]} { set ::macOS 0 }
-        if {![info exists ::windowsOS]} { set ::windowsOS 0 }
-        if {![info exists ::languages]} { set ::languages {E} }
-        if {![info exists ::language]} { set ::language E }
-        if {![info exists ::langName(E)]} { set ::langName(E) "English" }
-        if {![info exists ::langUnderline(E)]} { set ::langUnderline(E) 0 }
-    }
 
     ::scid_test::mocks::stubCommand $registryVar menu {path args} {
         return [::scid_test::menu_capture::createMenu $path {*}$args]
