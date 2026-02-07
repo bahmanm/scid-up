@@ -2531,14 +2531,14 @@ proc ::board::material {w} {
   set rank 0
 
   foreach pType {q r b n p} {
-    set count [expr {"\$$pType"}]
+    set count [set $pType]
     if {$count < 0} {
       addMaterial $count $pType $f $rank $sum
       incr rank [expr {abs($count) }]
     }
   }
   foreach pType {q r b n p} {
-    set count [expr {"\$$pType"}]
+    set count [set $pType]
     if {$count > 0} {
       addMaterial $count $pType $f $rank $sum
       incr rank [expr {abs($count) }]

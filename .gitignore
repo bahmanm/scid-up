@@ -55,3 +55,5 @@ install_manifest.txt
 _tmp/
 CTestTestfile.cmake
 out/
+dist/
+_build/

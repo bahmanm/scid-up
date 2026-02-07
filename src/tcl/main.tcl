@@ -639,11 +639,11 @@ proc toggleRotateBoard {} {
 #   - None.
 # Side effects:
 #   - Toggles material display via `::board::toggleMaterial`.
+#   - Synchronises `::gameInfo(showMaterial)` with the new visibility state.
 ################################################################################
-proc toggleShowMaterial {} {
-    board::toggleMaterial .main.board
+proc toggleShowMaterial { {boardPath .main.board} } {
+    set ::gameInfo(showMaterial) [::board::toggleMaterial $boardPath]
 }
-
 ################################################################################
 # main_mousewheelHandler
 #   Handles mouse-wheel navigation in the main window.
@@ -1804,7 +1804,7 @@ proc CreateMainBoard { {w} } {
   ::board::addNamesBar $w.board gamePlayers
   ::board::addInfoBar $w.board gameInfoBar
 
-  set ::gameInfoBar(tb_BD_Material) "set ::gameInfo(showMaterial) \[::board::toggleMaterial $w.board\]"
+  set ::gameInfoBar(tb_BD_Material) [list ::toggleShowMaterial $w.board]
   set ::gameInfoBar(tb_BD_Scorebar) [list apply {{w} {
     set ::showEvalBar($w) [::board::toggleEvalBar $w.board]
     unset -nocomplain ::mainEvalBarEngineID_
@@ -1904,7 +1904,7 @@ proc CreateGameInfo {} {
           -variable gameInfo(hideNextMove) -offvalue 0 -onvalue 1 -command updateBoard
 
   .main.gameInfo.menu add checkbutton -label GInfoMaterial -variable gameInfo(showMaterial) -offvalue 0 -onvalue 1 \
-          -command { toggleShowMaterial }
+          -command { ::toggleShowMaterial }
 
   .main.gameInfo.menu add checkbutton -label GInfoFEN \
           -variable gameInfo(showFEN) -offvalue 0 -onvalue 1 -command updateBoard
