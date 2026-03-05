@@ -157,6 +157,14 @@ proc ::scid_test::menu_capture::dispatchMenu {menu subcmd args} {
     variable menuOptions
 
     switch -- $subcmd {
+        activate -
+        post -
+        unpost {
+            # No-op UI actions for tests: posting/unposting menus and
+            # activating entries are visual behaviours not required for
+            # structural snapshots.
+            return
+        }
         configure {
             if {[llength $args] % 2 != 0} {
                 error "menu $menu configure expects option/value pairs, got: $args"
