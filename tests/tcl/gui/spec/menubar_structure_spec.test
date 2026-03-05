@@ -2,7 +2,7 @@ package require tcltest 2.5
 namespace import ::tcltest::*
 
 set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
-source [file join $tclTestsDir _support support.tcl]
+source [file join $tclTestsDir lib support.tcl]
 
 namespace eval ::gui_menubar_spec_test {
     variable stubbedCommands {}
