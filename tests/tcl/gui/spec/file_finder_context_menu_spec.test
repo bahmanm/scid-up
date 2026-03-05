@@ -52,39 +52,6 @@ proc ::gui_file_finder_context_menu_spec_test::cleanup {} {
     ::scid_test::menu_capture::reset
 }
 
-proc ::gui_file_finder_context_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_file_finder_context_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_file_finder_context_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_file_finder_context_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_file_finder_context_menu_spec_test::typeLabelPairs {menuSnapshot} {
-    set out {}
-    foreach entry [::gui_file_finder_context_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_file_finder_context_menu_spec_test::asDict $entry]
-        lappend out [list [dict get $d type] [dict get $d label]]
-    }
-    return $out
-}
-
 test gui-file-finder-context-menu-spec-structure-1.0 {File Finder context menu exposes stable actions for a file entry} -setup {
     ::gui_file_finder_context_menu_spec_test::setup
 } -body {
@@ -95,10 +62,9 @@ test gui-file-finder-context-menu-spec-structure-1.0 {File Finder context menu e
     ::file::finder::contextMenu $win $fullPath 1 2 101 202
 
     set snapshot [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
-    ::gui_file_finder_context_menu_spec_test::typeLabelPairs $snapshot
+    ::scid_test::menu_spec::typeLabelPairs $snapshot
 } -cleanup {
     ::gui_file_finder_context_menu_spec_test::cleanup
 } -result {{command FinderCtxOpen} {command FinderCtxBackup} {command FinderCtxCopy} {command FinderCtxMove} {separator {}} {command FinderCtxDelete}}
 
 cleanupTests
-

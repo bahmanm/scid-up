@@ -31,7 +31,7 @@ proc ::gui_board_toolbar_baseline_test::setup {} {
     set ::boardSize 20
 
     # Provide a fake pieces directory so `setPieceFont` sees at least one image.
-    set ::gui_board_toolbar_baseline_test::fakeImgRoot [file join [::scid_test::tempDir] board_toolbar_img_[pid]]
+    set ::gui_board_toolbar_baseline_test::fakeImgRoot [::scid_test::makeTempRoot [namespace current]]
     set piecesDir [file join $::gui_board_toolbar_baseline_test::fakeImgRoot sets pieces Merida]
     file mkdir $piecesDir
     set fakePng [file join $piecesDir fake.png]
@@ -98,7 +98,7 @@ proc ::gui_board_toolbar_baseline_test::cleanup {} {
     set ::gui_board_toolbar_baseline_test::createdImages {}
 
     if {$::gui_board_toolbar_baseline_test::fakeImgRoot ne ""} {
-        catch {file delete -force $::gui_board_toolbar_baseline_test::fakeImgRoot}
+        catch {::scid_test::deleteTempRoot $::gui_board_toolbar_baseline_test::fakeImgRoot}
         set ::gui_board_toolbar_baseline_test::fakeImgRoot ""
     }
 

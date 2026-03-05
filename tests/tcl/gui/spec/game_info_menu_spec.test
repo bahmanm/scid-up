@@ -6,6 +6,7 @@ source [file join $tclTestsDir lib support.tcl]
 
 namespace eval ::gui_game_info_menu_spec_test {
     variable stubbedCommands {}
+    variable tempRoot ""
 }
 
 proc ::gui_game_info_menu_spec_test::setup {} {
@@ -36,7 +37,8 @@ proc ::gui_game_info_menu_spec_test::setup {} {
 
     # Ensure the directories queried by loadPlayersPhoto exist so `glob -directory`
     # does not error.
-    set _photosRoot [::scid_test::tempDir]
+    set ::gui_game_info_menu_spec_test::tempRoot [::scid_test::makeTempRoot [namespace current]]
+    set _photosRoot $::gui_game_info_menu_spec_test::tempRoot
     foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
         set $dirVar $_photosRoot
     }
@@ -80,40 +82,10 @@ proc ::gui_game_info_menu_spec_test::cleanup {} {
     ::scid_test::widgets::reset
     ::scid_test::menu_capture::reset
 
+    ::scid_test::deleteTempRoot $::gui_game_info_menu_spec_test::tempRoot
+    set ::gui_game_info_menu_spec_test::tempRoot ""
+
     unset -nocomplain ::MB3
-}
-
-proc ::gui_game_info_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_game_info_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_game_info_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_game_info_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_game_info_menu_spec_test::typeLabelPairs {menuSnapshot} {
-    set out {}
-    foreach entry [::gui_game_info_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_game_info_menu_spec_test::asDict $entry]
-        lappend out [list [dict get $d type] [dict get $d label]]
-    }
-    return $out
 }
 
 test gui-game-info-menu-spec-structure-1.0 {Game-info context menu exposes stable toggles and delete action} -setup {
@@ -124,10 +96,9 @@ test gui-game-info-menu-spec-structure-1.0 {Game-info context menu exposes stabl
     CreateGameInfo
     set snapshot [::scid_test::menu_structure::snapshot .main.gameInfo.menu]
 
-    ::gui_game_info_menu_spec_test::typeLabelPairs $snapshot
+    ::scid_test::menu_spec::typeLabelPairs $snapshot
 } -cleanup {
     ::gui_game_info_menu_spec_test::cleanup
 } -result {{checkbutton GInfoHideNext} {checkbutton GInfoMaterial} {checkbutton GInfoFEN} {checkbutton GInfoMarks} {checkbutton GInfoWrap} {checkbutton GInfoFullComment} {checkbutton GInfoPhotos} {separator {}} {command GInfoDelete}}
 
 cleanupTests
-

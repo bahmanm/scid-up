@@ -6,6 +6,7 @@ source [file join $tclTestsDir lib support.tcl]
 
 namespace eval ::gui_game_info_menu_baseline_test {
     variable stubbedCommands {}
+    variable tempRoot ""
 }
 
 proc ::gui_game_info_menu_baseline_test::setup {} {
@@ -31,7 +32,8 @@ proc ::gui_game_info_menu_baseline_test::setup {} {
         return
     }
 
-    set _photosRoot [::scid_test::tempDir]
+    set ::gui_game_info_menu_baseline_test::tempRoot [::scid_test::makeTempRoot [namespace current]]
+    set _photosRoot $::gui_game_info_menu_baseline_test::tempRoot
     foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
         set $dirVar $_photosRoot
     }
@@ -71,6 +73,9 @@ proc ::gui_game_info_menu_baseline_test::cleanup {} {
     ::scid_test::widgets::reset
     ::scid_test::menu_capture::reset
 
+    ::scid_test::deleteTempRoot $::gui_game_info_menu_baseline_test::tempRoot
+    set ::gui_game_info_menu_baseline_test::tempRoot ""
+
     unset -nocomplain ::MB3
 }
 
@@ -106,4 +111,3 @@ test gui-game-info-menu-baseline-compare-1.0 {Game-info context menu matches the
 } -result 1
 
 cleanupTests
-

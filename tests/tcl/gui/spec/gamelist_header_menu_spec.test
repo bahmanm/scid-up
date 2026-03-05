@@ -120,53 +120,8 @@ proc ::gui_gamelist_header_menu_spec_test::cleanup {} {
     unset -nocomplain ::tr
 }
 
-proc ::gui_gamelist_header_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_gamelist_header_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_gamelist_header_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_gamelist_header_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_gamelist_header_menu_spec_test::findEntryByLabel {menuSnapshot label} {
-    foreach entry [::gui_gamelist_header_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_gamelist_header_menu_spec_test::asDict $entry]
-        if {[dict get $d label] eq $label} {
-            return $d
-        }
-    }
-    error "Menu [dict get [::gui_gamelist_header_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
-}
-
 proc ::gui_gamelist_header_menu_spec_test::hasLabel {menuSnapshot label} {
-    foreach entry [::gui_gamelist_header_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_gamelist_header_menu_spec_test::asDict $entry]
-        if {[dict get $d label] eq $label} {
-            return 1
-        }
-    }
-    return 0
-}
-
-proc ::gui_gamelist_header_menu_spec_test::entryState {menuSnapshot label} {
-    set entry [::gui_gamelist_header_menu_spec_test::findEntryByLabel $menuSnapshot $label]
-    return [dict get $entry state]
+    expr {[catch {::scid_test::menu_spec::findEntryByLabel $menuSnapshot $label}]==0}
 }
 
 test gui-gamelist-header-menu-spec-stable-actions-1.0 {Game list header menu exposes stable layout and findbar controls} -setup {
@@ -211,7 +166,7 @@ test gui-gamelist-header-menu-spec-addfield-disabled-when-no-empty-cols-1.0 {Gam
     glist.popupmenu_ $w 1 1 100 200 $layout
     set snapshot [::scid_test::menu_structure::snapshot ${w}.header_menu]
 
-    ::gui_gamelist_header_menu_spec_test::entryState $snapshot GlistAddField
+    ::scid_test::menu_spec::entryState $snapshot GlistAddField
 } -cleanup {
     ::gui_gamelist_header_menu_spec_test::cleanup
 } -result disabled

@@ -158,45 +158,6 @@ proc ::gui_gamelist_row_menu_spec_test::cleanup {} {
     unset -nocomplain ::tr
 }
 
-proc ::gui_gamelist_row_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_gamelist_row_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_gamelist_row_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_gamelist_row_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_gamelist_row_menu_spec_test::findEntryByLabel {menuSnapshot label} {
-    foreach entry [::gui_gamelist_row_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_gamelist_row_menu_spec_test::asDict $entry]
-        if {[dict get $d label] eq $label} {
-            return $d
-        }
-    }
-    error "Menu [dict get [::gui_gamelist_row_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
-}
-
-proc ::gui_gamelist_row_menu_spec_test::entryState {menuSnapshot label} {
-    set entry [::gui_gamelist_row_menu_spec_test::findEntryByLabel $menuSnapshot $label]
-    return [dict get $entry state]
-}
-
 test gui-gamelist-row-menu-spec-find-current-game-gating-1.0 {Game list row menu disables FindCurrentGame when not in current base or no current game} -setup {
     ::gui_gamelist_row_menu_spec_test::setup
 } -body {
@@ -230,9 +191,9 @@ test gui-gamelist-row-menu-spec-find-current-game-gating-1.0 {Game list row menu
     set snapshot2 [::scid_test::menu_structure::snapshot ${w}.game_menu]
 
     list \
-        [::gui_gamelist_row_menu_spec_test::entryState $snapshot0 FindCurrentGame] \
-        [::gui_gamelist_row_menu_spec_test::entryState $snapshot1 FindCurrentGame] \
-        [::gui_gamelist_row_menu_spec_test::entryState $snapshot2 FindCurrentGame]
+        [::scid_test::menu_spec::entryState $snapshot0 FindCurrentGame] \
+        [::scid_test::menu_spec::entryState $snapshot1 FindCurrentGame] \
+        [::scid_test::menu_spec::entryState $snapshot2 FindCurrentGame]
 } -cleanup {
     ::gui_gamelist_row_menu_spec_test::cleanup
 } -result {disabled disabled normal}

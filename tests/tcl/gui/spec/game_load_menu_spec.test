@@ -46,39 +46,6 @@ proc ::gui_game_load_menu_spec_test::cleanup {} {
     unset -nocomplain ::tr
 }
 
-proc ::gui_game_load_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_game_load_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_game_load_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_game_load_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_game_load_menu_spec_test::typeLabelPairs {menuSnapshot} {
-    set out {}
-    foreach entry [::gui_game_load_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_game_load_menu_spec_test::asDict $entry]
-        lappend out [list [dict get $d type] [dict get $d label]]
-    }
-    return $out
-}
-
 test gui-game-load-menu-spec-structure-1.0 {Game load menu exposes stable Browse/Load/Merge actions without duplication} -setup {
     ::gui_game_load_menu_spec_test::setup
 } -body {
@@ -91,10 +58,9 @@ test gui-game-load-menu-spec-structure-1.0 {Game load menu exposes stable Browse
     ::game::LoadMenu $w $base $gnum 10 20
 
     set snapshot [::scid_test::menu_structure::snapshot ${w}.gLoadMenu]
-    ::gui_game_load_menu_spec_test::typeLabelPairs $snapshot
+    ::scid_test::menu_spec::typeLabelPairs $snapshot
 } -cleanup {
     ::gui_game_load_menu_spec_test::cleanup
 } -result {{command BrowseGame} {command LoadGame} {command MergeGame}}
 
 cleanupTests
-

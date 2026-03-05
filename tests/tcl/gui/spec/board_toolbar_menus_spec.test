@@ -31,7 +31,7 @@ proc ::gui_board_toolbar_spec_test::setup {} {
     set ::boardSize 20
 
     # Provide a fake pieces directory so `setPieceFont` sees at least one image.
-    set ::gui_board_toolbar_spec_test::fakeImgRoot [file join [::scid_test::tempDir] board_toolbar_img_[pid]]
+    set ::gui_board_toolbar_spec_test::fakeImgRoot [::scid_test::makeTempRoot [namespace current]]
     set piecesDir [file join $::gui_board_toolbar_spec_test::fakeImgRoot sets pieces Merida]
     file mkdir $piecesDir
     set fakePng [file join $piecesDir fake.png]
@@ -98,71 +98,26 @@ proc ::gui_board_toolbar_spec_test::cleanup {} {
     set ::gui_board_toolbar_spec_test::createdImages {}
 
     if {$::gui_board_toolbar_spec_test::fakeImgRoot ne ""} {
-        catch {file delete -force $::gui_board_toolbar_spec_test::fakeImgRoot}
+        catch {::scid_test::deleteTempRoot $::gui_board_toolbar_spec_test::fakeImgRoot}
         set ::gui_board_toolbar_spec_test::fakeImgRoot ""
     }
 
     unset -nocomplain ::MB3
 }
 
-proc ::gui_board_toolbar_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_board_toolbar_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_board_toolbar_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_board_toolbar_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
 proc ::gui_board_toolbar_spec_test::labels {menuSnapshot} {
     set out {}
-    foreach entry [::gui_board_toolbar_spec_test::entries $menuSnapshot] {
-        set d [::gui_board_toolbar_spec_test::asDict $entry]
+    foreach entry [::scid_test::menu_spec::entries $menuSnapshot] {
+        set d [::scid_test::menu_spec::entryDict $entry]
         lappend out [dict get $d label]
     }
     return $out
 }
 
-proc ::gui_board_toolbar_spec_test::findEntryByLabel {menuSnapshot label} {
-    foreach entry [::gui_board_toolbar_spec_test::entries $menuSnapshot] {
-        set d [::gui_board_toolbar_spec_test::asDict $entry]
-        if {[dict get $d label] eq $label} {
-            return $d
-        }
-    }
-    error "Menu [dict get [::gui_board_toolbar_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
-}
-
-proc ::gui_board_toolbar_spec_test::assertCommandAcc {menuSnapshot label expectedAcc} {
-    set entry [::gui_board_toolbar_spec_test::findEntryByLabel $menuSnapshot $label]
-    if {[dict get $entry type] ne "command"} {
-        error "Entry '$label' is not a command (got: [dict get $entry type])"
-    }
-    set actual [dict get $entry acc]
-    if {$actual ne $expectedAcc} {
-        error "Entry '$label' accelerator mismatch (expected '$expectedAcc', got '$actual')"
-    }
-}
-
 proc ::gui_board_toolbar_spec_test::assertLabelsEqual {menuSnapshot expectedLabels} {
     set actual [::gui_board_toolbar_spec_test::labels $menuSnapshot]
     if {$actual ne $expectedLabels} {
-        error "Label mismatch for [dict get [::gui_board_toolbar_spec_test::menuAttrs $menuSnapshot] path]\nExpected: $expectedLabels\nActual:   $actual"
+        error "Label mismatch for [::scid_test::menu_spec::path $menuSnapshot]\nExpected: $expectedLabels\nActual:   $actual"
     }
 }
 
@@ -201,8 +156,8 @@ test gui-board-toolbar-spec-structure-1.0 {Board navigation toolbar menus expose
     ]
 
     # Assert: key accelerators.
-    ::gui_board_toolbar_spec_test::assertCommandAcc $backMenu "  GameStart" "<home>"
-    ::gui_board_toolbar_spec_test::assertCommandAcc $forwMenu "  GameEnd" "<end>"
+    ::scid_test::menu_spec::assertCommandAcc $backMenu "  GameStart" "<home>"
+    ::scid_test::menu_spec::assertCommandAcc $forwMenu "  GameEnd" "<end>"
 
     return 1
 } -cleanup {

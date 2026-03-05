@@ -8,6 +8,7 @@ namespace eval ::gui_main_evalbar_menu_spec_test {
     variable stubbedCommands {}
     variable enginesList {}
     variable engineNames {}
+    variable tempRoot ""
 }
 
 proc ::gui_main_evalbar_menu_spec_test::setup {} {
@@ -33,7 +34,8 @@ proc ::gui_main_evalbar_menu_spec_test::setup {} {
         return
     }
 
-    set _photosRoot [::scid_test::tempDir]
+    set ::gui_main_evalbar_menu_spec_test::tempRoot [::scid_test::makeTempRoot [namespace current]]
+    set _photosRoot $::gui_main_evalbar_menu_spec_test::tempRoot
     foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
         set $dirVar $_photosRoot
     }
@@ -78,42 +80,12 @@ proc ::gui_main_evalbar_menu_spec_test::cleanup {} {
     ::scid_test::mocks::restoreStubs ::gui_main_evalbar_menu_spec_test::stubbedCommands
     ::scid_test::menu_capture::reset
 
+    ::scid_test::deleteTempRoot $::gui_main_evalbar_menu_spec_test::tempRoot
+    set ::gui_main_evalbar_menu_spec_test::tempRoot ""
+
     unset -nocomplain ::mainEvalBarEngineID_
     unset -nocomplain ::mainEvalBarCheckbutton
     unset -nocomplain ::showMainEvalBarArrow
-}
-
-proc ::gui_main_evalbar_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_main_evalbar_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_main_evalbar_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_main_evalbar_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_main_evalbar_menu_spec_test::typeLabelPairs {menuSnapshot} {
-    set out {}
-    foreach entry [::gui_main_evalbar_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_main_evalbar_menu_spec_test::asDict $entry]
-        lappend out [list [dict get $d type] [dict get $d label]]
-    }
-    return $out
 }
 
 test gui-main-evalbar-menu-spec-selected-running-engine-is-checkbutton-1.0 {Eval bar menu shows the selected running engine as a checkbutton and keeps stable tail items} -setup {
@@ -134,7 +106,7 @@ test gui-main-evalbar-menu-spec-selected-running-engine-is-checkbutton-1.0 {Eval
     ::createMainEvalBarMenu .main.board
     set snapshot [::scid_test::menu_structure::snapshot .main.board.evalbar_menu]
 
-    ::gui_main_evalbar_menu_spec_test::typeLabelPairs $snapshot
+    ::scid_test::menu_spec::typeLabelPairs $snapshot
 } -cleanup {
     ::gui_main_evalbar_menu_spec_test::cleanup
 } -result {{checkbutton Stockfish} {command Leela} {separator {}} {command Ethereal} {command Komodo} {command NewLocalEngine} {separator {}} {checkbutton BestMoveArrow} {separator {}} {command Hide}}
@@ -156,7 +128,7 @@ test gui-main-evalbar-menu-spec-no-selected-engine-yields-only-commands-1.0 {Eva
     ::createMainEvalBarMenu .main.board
     set snapshot [::scid_test::menu_structure::snapshot .main.board.evalbar_menu]
 
-    lrange [::gui_main_evalbar_menu_spec_test::typeLabelPairs $snapshot] 0 1
+    lrange [::scid_test::menu_spec::typeLabelPairs $snapshot] 0 1
 } -cleanup {
     ::gui_main_evalbar_menu_spec_test::cleanup
 } -result {{command Stockfish} {command Leela}}

@@ -62,57 +62,10 @@ proc ::gui_tree_mask_context_menu_spec_test::cleanup {} {
     ::scid_test::menu_capture::reset
 }
 
-proc ::gui_tree_mask_context_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_tree_mask_context_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_tree_mask_context_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_tree_mask_context_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_tree_mask_context_menu_spec_test::findEntryByLabel {menuSnapshot label} {
-    foreach entry [::gui_tree_mask_context_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_tree_mask_context_menu_spec_test::asDict $entry]
-        if {[dict get $d label] eq $label} {
-            return $d
-        }
-    }
-    error "Menu [dict get [::gui_tree_mask_context_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
-}
-
-proc ::gui_tree_mask_context_menu_spec_test::submenuOfCascade {menuSnapshot label} {
-    set entry [::gui_tree_mask_context_menu_spec_test::findEntryByLabel $menuSnapshot $label]
-    if {[dict get $entry type] ne "cascade"} {
-        error "Entry '$label' is not a cascade (got: [dict get $entry type])"
-    }
-    return [dict get $entry submenu]
-}
-
-proc ::gui_tree_mask_context_menu_spec_test::entryState {menuSnapshot label} {
-    set entry [::gui_tree_mask_context_menu_spec_test::findEntryByLabel $menuSnapshot $label]
-    return [dict get $entry state]
-}
-
 proc ::gui_tree_mask_context_menu_spec_test::labels {menuSnapshot} {
     set out {}
-    foreach entry [::gui_tree_mask_context_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_tree_mask_context_menu_spec_test::asDict $entry]
+    foreach entry [::scid_test::menu_spec::entries $menuSnapshot] {
+        set d [::scid_test::menu_spec::entryDict $entry]
         lappend out [dict get $d label]
     }
     return $out
@@ -131,14 +84,14 @@ test gui-tree-mask-context-menu-spec-dummy-disables-move-actions-1.0 {Tree mask 
     set snapshot [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
 
     list \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot AddToMask] \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot RemoveFromMask] \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot Nag] \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot "Marker 1"] \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot "Marker 2"] \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot ColorMarker] \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot CommentMove] \
-        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot CommentPosition]
+        [::scid_test::menu_spec::entryState $snapshot AddToMask] \
+        [::scid_test::menu_spec::entryState $snapshot RemoveFromMask] \
+        [::scid_test::menu_spec::entryState $snapshot Nag] \
+        [::scid_test::menu_spec::entryState $snapshot "Marker 1"] \
+        [::scid_test::menu_spec::entryState $snapshot "Marker 2"] \
+        [::scid_test::menu_spec::entryState $snapshot ColorMarker] \
+        [::scid_test::menu_spec::entryState $snapshot CommentMove] \
+        [::scid_test::menu_spec::entryState $snapshot CommentPosition]
 } -cleanup {
     ::gui_tree_mask_context_menu_spec_test::cleanup
 } -result {disabled disabled disabled disabled disabled disabled disabled normal}
@@ -154,8 +107,8 @@ test gui-tree-mask-context-menu-spec-match-moves-split-maps-castles-1.0 {Tree ma
     ::tree::mask::contextMenu $win e4 0 0 0 0
 
     set snapshot [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
-    set matchMoves1 [::gui_tree_mask_context_menu_spec_test::submenuOfCascade $snapshot "AddThisMoveToMask (1)"]
-    set matchMoves2 [::gui_tree_mask_context_menu_spec_test::submenuOfCascade $snapshot "AddThisMoveToMask (2)"]
+    set matchMoves1 [::scid_test::menu_spec::submenuOfCascade $snapshot "AddThisMoveToMask (1)"]
+    set matchMoves2 [::scid_test::menu_spec::submenuOfCascade $snapshot "AddThisMoveToMask (2)"]
 
     list \
         [::gui_tree_mask_context_menu_spec_test::labels $matchMoves1] \

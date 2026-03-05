@@ -8,6 +8,7 @@ namespace eval ::gui_main_evalbar_menu_baseline_test {
     variable stubbedCommands {}
     variable enginesList {}
     variable engineNames {}
+    variable tempRoot ""
 }
 
 proc ::gui_main_evalbar_menu_baseline_test::setup {} {
@@ -31,7 +32,8 @@ proc ::gui_main_evalbar_menu_baseline_test::setup {} {
         return
     }
 
-    set _photosRoot [::scid_test::tempDir]
+    set ::gui_main_evalbar_menu_baseline_test::tempRoot [::scid_test::makeTempRoot [namespace current]]
+    set _photosRoot $::gui_main_evalbar_menu_baseline_test::tempRoot
     foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
         set $dirVar $_photosRoot
     }
@@ -73,6 +75,9 @@ proc ::gui_main_evalbar_menu_baseline_test::setup {} {
 proc ::gui_main_evalbar_menu_baseline_test::cleanup {} {
     ::scid_test::mocks::restoreStubs ::gui_main_evalbar_menu_baseline_test::stubbedCommands
     ::scid_test::menu_capture::reset
+
+    ::scid_test::deleteTempRoot $::gui_main_evalbar_menu_baseline_test::tempRoot
+    set ::gui_main_evalbar_menu_baseline_test::tempRoot ""
 
     unset -nocomplain ::mainEvalBarEngineID_
     unset -nocomplain ::mainEvalBarCheckbutton
@@ -121,4 +126,3 @@ test gui-main-evalbar-menu-baseline-compare-1.0 {Main eval bar context menu matc
 } -result 1
 
 cleanupTests
-

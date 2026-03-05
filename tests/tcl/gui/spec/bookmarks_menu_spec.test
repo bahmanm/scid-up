@@ -73,62 +73,6 @@ proc ::gui_bookmarks_menu_spec_test::cleanup {} {
     ::scid_test::menu_capture::reset
 }
 
-proc ::gui_bookmarks_menu_spec_test::asDict {kvList} {
-    dict create {*}$kvList
-}
-
-proc ::gui_bookmarks_menu_spec_test::menuAttrs {snapshot} {
-    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
-        error "Invalid menu snapshot: $snapshot"
-    }
-
-    set attrs [dict create path [lindex $snapshot 1]]
-    foreach {k v} [lrange $snapshot 2 end] {
-        dict set attrs $k $v
-    }
-    return $attrs
-}
-
-proc ::gui_bookmarks_menu_spec_test::entries {menuSnapshot} {
-    set attrs [::gui_bookmarks_menu_spec_test::menuAttrs $menuSnapshot]
-    if {[dict get $attrs dynamic]} {
-        return {}
-    }
-    return [dict get $attrs entries]
-}
-
-proc ::gui_bookmarks_menu_spec_test::findEntryByLabel {menuSnapshot label} {
-    foreach entry [::gui_bookmarks_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_bookmarks_menu_spec_test::asDict $entry]
-        if {[dict get $d label] eq $label} {
-            return $d
-        }
-    }
-    error "Menu [dict get [::gui_bookmarks_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
-}
-
-proc ::gui_bookmarks_menu_spec_test::submenuOfCascade {menuSnapshot label} {
-    set entry [::gui_bookmarks_menu_spec_test::findEntryByLabel $menuSnapshot $label]
-    if {[dict get $entry type] ne "cascade"} {
-        error "Entry '$label' is not a cascade (got: [dict get $entry type])"
-    }
-    return [dict get $entry submenu]
-}
-
-proc ::gui_bookmarks_menu_spec_test::entryState {menuSnapshot label} {
-    set entry [::gui_bookmarks_menu_spec_test::findEntryByLabel $menuSnapshot $label]
-    return [dict get $entry state]
-}
-
-proc ::gui_bookmarks_menu_spec_test::typeLabelPairs {menuSnapshot} {
-    set out {}
-    foreach entry [::gui_bookmarks_menu_spec_test::entries $menuSnapshot] {
-        set d [::gui_bookmarks_menu_spec_test::asDict $entry]
-        lappend out [list [dict get $d type] [dict get $d label]]
-    }
-    return $out
-}
-
 test gui-bookmarks-menu-spec-skeleton-1.0 {Bookmarks menu exposes a stable skeleton before user entries} -setup {
     ::gui_bookmarks_menu_spec_test::setup
 } -body {
@@ -146,7 +90,7 @@ test gui-bookmarks-menu-spec-skeleton-1.0 {Bookmarks menu exposes a stable skele
     ::bookmarks::RefreshMenu .menu.file.bookmarks
     set snapshot [::scid_test::menu_structure::snapshot .menu.file.bookmarks]
 
-    ::gui_bookmarks_menu_spec_test::typeLabelPairs $snapshot
+    ::scid_test::menu_spec::typeLabelPairs $snapshot
 } -cleanup {
     ::gui_bookmarks_menu_spec_test::cleanup
 } -result {{command FileBookmarksAdd} {cascade FileBookmarksFile} {command FileBookmarksEdit} {command FileBookmarksSub}}
@@ -175,12 +119,12 @@ test gui-bookmarks-menu-spec-canadd-gates-add-and-file-1.0 {Bookmarks menu disab
 
     list \
         [list \
-            [::gui_bookmarks_menu_spec_test::entryState $snapshot0 FileBookmarksAdd] \
-            [::gui_bookmarks_menu_spec_test::entryState $snapshot0 FileBookmarksFile] \
+            [::scid_test::menu_spec::entryState $snapshot0 FileBookmarksAdd] \
+            [::scid_test::menu_spec::entryState $snapshot0 FileBookmarksFile] \
         ] \
         [list \
-            [::gui_bookmarks_menu_spec_test::entryState $snapshot1 FileBookmarksAdd] \
-            [::gui_bookmarks_menu_spec_test::entryState $snapshot1 FileBookmarksFile] \
+            [::scid_test::menu_spec::entryState $snapshot1 FileBookmarksAdd] \
+            [::scid_test::menu_spec::entryState $snapshot1 FileBookmarksFile] \
         ]
 } -cleanup {
     ::gui_bookmarks_menu_spec_test::cleanup
@@ -209,11 +153,11 @@ test gui-bookmarks-menu-spec-submenus-builds-folder-cascades-1.0 {Bookmarks subm
     ::bookmarks::RefreshMenu .menu.file.bookmarks
     set snapshot [::scid_test::menu_structure::snapshot .menu.file.bookmarks]
 
-    set folderA [::gui_bookmarks_menu_spec_test::submenuOfCascade $snapshot "Folder A"]
-    set pairsA [::gui_bookmarks_menu_spec_test::typeLabelPairs $folderA]
+    set folderA [::scid_test::menu_spec::submenuOfCascade $snapshot "Folder A"]
+    set pairsA [::scid_test::menu_spec::typeLabelPairs $folderA]
 
-    set folderMenu [::gui_bookmarks_menu_spec_test::submenuOfCascade $snapshot FileBookmarksFile]
-    set folderPairs [::gui_bookmarks_menu_spec_test::typeLabelPairs $folderMenu]
+    set folderMenu [::scid_test::menu_spec::submenuOfCascade $snapshot FileBookmarksFile]
+    set folderPairs [::scid_test::menu_spec::typeLabelPairs $folderMenu]
 
     list $pairsA $folderPairs
 } -cleanup {
