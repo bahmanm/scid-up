@@ -1,0 +1,167 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_tree_mask_context_menu_spec_test {
+    variable stubbedCommands {}
+    variable posMoves {}
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_tree_mask_context_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_tree_mask_context_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    namespace eval ::tree {}
+    namespace eval ::tree::mask {}
+
+    set ::gui_tree_mask_context_menu_spec_test::posMoves {}
+
+    ::scid_test::mocks::stubCommand ::gui_tree_mask_context_menu_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_tree_mask_context_menu_spec_test::stubbedCommands ::trans {text} {
+        return $text
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_tree_mask_context_menu_spec_test::stubbedCommands sc_pos {subcmd args} {
+        if {$subcmd ne "moves"} {
+            error "sc_pos $subcmd not stubbed in tests"
+        }
+        return $::gui_tree_mask_context_menu_spec_test::posMoves
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_tree_mask_context_menu_spec_test::stubbedCommands winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set w [lindex $args 0]
+                expr {[llength [info commands $w]] > 0}
+            }
+            pointerx { return 100 }
+            pointery { return 200 }
+            default {
+                error "winfo $subcmd not stubbed in tests"
+            }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_tree_mask_context_menu_spec_test::stubbedCommands destroy {w} {
+        catch {rename $w ""}
+        return
+    }
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_tree_mask_context_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::asDict {kvList} {
+    dict create {*}$kvList
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::menuAttrs {snapshot} {
+    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
+        error "Invalid menu snapshot: $snapshot"
+    }
+
+    set attrs [dict create path [lindex $snapshot 1]]
+    foreach {k v} [lrange $snapshot 2 end] {
+        dict set attrs $k $v
+    }
+    return $attrs
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::entries {menuSnapshot} {
+    set attrs [::gui_tree_mask_context_menu_spec_test::menuAttrs $menuSnapshot]
+    if {[dict get $attrs dynamic]} {
+        return {}
+    }
+    return [dict get $attrs entries]
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::findEntryByLabel {menuSnapshot label} {
+    foreach entry [::gui_tree_mask_context_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_tree_mask_context_menu_spec_test::asDict $entry]
+        if {[dict get $d label] eq $label} {
+            return $d
+        }
+    }
+    error "Menu [dict get [::gui_tree_mask_context_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::submenuOfCascade {menuSnapshot label} {
+    set entry [::gui_tree_mask_context_menu_spec_test::findEntryByLabel $menuSnapshot $label]
+    if {[dict get $entry type] ne "cascade"} {
+        error "Entry '$label' is not a cascade (got: [dict get $entry type])"
+    }
+    return [dict get $entry submenu]
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::entryState {menuSnapshot label} {
+    set entry [::gui_tree_mask_context_menu_spec_test::findEntryByLabel $menuSnapshot $label]
+    return [dict get $entry state]
+}
+
+proc ::gui_tree_mask_context_menu_spec_test::labels {menuSnapshot} {
+    set out {}
+    foreach entry [::gui_tree_mask_context_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_tree_mask_context_menu_spec_test::asDict $entry]
+        lappend out [dict get $d label]
+    }
+    return $out
+}
+
+test gui-tree-mask-context-menu-spec-dummy-disables-move-actions-1.0 {Tree mask context menu disables move-specific actions for dummy header rows} -setup {
+    ::gui_tree_mask_context_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows tree.tcl]
+
+    set ::gui_tree_mask_context_menu_spec_test::posMoves {e4 OK}
+
+    set win .treeWin1.f.tl
+    ::tree::mask::contextMenu $win dummy 0 0 0 0
+
+    set snapshot [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
+
+    list \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot AddToMask] \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot RemoveFromMask] \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot Nag] \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot "Marker 1"] \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot "Marker 2"] \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot ColorMarker] \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot CommentMove] \
+        [::gui_tree_mask_context_menu_spec_test::entryState $snapshot CommentPosition]
+} -cleanup {
+    ::gui_tree_mask_context_menu_spec_test::cleanup
+} -result {disabled disabled disabled disabled disabled disabled disabled normal}
+
+test gui-tree-mask-context-menu-spec-match-moves-split-maps-castles-1.0 {Tree mask context menu splits match-moves menus and maps OK/OQ to O-O/O-O-O} -setup {
+    ::gui_tree_mask_context_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows tree.tcl]
+
+    set ::gui_tree_mask_context_menu_spec_test::posMoves {a3 b3 c3 d3 e3 f3 g3 h3 a4 b4 c4 d4 e4 f4 g4 OK OQ}
+
+    set win .treeWin1.f.tl
+    ::tree::mask::contextMenu $win e4 0 0 0 0
+
+    set snapshot [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
+    set matchMoves1 [::gui_tree_mask_context_menu_spec_test::submenuOfCascade $snapshot "AddThisMoveToMask (1)"]
+    set matchMoves2 [::gui_tree_mask_context_menu_spec_test::submenuOfCascade $snapshot "AddThisMoveToMask (2)"]
+
+    list \
+        [::gui_tree_mask_context_menu_spec_test::labels $matchMoves1] \
+        [::gui_tree_mask_context_menu_spec_test::labels $matchMoves2]
+} -cleanup {
+    ::gui_tree_mask_context_menu_spec_test::cleanup
+} -result {{a3 b3 c3 d3 e3 f3 g3 h3 a4 b4 c4 d4 e4 f4 g4 O-O} O-O-O}
+
+cleanupTests
