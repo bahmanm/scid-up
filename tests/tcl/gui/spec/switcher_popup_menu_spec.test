@@ -1,0 +1,194 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_switcher_popup_menu_spec_test {
+    variable stubbedCommands {}
+    variable baseReadonly 0
+    variable autoLoadPresent 0
+}
+
+proc ::gui_switcher_popup_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_switcher_popup_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_switcher_popup_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    namespace eval ::windows {}
+    namespace eval ::windows::switcher {}
+    namespace eval ::file {}
+    namespace eval ::file::autoLoadBases {}
+
+    set ::gui_switcher_popup_menu_spec_test::baseReadonly 0
+    set ::gui_switcher_popup_menu_spec_test::autoLoadPresent 0
+
+    array set ::tr {CompactDatabase CompactDatabase}
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_popup_menu_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_popup_menu_spec_test::stubbedCommands tk_popup {menu x y} {
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_popup_menu_spec_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        set type [lindex $args 0]
+        if {$type ne "photo"} {
+            error "image create $type not stubbed in tests"
+        }
+        set name [lindex $args 1]
+        if {$name eq "" || [string match "-*" $name]} {
+            return "scid_test_image"
+        }
+        return $name
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_popup_menu_spec_test::stubbedCommands sc_base {subcmd args} {
+        if {$subcmd ne "isReadOnly"} {
+            error "sc_base $subcmd not stubbed in tests"
+        }
+        return $::gui_switcher_popup_menu_spec_test::baseReadonly
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_popup_menu_spec_test::stubbedCommands ::file::autoLoadBases.find {baseIdx} {
+        if {$::gui_switcher_popup_menu_spec_test::autoLoadPresent} {
+            return 0
+        }
+        return -1
+    }
+    ::scid_test::mocks::stubCommand ::gui_switcher_popup_menu_spec_test::stubbedCommands ::file::autoLoadBases.add {baseIdx} {
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_switcher_popup_menu_spec_test::stubbedCommands ::file::autoLoadBases.remove {baseIdx} {
+        return
+    }
+}
+
+proc ::gui_switcher_popup_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_switcher_popup_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::tr
+    unset -nocomplain ::sw_DummyCheckbutton
+}
+
+proc ::gui_switcher_popup_menu_spec_test::asDict {kvList} {
+    dict create {*}$kvList
+}
+
+proc ::gui_switcher_popup_menu_spec_test::menuAttrs {snapshot} {
+    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
+        error "Invalid menu snapshot: $snapshot"
+    }
+
+    set attrs [dict create path [lindex $snapshot 1]]
+    foreach {k v} [lrange $snapshot 2 end] {
+        dict set attrs $k $v
+    }
+    return $attrs
+}
+
+proc ::gui_switcher_popup_menu_spec_test::entries {menuSnapshot} {
+    set attrs [::gui_switcher_popup_menu_spec_test::menuAttrs $menuSnapshot]
+    if {[dict get $attrs dynamic]} {
+        return {}
+    }
+    return [dict get $attrs entries]
+}
+
+proc ::gui_switcher_popup_menu_spec_test::hasLabel {menuSnapshot label} {
+    foreach entry [::gui_switcher_popup_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_switcher_popup_menu_spec_test::asDict $entry]
+        if {[dict get $d label] eq $label} {
+            return 1
+        }
+    }
+    return 0
+}
+
+proc ::gui_switcher_popup_menu_spec_test::entryType {menuSnapshot label} {
+    foreach entry [::gui_switcher_popup_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_switcher_popup_menu_spec_test::asDict $entry]
+        if {[dict get $d label] eq $label} {
+            return [dict get $d type]
+        }
+    }
+    error "Menu [dict get [::gui_switcher_popup_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
+}
+
+test gui-switcher-popup-menu-spec-readonly-hides-import-1.0 {Switcher popup menu omits import when the base is read-only} -setup {
+    ::gui_switcher_popup_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows switcher.tcl]
+
+    set ::clipbase_db 0
+
+    set w .sw.c.f1
+    menu ${w}.menu
+
+    set ::gui_switcher_popup_menu_spec_test::baseReadonly 1
+    ::windows::switcher::popupmenu "" $w 10 20 1
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.menu]
+
+    ::gui_switcher_popup_menu_spec_test::hasLabel $snapshot ToolsImportFile
+} -cleanup {
+    ::gui_switcher_popup_menu_spec_test::cleanup
+} -result 0
+
+test gui-switcher-popup-menu-spec-clipbase-shows-reset-1.0 {Switcher popup menu shows clipbase reset action instead of close/compact} -setup {
+    ::gui_switcher_popup_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows switcher.tcl]
+
+    set ::clipbase_db 9
+
+    set w .sw.c.f1
+    menu ${w}.menu
+
+    ::windows::switcher::popupmenu "" $w 10 20 9
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.menu]
+
+    list \
+        [::gui_switcher_popup_menu_spec_test::hasLabel $snapshot EditReset] \
+        [::gui_switcher_popup_menu_spec_test::hasLabel $snapshot FileClose] \
+        [::gui_switcher_popup_menu_spec_test::hasLabel $snapshot CompactDatabase]
+} -cleanup {
+    ::gui_switcher_popup_menu_spec_test::cleanup
+} -result {1 0 0}
+
+test gui-switcher-popup-menu-spec-autoload-checkbutton-1.0 {Switcher popup menu reflects autoload membership via sw_DummyCheckbutton} -setup {
+    ::gui_switcher_popup_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows switcher.tcl]
+
+    set ::clipbase_db 0
+
+    set w .sw.c.f1
+    menu ${w}.menu
+
+    set ::gui_switcher_popup_menu_spec_test::autoLoadPresent 0
+    ::windows::switcher::popupmenu "" $w 10 20 1
+    set snapshot0 [::scid_test::menu_structure::snapshot ${w}.menu]
+    set v0 $::sw_DummyCheckbutton
+
+    set ::gui_switcher_popup_menu_spec_test::autoLoadPresent 1
+    ::windows::switcher::popupmenu "" $w 10 20 1
+    set snapshot1 [::scid_test::menu_structure::snapshot ${w}.menu]
+    set v1 $::sw_DummyCheckbutton
+
+    list \
+        [list [::gui_switcher_popup_menu_spec_test::entryType $snapshot0 LoadatStartup] $v0] \
+        [list [::gui_switcher_popup_menu_spec_test::entryType $snapshot1 LoadatStartup] $v1]
+} -cleanup {
+    ::gui_switcher_popup_menu_spec_test::cleanup
+} -result {{checkbutton 0} {checkbutton 1}}
+
+cleanupTests
