@@ -1,0 +1,178 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_pgn_context_menu_spec_test {
+    variable stubbedCommands {}
+    variable scVarLevel 0
+}
+
+proc ::gui_pgn_context_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_pgn_context_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_pgn_context_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    namespace eval ::pgn {}
+    namespace eval ::board {}
+    namespace eval ::htext {}
+
+    set ::gui_pgn_context_menu_spec_test::scVarLevel 0
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_context_menu_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_context_menu_spec_test::stubbedCommands sc_var {subcmd args} {
+        if {$subcmd ne "level"} {
+            error "sc_var $subcmd not stubbed in tests"
+        }
+        return $::gui_pgn_context_menu_spec_test::scVarLevel
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_context_menu_spec_test::stubbedCommands tk_popup {menu x y} {
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_context_menu_spec_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} {
+            error "winfo $subcmd not stubbed in tests"
+        }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_context_menu_spec_test::stubbedCommands destroy {w} {
+        catch {rename $w ""}
+        return
+    }
+}
+
+proc ::gui_pgn_context_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_pgn_context_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+}
+
+proc ::gui_pgn_context_menu_spec_test::asDict {kvList} {
+    dict create {*}$kvList
+}
+
+proc ::gui_pgn_context_menu_spec_test::menuAttrs {snapshot} {
+    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
+        error "Invalid menu snapshot: $snapshot"
+    }
+
+    set attrs [dict create path [lindex $snapshot 1]]
+    foreach {k v} [lrange $snapshot 2 end] {
+        dict set attrs $k $v
+    }
+    return $attrs
+}
+
+proc ::gui_pgn_context_menu_spec_test::entries {menuSnapshot} {
+    set attrs [::gui_pgn_context_menu_spec_test::menuAttrs $menuSnapshot]
+    if {[dict get $attrs dynamic]} {
+        return {}
+    }
+    return [dict get $attrs entries]
+}
+
+proc ::gui_pgn_context_menu_spec_test::findEntryByLabel {menuSnapshot label} {
+    foreach entry [::gui_pgn_context_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_pgn_context_menu_spec_test::asDict $entry]
+        if {[dict get $d label] eq $label} {
+            return $d
+        }
+    }
+    error "Menu [dict get [::gui_pgn_context_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
+}
+
+proc ::gui_pgn_context_menu_spec_test::submenuOfCascade {menuSnapshot label} {
+    set entry [::gui_pgn_context_menu_spec_test::findEntryByLabel $menuSnapshot $label]
+    if {[dict get $entry type] ne "cascade"} {
+        error "Entry '$label' is not a cascade (got: [dict get $entry type])"
+    }
+    return [dict get $entry submenu]
+}
+
+proc ::gui_pgn_context_menu_spec_test::entryState {menuSnapshot label} {
+    set entry [::gui_pgn_context_menu_spec_test::findEntryByLabel $menuSnapshot $label]
+    return [dict get $entry state]
+}
+
+proc ::gui_pgn_context_menu_spec_test::labels {menuSnapshot} {
+    set out {}
+    foreach entry [::gui_pgn_context_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_pgn_context_menu_spec_test::asDict $entry]
+        lappend out [dict get $d label]
+    }
+    return $out
+}
+
+test gui-pgn-context-menu-spec-structure-1.0 {PGN text context menu exposes stable evaluation cascades} -setup {
+    ::gui_pgn_context_menu_spec_test::setup
+} -body {
+    # Arrange/Act: build the context menu under the harness.
+    source [file join [::scid_test::tclDir] windows pgn.tcl]
+
+    set win .pgnWin.text
+    set ::gui_pgn_context_menu_spec_test::scVarLevel 1
+    ::pgn::contextMenu $win 10 20
+
+    set snapshot [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
+
+    # Assert: evaluation cascades exist and have stable labels.
+    set evals1 [::gui_pgn_context_menu_spec_test::submenuOfCascade $snapshot "!  ?  ..."]
+    set evals2 [::gui_pgn_context_menu_spec_test::submenuOfCascade $snapshot "+-  +/-  ..."]
+
+    set expectedEvals1 {Clear ! ? !? ?! !! ??}
+    set expectedEvals2 {Clear = ~ += =+ +/- -/+ +- -+ +-- --+ N D}
+
+    if {[::gui_pgn_context_menu_spec_test::labels $evals1] ne $expectedEvals1} {
+        error "Evals1 cascade mismatch"
+    }
+    if {[::gui_pgn_context_menu_spec_test::labels $evals2] ne $expectedEvals2} {
+        error "Evals2 cascade mismatch"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_pgn_context_menu_spec_test::cleanup
+} -result 1
+
+test gui-pgn-context-menu-spec-variation-gates-edit-actions-1.0 {PGN edit variation actions are disabled when no variation is selected} -setup {
+    ::gui_pgn_context_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows pgn.tcl]
+
+    set win .pgnWin.text
+
+    set ::gui_pgn_context_menu_spec_test::scVarLevel 0
+    ::pgn::contextMenu $win 10 20
+    set snapshot0 [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
+
+    set ::gui_pgn_context_menu_spec_test::scVarLevel 1
+    ::pgn::contextMenu $win 10 20
+    set snapshot1 [::scid_test::menu_structure::snapshot ${win}.ctxtMenu]
+
+    list \
+        [list \
+            [::gui_pgn_context_menu_spec_test::entryState $snapshot0 EditDelete] \
+            [::gui_pgn_context_menu_spec_test::entryState $snapshot0 EditFirst] \
+            [::gui_pgn_context_menu_spec_test::entryState $snapshot0 EditMain] \
+        ] \
+        [list \
+            [::gui_pgn_context_menu_spec_test::entryState $snapshot1 EditDelete] \
+            [::gui_pgn_context_menu_spec_test::entryState $snapshot1 EditFirst] \
+            [::gui_pgn_context_menu_spec_test::entryState $snapshot1 EditMain] \
+        ]
+} -cleanup {
+    ::gui_pgn_context_menu_spec_test::cleanup
+} -result {{disabled disabled disabled} {normal normal normal}}
+
+cleanupTests
+

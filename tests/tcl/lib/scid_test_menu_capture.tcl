@@ -90,6 +90,11 @@ proc ::scid_test::menu_capture::createMenu {path args} {
     interp alias {} $path {} ::scid_test::menu_capture::dispatchMenu $path
     lappend created $path
 
+    # A menu path can be destroyed and later re-created within a single test.
+    # Clear any prior captured state for that path.
+    set menuEntries($path) {}
+    array unset menuOptions "$path,*"
+
     set menuOptions($path,-tearoff) $tearoff
     if {$tearoff} {
         # Mimic Tk's implicit tearoff entry at index 0.
