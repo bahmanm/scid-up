@@ -1,0 +1,240 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_gamelist_row_menu_spec_test {
+    variable stubbedCommands {}
+    variable selected "42_0"
+    variable baseCurrent 1
+    variable baseForWidget 1
+    variable gameNumber 1
+}
+
+proc ::gui_gamelist_row_menu_spec_test::defineTreeview {path} {
+    catch {rename $path ""}
+    interp alias {} $path {} ::gui_gamelist_row_menu_spec_test::dispatchTreeview $path
+    return $path
+}
+
+proc ::gui_gamelist_row_menu_spec_test::dispatchTreeview {path subcmd args} {
+    switch -- $subcmd {
+        identify {
+            set what [lindex $args 0]
+            switch -- $what {
+                region { return "cell" }
+                default { error "treeview identify $what not stubbed" }
+            }
+        }
+        selection {
+            return $::gui_gamelist_row_menu_spec_test::selected
+        }
+        default {
+            error "treeview $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::gui_gamelist_row_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_gamelist_row_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_gamelist_row_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    namespace eval ::windows {}
+    namespace eval ::windows::gamelist {}
+    namespace eval ::file {}
+    namespace eval ::notify {}
+    namespace eval ::game {}
+
+    set ::gui_gamelist_row_menu_spec_test::selected "42_0"
+    set ::gui_gamelist_row_menu_spec_test::baseCurrent 1
+    set ::gui_gamelist_row_menu_spec_test::baseForWidget 1
+    set ::gui_gamelist_row_menu_spec_test::gameNumber 1
+
+    array set ::tr {
+        LoadGame LoadGame
+        BrowseGame BrowseGame
+        MergeGame MergeGame
+        GlistMergeGameInBase GlistMergeGameInBase
+        CopyGameTo CopyGameTo
+        DeleteGame DeleteGame
+        UndeleteGame UndeleteGame
+        Filter Filter
+        SearchReset SearchReset
+        SearchNegate SearchNegate
+        GlistRemoveGameAndAboveFromFilter GlistRemoveGameAndAboveFromFilter
+        GlistRemoveThisGameFromFilter GlistRemoveThisGameFromFilter
+        GlistRemoveGameAndBelowFromFilter GlistRemoveGameAndBelowFromFilter
+        GlistDeleteAllGames GlistDeleteAllGames
+        GlistUndeleteAllGames GlistUndeleteAllGames
+        ToolsExpFilter ToolsExpFilter
+        CopyGames CopyGames
+        FindBar FindBar
+        FindCurrentGame FindCurrentGame
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands tk_popup {menu x y} {
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands event {subcmd args} {
+        if {$subcmd ne "generate"} {
+            error "event $subcmd not stubbed in tests"
+        }
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set w [lindex $args 0]
+                expr {[llength [info commands $w]] > 0}
+            }
+            parent { return ".glistWin1.games" }
+            default { error "winfo $subcmd not stubbed in tests" }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands destroy {w} {
+        catch {rename $w ""}
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands sc_game {subcmd args} {
+        if {$subcmd ne "number"} {
+            error "sc_game $subcmd not stubbed in tests"
+        }
+        return $::gui_gamelist_row_menu_spec_test::gameNumber
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands sc_base {subcmd args} {
+        switch -- $subcmd {
+            current { return $::gui_gamelist_row_menu_spec_test::baseCurrent }
+            gameflag {
+                # `sc_base gameflag <base> <idx> get del` queried for Delete/Undelete label
+                # Default to "not deleted".
+                return 0
+            }
+            list { return {} }
+            isReadOnly { return 0 }
+            default {
+                error "sc_base $subcmd not stubbed in tests"
+            }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands ::file::SwitchToBase {base {arg 0}} {
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        set type [lindex $args 0]
+        if {$type ni {"photo" "bitmap"}} {
+            error "image create $type not stubbed in tests"
+        }
+        set name [lindex $args 1]
+        if {$name eq "" || [string match "-*" $name]} {
+            return "scid_test_image"
+        }
+        return $name
+    }
+}
+
+proc ::gui_gamelist_row_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_gamelist_row_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::tr
+}
+
+proc ::gui_gamelist_row_menu_spec_test::asDict {kvList} {
+    dict create {*}$kvList
+}
+
+proc ::gui_gamelist_row_menu_spec_test::menuAttrs {snapshot} {
+    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
+        error "Invalid menu snapshot: $snapshot"
+    }
+
+    set attrs [dict create path [lindex $snapshot 1]]
+    foreach {k v} [lrange $snapshot 2 end] {
+        dict set attrs $k $v
+    }
+    return $attrs
+}
+
+proc ::gui_gamelist_row_menu_spec_test::entries {menuSnapshot} {
+    set attrs [::gui_gamelist_row_menu_spec_test::menuAttrs $menuSnapshot]
+    if {[dict get $attrs dynamic]} {
+        return {}
+    }
+    return [dict get $attrs entries]
+}
+
+proc ::gui_gamelist_row_menu_spec_test::findEntryByLabel {menuSnapshot label} {
+    foreach entry [::gui_gamelist_row_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_gamelist_row_menu_spec_test::asDict $entry]
+        if {[dict get $d label] eq $label} {
+            return $d
+        }
+    }
+    error "Menu [dict get [::gui_gamelist_row_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
+}
+
+proc ::gui_gamelist_row_menu_spec_test::entryState {menuSnapshot label} {
+    set entry [::gui_gamelist_row_menu_spec_test::findEntryByLabel $menuSnapshot $label]
+    return [dict get $entry state]
+}
+
+test gui-gamelist-row-menu-spec-find-current-game-gating-1.0 {Game list row menu disables FindCurrentGame when not in current base or no current game} -setup {
+    ::gui_gamelist_row_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_row_menu_spec_test::defineTreeview $w
+
+    menu ${w}.game_menu
+
+    set layout Full
+    set ::glistBase($w) 2
+    set ::glistFilter($w) dbfilter
+    set ::glist_FindBar($layout) 0
+
+    set ::gui_gamelist_row_menu_spec_test::baseCurrent 1
+    set ::gui_gamelist_row_menu_spec_test::gameNumber 1
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot0 [::scid_test::menu_structure::snapshot ${w}.game_menu]
+
+    set ::glistBase($w) 1
+    set ::gui_gamelist_row_menu_spec_test::baseCurrent 1
+    set ::gui_gamelist_row_menu_spec_test::gameNumber 0
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot1 [::scid_test::menu_structure::snapshot ${w}.game_menu]
+
+    set ::glistBase($w) 1
+    set ::gui_gamelist_row_menu_spec_test::baseCurrent 1
+    set ::gui_gamelist_row_menu_spec_test::gameNumber 7
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot2 [::scid_test::menu_structure::snapshot ${w}.game_menu]
+
+    list \
+        [::gui_gamelist_row_menu_spec_test::entryState $snapshot0 FindCurrentGame] \
+        [::gui_gamelist_row_menu_spec_test::entryState $snapshot1 FindCurrentGame] \
+        [::gui_gamelist_row_menu_spec_test::entryState $snapshot2 FindCurrentGame]
+} -cleanup {
+    ::gui_gamelist_row_menu_spec_test::cleanup
+} -result {disabled disabled normal}
+
+cleanupTests
