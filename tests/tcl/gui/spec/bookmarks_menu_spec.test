@@ -1,0 +1,223 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_bookmarks_menu_spec_test {
+    variable stubbedCommands {}
+    variable canAdd 1
+}
+
+proc ::gui_bookmarks_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_bookmarks_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_bookmarks_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    set ::gui_bookmarks_menu_spec_test::canAdd 1
+
+    set ::languages {E}
+    set ::language E
+    set ::langName(E) "English"
+    set ::langUnderline(E) 0
+
+    ::scid_test::mocks::stubCommand ::gui_bookmarks_menu_spec_test::stubbedCommands configMenuText {menu entry tag lang} {
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_bookmarks_menu_spec_test::stubbedCommands destroy {w} {
+        catch {rename $w ""}
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_bookmarks_menu_spec_test::stubbedCommands winfo {subcmd args} {
+        set w [lindex $args 0]
+        switch -- $subcmd {
+            parent {
+                if {![regexp {^(.+)\.[^.]+$} $w -> parent]} {
+                    return "."
+                }
+                if {$parent eq ""} { return "." }
+                return $parent
+            }
+            children {
+                set out {}
+                foreach m [namespace eval ::scid_test::menu_capture { variable created; set created }] {
+                    if {![llength [info commands $m]]} {
+                        continue
+                    }
+                    if {$m eq $w} {
+                        continue
+                    }
+                    if {[winfo parent $m] eq $w} {
+                        lappend out $m
+                    }
+                }
+                return $out
+            }
+            exists {
+                expr {[llength [info commands $w]] > 0}
+            }
+            default {
+                error "winfo $subcmd not stubbed in tests"
+            }
+        }
+    }
+}
+
+proc ::gui_bookmarks_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_bookmarks_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+}
+
+proc ::gui_bookmarks_menu_spec_test::asDict {kvList} {
+    dict create {*}$kvList
+}
+
+proc ::gui_bookmarks_menu_spec_test::menuAttrs {snapshot} {
+    if {[llength $snapshot] < 4 || [lindex $snapshot 0] ne "menu"} {
+        error "Invalid menu snapshot: $snapshot"
+    }
+
+    set attrs [dict create path [lindex $snapshot 1]]
+    foreach {k v} [lrange $snapshot 2 end] {
+        dict set attrs $k $v
+    }
+    return $attrs
+}
+
+proc ::gui_bookmarks_menu_spec_test::entries {menuSnapshot} {
+    set attrs [::gui_bookmarks_menu_spec_test::menuAttrs $menuSnapshot]
+    if {[dict get $attrs dynamic]} {
+        return {}
+    }
+    return [dict get $attrs entries]
+}
+
+proc ::gui_bookmarks_menu_spec_test::findEntryByLabel {menuSnapshot label} {
+    foreach entry [::gui_bookmarks_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_bookmarks_menu_spec_test::asDict $entry]
+        if {[dict get $d label] eq $label} {
+            return $d
+        }
+    }
+    error "Menu [dict get [::gui_bookmarks_menu_spec_test::menuAttrs $menuSnapshot] path] has no entry labelled: $label"
+}
+
+proc ::gui_bookmarks_menu_spec_test::submenuOfCascade {menuSnapshot label} {
+    set entry [::gui_bookmarks_menu_spec_test::findEntryByLabel $menuSnapshot $label]
+    if {[dict get $entry type] ne "cascade"} {
+        error "Entry '$label' is not a cascade (got: [dict get $entry type])"
+    }
+    return [dict get $entry submenu]
+}
+
+proc ::gui_bookmarks_menu_spec_test::entryState {menuSnapshot label} {
+    set entry [::gui_bookmarks_menu_spec_test::findEntryByLabel $menuSnapshot $label]
+    return [dict get $entry state]
+}
+
+proc ::gui_bookmarks_menu_spec_test::typeLabelPairs {menuSnapshot} {
+    set out {}
+    foreach entry [::gui_bookmarks_menu_spec_test::entries $menuSnapshot] {
+        set d [::gui_bookmarks_menu_spec_test::asDict $entry]
+        lappend out [list [dict get $d type] [dict get $d label]]
+    }
+    return $out
+}
+
+test gui-bookmarks-menu-spec-skeleton-1.0 {Bookmarks menu exposes a stable skeleton before user entries} -setup {
+    ::gui_bookmarks_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] file bookmark.tcl]
+
+    ::scid_test::mocks::stubCommand ::gui_bookmarks_menu_spec_test::stubbedCommands ::bookmarks::CanAdd {} {
+        return $::gui_bookmarks_menu_spec_test::canAdd
+    }
+
+    menu .menu.file.bookmarks
+    set bookmarks(data) {}
+    set bookmarks(subMenus) 0
+    set bookmarks(menuNum) 0
+
+    ::bookmarks::RefreshMenu .menu.file.bookmarks
+    set snapshot [::scid_test::menu_structure::snapshot .menu.file.bookmarks]
+
+    ::gui_bookmarks_menu_spec_test::typeLabelPairs $snapshot
+} -cleanup {
+    ::gui_bookmarks_menu_spec_test::cleanup
+} -result {{command FileBookmarksAdd} {cascade FileBookmarksFile} {command FileBookmarksEdit} {command FileBookmarksSub}}
+
+test gui-bookmarks-menu-spec-canadd-gates-add-and-file-1.0 {Bookmarks menu disables Add/File entries when the current game cannot be bookmarked} -setup {
+    ::gui_bookmarks_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] file bookmark.tcl]
+
+    ::scid_test::mocks::stubCommand ::gui_bookmarks_menu_spec_test::stubbedCommands ::bookmarks::CanAdd {} {
+        return $::gui_bookmarks_menu_spec_test::canAdd
+    }
+
+    menu .menu.file.bookmarks
+    set bookmarks(data) {}
+    set bookmarks(subMenus) 0
+    set bookmarks(menuNum) 0
+
+    set ::gui_bookmarks_menu_spec_test::canAdd 0
+    ::bookmarks::RefreshMenu .menu.file.bookmarks
+    set snapshot0 [::scid_test::menu_structure::snapshot .menu.file.bookmarks]
+
+    set ::gui_bookmarks_menu_spec_test::canAdd 1
+    ::bookmarks::RefreshMenu .menu.file.bookmarks
+    set snapshot1 [::scid_test::menu_structure::snapshot .menu.file.bookmarks]
+
+    list \
+        [list \
+            [::gui_bookmarks_menu_spec_test::entryState $snapshot0 FileBookmarksAdd] \
+            [::gui_bookmarks_menu_spec_test::entryState $snapshot0 FileBookmarksFile] \
+        ] \
+        [list \
+            [::gui_bookmarks_menu_spec_test::entryState $snapshot1 FileBookmarksAdd] \
+            [::gui_bookmarks_menu_spec_test::entryState $snapshot1 FileBookmarksFile] \
+        ]
+} -cleanup {
+    ::gui_bookmarks_menu_spec_test::cleanup
+} -result {{disabled disabled} {normal normal}}
+
+test gui-bookmarks-menu-spec-submenus-builds-folder-cascades-1.0 {Bookmarks submenu mode builds folder cascades with game items} -setup {
+    ::gui_bookmarks_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] file bookmark.tcl]
+
+    ::scid_test::mocks::stubCommand ::gui_bookmarks_menu_spec_test::stubbedCommands ::bookmarks::CanAdd {} {
+        return $::gui_bookmarks_menu_spec_test::canAdd
+    }
+
+    menu .menu.file.bookmarks
+    set bookmarks(data) [list \
+        [list f "Folder A"] \
+        [list g "Game 1"] \
+        [list g "Game 2"] \
+        [list f "Folder B"] \
+        [list g "Game 3"] \
+    ]
+    set bookmarks(subMenus) 1
+    set bookmarks(menuNum) 0
+
+    ::bookmarks::RefreshMenu .menu.file.bookmarks
+    set snapshot [::scid_test::menu_structure::snapshot .menu.file.bookmarks]
+
+    set folderA [::gui_bookmarks_menu_spec_test::submenuOfCascade $snapshot "Folder A"]
+    set pairsA [::gui_bookmarks_menu_spec_test::typeLabelPairs $folderA]
+
+    set folderMenu [::gui_bookmarks_menu_spec_test::submenuOfCascade $snapshot FileBookmarksFile]
+    set folderPairs [::gui_bookmarks_menu_spec_test::typeLabelPairs $folderMenu]
+
+    list $pairsA $folderPairs
+} -cleanup {
+    ::gui_bookmarks_menu_spec_test::cleanup
+} -result {{{command {Game 1}} {command {Game 2}}} {{command {Folder A}} {command {Folder B}}}}
+
+cleanupTests
