@@ -1,0 +1,119 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_game_info_panel_spec_test {
+    variable stubbedCommands {}
+    variable tempRoot ""
+}
+
+proc ::gui_game_info_panel_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_game_info_panel_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_game_info_panel_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    set ::MB3 3
+    set ::macOS 0
+
+    # `main.tcl` executes `loadPlayersPhoto` at file scope, which requires Tk's
+    # `image` command. Provide a minimal stub so the file can be sourced under
+    # plain `tclsh`.
+    ::scid_test::mocks::stubCommand ::gui_game_info_panel_spec_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        set type [lindex $args 0]
+        if {$type ne "photo"} {
+            error "image create $type not stubbed in tests"
+        }
+        return
+    }
+
+    # Ensure the directories queried by loadPlayersPhoto exist so `glob -directory`
+    # does not error.
+    set ::gui_game_info_panel_spec_test::tempRoot [::scid_test::makeTempRoot [namespace current]]
+    set _photosRoot $::gui_game_info_panel_spec_test::tempRoot
+    foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
+        set $dirVar $_photosRoot
+    }
+    file mkdir [file join $::scidShareDir photos]
+    unset _photosRoot
+
+    namespace eval ::htext {}
+    ::scid_test::mocks::stubCommand ::gui_game_info_panel_spec_test::stubbedCommands ::htext::init {w} {
+        return
+    }
+
+    # CreateGameInfo uses ttk labels for the player photos.
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    ::scid_test::mocks::stubCommand ::gui_game_info_panel_spec_test::stubbedCommands ::ttk::label {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+
+    # CreateGameInfo relies on autoscrollText to create `.main.gameInfo.text`.
+    ::scid_test::mocks::stubCommand ::gui_game_info_panel_spec_test::stubbedCommands autoscrollText {axis frame textWidget class} {
+        if {![llength [info commands $textWidget]]} {
+            ::scid_test::widgets::defineTextWidget $textWidget
+        }
+        return
+    }
+
+    # Force token-based labels (menu label translation is not under test here).
+    ::scid_test::mocks::stubCommand ::gui_game_info_panel_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+    ::scid_test::mocks::stubCommand ::gui_game_info_panel_spec_test::stubbedCommands translateMenuLabels {menu} {
+        return
+    }
+}
+
+proc ::gui_game_info_panel_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_game_info_panel_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::deleteTempRoot $::gui_game_info_panel_spec_test::tempRoot
+    set ::gui_game_info_panel_spec_test::tempRoot ""
+
+    unset -nocomplain ::MB3
+}
+
+test gui-game-info-panel-spec-widget-skeleton-1.0 {Game-info panel creates text widget and photo labels with stable core configuration} -setup {
+    ::gui_game_info_panel_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] main.tcl]
+
+    CreateGameInfo
+
+    list \
+        [llength [info commands .main.gameInfo.text]] \
+        [llength [info commands .main.photoW]] \
+        [llength [info commands .main.photoB]] \
+        [llength [info commands .main.gameInfo.menu]] \
+        [::scid_test::widgets::getState .main.gameInfo.text -width] \
+        [::scid_test::widgets::getState .main.gameInfo.text -height] \
+        [::scid_test::widgets::getState .main.gameInfo.text -wrap] \
+        [::scid_test::widgets::getState .main.gameInfo.text -state] \
+        [::scid_test::widgets::getState .main.gameInfo.text -cursor] \
+        [::scid_test::widgets::getState .main.photoW -image] \
+        [::scid_test::widgets::getState .main.photoW -anchor] \
+        [::scid_test::widgets::getState .main.photoB -image] \
+        [::scid_test::widgets::getState .main.photoB -anchor]
+} -cleanup {
+    ::gui_game_info_panel_spec_test::cleanup
+} -result {1 1 1 1 20 6 none disabled top_left_arrow photoW ne photoB ne}
+
+cleanupTests
+
