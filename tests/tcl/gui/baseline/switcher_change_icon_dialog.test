@@ -1,0 +1,230 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_switcher_change_icon_baseline_test {
+    variable stubbedCommands {}
+    variable bindCalls {}
+
+    variable treeItems
+    array set treeItems {}
+    variable treeConfig
+    array set treeConfig {}
+}
+
+proc ::gui_switcher_change_icon_baseline_test::defineTreeview {path} {
+    catch {rename $path ""}
+    interp alias {} $path {} ::gui_switcher_change_icon_baseline_test::dispatchTreeview $path
+    return $path
+}
+
+proc ::gui_switcher_change_icon_baseline_test::dispatchTreeview {path subcmd args} {
+    switch -- $subcmd {
+        configure {
+            if {[llength $args] % 2 != 0} {
+                error "treeview $path configure expects option/value pairs, got: $args"
+            }
+            foreach {opt val} $args {
+                set ::gui_switcher_change_icon_baseline_test::treeConfig($path,$opt) $val
+            }
+            return
+        }
+        insert {
+            set opts [lrange $args 2 end]
+            set id ""
+            set image ""
+            set text ""
+            for {set i 0} {$i < [llength $opts]} {incr i 2} {
+                set opt [lindex $opts $i]
+                set val [lindex $opts [expr {$i + 1}]]
+                switch -- $opt {
+                    -id { set id $val }
+                    -image { set image $val }
+                    -text { set text $val }
+                }
+            }
+            set ::gui_switcher_change_icon_baseline_test::treeItems($path,$id) [list -text $text -image $image]
+            return $id
+        }
+        selection { return {} }
+        yview { return }
+        default { return }
+    }
+}
+
+proc ::gui_switcher_change_icon_baseline_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_switcher_change_icon_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_switcher_change_icon_baseline_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 0
+
+    namespace eval ::windows {}
+    namespace eval ::windows::switcher {}
+    namespace eval ::win {}
+
+    set ::MB3 3
+
+    array set ::tr {
+        ScidUp ScidUp
+        ChangeIcon ChangeIcon
+        Cancel Cancel
+    }
+
+    set ::gui_switcher_change_icon_baseline_test::bindCalls {}
+    array unset ::gui_switcher_change_icon_baseline_test::treeItems
+    array set ::gui_switcher_change_icon_baseline_test::treeItems {}
+    array unset ::gui_switcher_change_icon_baseline_test::treeConfig
+    array set ::gui_switcher_change_icon_baseline_test::treeConfig {}
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands tr {tag {lang ""}} {
+        if {[info exists ::tr($tag)]} { return $::tr($tag) }
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands sc_info {subcmd args} {
+        switch -- $subcmd {
+            limit {
+                if {[llength $args] >= 1 && [lindex $args 0] eq "bases"} {
+                    return 3
+                }
+                return 0
+            }
+            default { return "" }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands sc_base {subcmd args} {
+        switch -- $subcmd {
+            extra { return {type 1} }
+            default { error "sc_base $subcmd not stubbed in tests" }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} { error "image $subcmd not stubbed in tests" }
+        set type [lindex $args 0]
+        if {$type ne "photo"} { error "image create $type not stubbed in tests" }
+        set name [lindex $args 1]
+        if {$name eq "" || [string match "-*" $name]} { return "scid_test_image" }
+        return $name
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} { error "winfo $subcmd not stubbed in tests" }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands wm {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands pack {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands grid {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands update {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands focus {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands grab {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands destroy {w} {
+        catch {rename $w ""}
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands bind {w sequence script} {
+        lappend ::gui_switcher_change_icon_baseline_test::bindCalls [list $w $sequence]
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands ::win::createDialog {w} {
+        if {![llength [info commands $w]]} { ::scid_test::widgets::defineWidget $w }
+        return
+    }
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands ::ttk::style {subcmd args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands ::ttk::treeview {path args} {
+        ::gui_switcher_change_icon_baseline_test::defineTreeview $path
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands ::ttk::scrollbar {path args} {
+        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands ::ttk::frame {path args} {
+        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands dialogbutton {path args} {
+        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_switcher_change_icon_baseline_test::stubbedCommands packdlgbuttons {args} { return }
+}
+
+proc ::gui_switcher_change_icon_baseline_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_switcher_change_icon_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::MB3
+    unset -nocomplain ::tr
+}
+
+proc ::gui_switcher_change_icon_baseline_test::formatSnapshot {} {
+    set lines {}
+
+    lappend lines [list treeview .btypeWin.t -height $::gui_switcher_change_icon_baseline_test::treeConfig(.btypeWin.t,-height)]
+    foreach id {0 1 2} {
+        set d [dict create {*}$::gui_switcher_change_icon_baseline_test::treeItems(.btypeWin.t,$id)]
+        lappend lines [list item $id -text [dict get $d -text] -image [dict get $d -image]]
+    }
+
+    set sequences {}
+    foreach call $::gui_switcher_change_icon_baseline_test::bindCalls {
+        lappend sequences [lindex $call 1]
+    }
+    set sequences [lsort -unique $sequences]
+    lappend lines [list binds $sequences]
+
+    return [join $lines "\n"]
+}
+
+test gui-switcher-change-icon-dialog-baseline-compare-1.0 {Change Icon dialog matches the approved baseline structure} -setup {
+    ::gui_switcher_change_icon_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows switcher.tcl]
+
+    set ::windows::switcher::base_types {Unknown Temporary Clipbase}
+    set ::numBaseTypeIcons [llength $::windows::switcher::base_types]
+
+    changeBaseType 1
+    set actual [::gui_switcher_change_icon_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] switcher_change_icon_dialog.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: switcher Change Icon dialog skeleton (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/switcher_change_icon_dialog.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Switcher Change Icon dialog baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_switcher_change_icon_baseline_test::cleanup
+} -result 1
+
+cleanupTests
+
