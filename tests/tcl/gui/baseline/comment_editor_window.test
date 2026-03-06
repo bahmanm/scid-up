@@ -1,0 +1,224 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_comment_editor_window_baseline_test {
+    variable stubbedCommands {}
+    variable bindCalls {}
+    variable afterCalls {}
+    variable tooltipCalls {}
+    variable winCreateCalls {}
+
+    variable childrenByParent
+    array set childrenByParent {}
+}
+
+proc ::gui_comment_editor_window_baseline_test::recordChild {path} {
+    set dotIdx [string last "." $path]
+    if {$dotIdx <= 0} {
+        return
+    }
+    set parent [string range $path 0 [expr {$dotIdx - 1}]]
+    if {![info exists ::gui_comment_editor_window_baseline_test::childrenByParent($parent)]} {
+        set ::gui_comment_editor_window_baseline_test::childrenByParent($parent) {}
+    }
+    lappend ::gui_comment_editor_window_baseline_test::childrenByParent($parent) $path
+}
+
+proc ::gui_comment_editor_window_baseline_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_comment_editor_window_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    set ::gui_comment_editor_window_baseline_test::bindCalls {}
+    set ::gui_comment_editor_window_baseline_test::afterCalls {}
+    set ::gui_comment_editor_window_baseline_test::tooltipCalls {}
+    set ::gui_comment_editor_window_baseline_test::winCreateCalls {}
+
+    array unset ::gui_comment_editor_window_baseline_test::childrenByParent
+    array set ::gui_comment_editor_window_baseline_test::childrenByParent {}
+
+    set ::language E
+    array set ::tr {
+        WindowsComment WindowsComment
+        AnnotationSymbols AnnotationSymbols
+        Comment Comment
+        Clear Clear
+    }
+
+    namespace eval ::win {}
+    namespace eval ::utils {}
+    namespace eval ::utils::tooltip {}
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands tr {tag {lang ""}} {
+        if {[info exists ::tr($tag)]} { return $::tr($tag) }
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands ::win::createWindow {w title args} {
+        lappend ::gui_comment_editor_window_baseline_test::winCreateCalls [list $w $title {*}$args]
+        if {[llength [info commands $w]]} {
+            return 0
+        }
+        ::scid_test::widgets::defineWidget $w
+        ::gui_comment_editor_window_baseline_test::recordChild $w
+        return 1
+    }
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands ::win::makeVisible {w} { return }
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands ::win::closeWindow {w} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands grid {args} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands bind {args} {
+        lappend ::gui_comment_editor_window_baseline_test::bindCalls $args
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands after {args} {
+        lappend ::gui_comment_editor_window_baseline_test::afterCalls $args
+        return "after#scid_test"
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands winfo {subcmd args} {
+        switch -- $subcmd {
+            exists {
+                set w [lindex $args 0]
+                expr {[llength [info commands $w]] > 0}
+            }
+            children {
+                set w [lindex $args 0]
+                set result {}
+                foreach c [info commands "${w}.*"] {
+                    set dotIdx [string last "." $c]
+                    if {$dotIdx <= 0} {
+                        continue
+                    }
+                    set parent [string range $c 0 [expr {$dotIdx - 1}]]
+                    if {$parent eq $w} {
+                        lappend result $c
+                    }
+                }
+                return [lsort $result]
+            }
+            default {
+                error "winfo $subcmd not stubbed in tests"
+            }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands autoscrollText {bars frame widget style} {
+        if {![llength [info commands $frame]]} {
+            ::scid_test::widgets::defineWidget $frame
+            ::gui_comment_editor_window_baseline_test::recordChild $frame
+        }
+        if {![llength [info commands $widget]]} {
+            ::scid_test::widgets::defineTextWidget $widget
+            ::gui_comment_editor_window_baseline_test::recordChild $widget
+        }
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands ::utils::tooltip::Set {w msg} {
+        lappend ::gui_comment_editor_window_baseline_test::tooltipCalls [list $w $msg]
+        return
+    }
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    foreach cmd {frame label button} {
+        ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands ::ttk::$cmd {path args} {
+            if {![llength [info commands $path]]} {
+                ::scid_test::widgets::defineWidget $path
+                ::gui_comment_editor_window_baseline_test::recordChild $path
+            }
+            if {[llength $args]} { $path configure {*}$args }
+            return $path
+        }
+    }
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands ::ttk::entry {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineEntryWidget $path
+            ::gui_comment_editor_window_baseline_test::recordChild $path
+        }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_comment_editor_window_baseline_test::stubbedCommands sc_pos {subcmd args} {
+        switch -- $subcmd {
+            getComment { return "sample comment" }
+            getNags { return "!!" }
+            isAt { return 0 }
+            default { error "sc_pos $subcmd not stubbed in tests" }
+        }
+    }
+}
+
+proc ::gui_comment_editor_window_baseline_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_comment_editor_window_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::tr
+    unset -nocomplain ::language
+}
+
+proc ::gui_comment_editor_window_baseline_test::formatSnapshot {} {
+    set lines {}
+    set w .commentWin
+
+    lappend lines [list win::createWindow {*}[lindex $::gui_comment_editor_window_baseline_test::winCreateCalls 0]]
+
+    lappend lines [list text $w.cf.txtframe.text \
+        -wrap [::scid_test::widgets::getState $w.cf.txtframe.text -wrap] \
+        -state [::scid_test::widgets::getState $w.cf.txtframe.text -state] \
+        modified [$w.cf.txtframe.text edit modified] \
+    ]
+
+    lappend lines [list comment [::scid_test::widgets::getText $w.cf.txtframe.text]]
+    lappend lines [list nags [::scid_test::widgets::getText $w.nf.text]]
+    lappend lines [list nagButtons [llength [winfo children $w.nf.b]]]
+
+    set sequences {}
+    foreach call $::gui_comment_editor_window_baseline_test::bindCalls {
+        lappend sequences [lindex $call 1]
+    }
+    set sequences [lsort -unique $sequences]
+    lappend lines [list binds $sequences]
+
+    lappend lines [list after [lindex $::gui_comment_editor_window_baseline_test::afterCalls end]]
+
+    return [join $lines "\n"]
+}
+
+test gui-comment-editor-window-baseline-compare-1.0 {Comment editor window skeleton matches the approved baseline structure} -setup {
+    ::gui_comment_editor_window_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows comment.tcl]
+
+    ::windows::commenteditor::createWin 1
+    set actual [::gui_comment_editor_window_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] comment_editor_window.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: Comment editor window skeleton (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/comment_editor_window.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Comment editor baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_comment_editor_window_baseline_test::cleanup
+} -result 1
+
+cleanupTests
