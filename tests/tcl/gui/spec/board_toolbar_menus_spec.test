@@ -1,0 +1,167 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_board_toolbar_spec_test {
+    variable stubbedCommands {}
+    variable createdImages {}
+    variable fakeImgRoot ""
+}
+
+proc ::gui_board_toolbar_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_board_toolbar_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_board_toolbar_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    set ::MB3 3
+
+    # Ensure required namespaces exist before sourcing modules that write
+    # namespace variables at file scope.
+    namespace eval ::board {}
+    namespace eval ::board::mark {}
+
+    # Minimal board globals required by InitBoard (executed at file scope).
+    set ::boardStyles {Merida}
+    set ::boardStyle Merida
+    set ::boardSize 20
+
+    # Provide a fake pieces directory so `setPieceFont` sees at least one image.
+    set ::gui_board_toolbar_spec_test::fakeImgRoot [::scid_test::makeTempRoot [namespace current]]
+    set piecesDir [file join $::gui_board_toolbar_spec_test::fakeImgRoot sets pieces Merida]
+    file mkdir $piecesDir
+    set fakePng [file join $piecesDir fake.png]
+    if {![file exists $fakePng]} {
+        set ch [open $fakePng w]
+        close $ch
+    }
+    set ::scidImgDir $::gui_board_toolbar_spec_test::fakeImgRoot
+
+    # Force token-based labels regardless of any translation tables that may be
+    # initialised by sourced modules.
+    ::scid_test::mocks::stubCommand ::gui_board_toolbar_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+
+    # `board.tcl` creates Tk photo images at file scope. Provide a minimal stub
+    # so it can be sourced under plain `tclsh`, and define per-image commands
+    # that accept the `copy` subcommand used during InitBoard initialisation.
+    ::scid_test::mocks::stubCommand ::gui_board_toolbar_spec_test::stubbedCommands image {subcmd args} {
+        switch -- $subcmd {
+            create {
+                set type [lindex $args 0]
+                if {$type ne "photo"} {
+                    error "image create $type not stubbed in tests"
+                }
+                set name [lindex $args 1]
+                if {$name eq ""} {
+                    return ""
+                }
+                if {[llength [info commands $name]]} {
+                    catch {rename $name ""}
+                }
+                proc $name {imgSubcmd args} {
+                    switch -- $imgSubcmd {
+                        copy { return }
+                        get { return {0 0 0} }
+                        default { return }
+                    }
+                }
+                lappend ::gui_board_toolbar_spec_test::createdImages $name
+                return $name
+            }
+            delete {
+                foreach name $args {
+                    if {[llength [info commands $name]]} {
+                        catch {rename $name ""}
+                    }
+                }
+                return
+            }
+            height - width { return 20 }
+            default { error "image $subcmd not stubbed in tests" }
+        }
+    }
+}
+
+proc ::gui_board_toolbar_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_board_toolbar_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    foreach img $::gui_board_toolbar_spec_test::createdImages {
+        catch {rename $img ""}
+    }
+    set ::gui_board_toolbar_spec_test::createdImages {}
+
+    if {$::gui_board_toolbar_spec_test::fakeImgRoot ne ""} {
+        catch {::scid_test::deleteTempRoot $::gui_board_toolbar_spec_test::fakeImgRoot}
+        set ::gui_board_toolbar_spec_test::fakeImgRoot ""
+    }
+
+    unset -nocomplain ::MB3
+}
+
+proc ::gui_board_toolbar_spec_test::labels {menuSnapshot} {
+    set out {}
+    foreach entry [::scid_test::menu_spec::entries $menuSnapshot] {
+        set d [::scid_test::menu_spec::entryDict $entry]
+        lappend out [dict get $d label]
+    }
+    return $out
+}
+
+proc ::gui_board_toolbar_spec_test::assertLabelsEqual {menuSnapshot expectedLabels} {
+    set actual [::gui_board_toolbar_spec_test::labels $menuSnapshot]
+    if {$actual ne $expectedLabels} {
+        error "Label mismatch for [::scid_test::menu_spec::path $menuSnapshot]\nExpected: $expectedLabels\nActual:   $actual"
+    }
+}
+
+test gui-board-toolbar-spec-structure-1.0 {Board navigation toolbar menus expose stable entries} -setup {
+    ::gui_board_toolbar_spec_test::setup
+} -body {
+    # Arrange/Act: build the toolbar menus under the harness.
+    source [file join [::scid_test::tclDir] board.tcl]
+
+    set w .main.board
+    set varname toolbar_cmds
+    ::board::newToolBar_ $w $varname
+
+    set backMenu [::scid_test::menu_structure::snapshot ${w}.menu_back]
+    set forwMenu [::scid_test::menu_structure::snapshot ${w}.menu_forw]
+    set mainMenu [::scid_test::menu_structure::snapshot ${w}.menu]
+
+    # Assert: menu structures.
+    ::gui_board_toolbar_spec_test::assertLabelsEqual $backMenu [list \
+        "  BackToMainline" \
+        "  EditDelete" \
+        "  LeaveVariant" \
+        "  GameStart" \
+    ]
+    ::gui_board_toolbar_spec_test::assertLabelsEqual $forwMenu [list \
+        "  Autoplay" \
+        "  GameEnd" \
+    ]
+    ::gui_board_toolbar_spec_test::assertLabelsEqual $mainMenu [list \
+        "  EditSetup" \
+        "  IERotate" \
+        "  SelectMarker" \
+        "  ShowHideMaterial" \
+        "  ShowHideEvalBar" \
+        "  ConfigureScid" \
+    ]
+
+    # Assert: key accelerators.
+    ::scid_test::menu_spec::assertCommandAcc $backMenu "  GameStart" "<home>"
+    ::scid_test::menu_spec::assertCommandAcc $forwMenu "  GameEnd" "<end>"
+
+    return 1
+} -cleanup {
+    ::gui_board_toolbar_spec_test::cleanup
+} -result 1
+
+cleanupTests

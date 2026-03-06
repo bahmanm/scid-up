@@ -1,0 +1,174 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_gamelist_header_menu_spec_test {
+    variable stubbedCommands {}
+    variable treeColumnId
+    array set treeColumnId {}
+}
+
+proc ::gui_gamelist_header_menu_spec_test::defineTreeview {path columnIdByColumnToken} {
+    catch {rename $path ""}
+    array unset ::gui_gamelist_header_menu_spec_test::treeColumnId "$path,*"
+    foreach {colToken colId} $columnIdByColumnToken {
+        set ::gui_gamelist_header_menu_spec_test::treeColumnId($path,$colToken) $colId
+    }
+    interp alias {} $path {} ::gui_gamelist_header_menu_spec_test::dispatchTreeview $path
+    return $path
+}
+
+proc ::gui_gamelist_header_menu_spec_test::dispatchTreeview {path subcmd args} {
+    switch -- $subcmd {
+        identify {
+            set what [lindex $args 0]
+            switch -- $what {
+                region { return "heading" }
+                column { return "#1" }
+                default { error "treeview identify $what not stubbed" }
+            }
+        }
+        column {
+            set colToken [lindex $args 0]
+            set opt [lindex $args 1]
+            if {$opt ne "-id"} {
+                error "treeview column $opt not stubbed"
+            }
+            if {![info exists ::gui_gamelist_header_menu_spec_test::treeColumnId($path,$colToken)]} {
+                error "treeview $path missing column id for $colToken"
+            }
+            return $::gui_gamelist_header_menu_spec_test::treeColumnId($path,$colToken)
+        }
+        default {
+            error "treeview $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::gui_gamelist_header_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_gamelist_header_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_gamelist_header_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    namespace eval ::windows {}
+    namespace eval ::windows::gamelist {}
+
+    array set ::tr {
+        GlistAlignL GlistAlignL
+        GlistAlignR GlistAlignR
+        GlistAlignC GlistAlignC
+        GlistAddField GlistAddField
+        GlistDeleteField GlistDeleteField
+        ResetSort ResetSort
+        FindBar FindBar
+        Save Save
+        Defaults Defaults
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands winfo {subcmd args} {
+        switch -- $subcmd {
+            parent { return ".glistWin1" }
+            exists {
+                set w [lindex $args 0]
+                expr {[llength [info commands $w]] > 0}
+            }
+            default { error "winfo $subcmd not stubbed in tests" }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands destroy {w} {
+        catch {rename $w ""}
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands tk_popup {menu x y} {
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        set type [lindex $args 0]
+        if {$type ni {"photo" "bitmap"}} {
+            error "image create $type not stubbed in tests"
+        }
+        set name [lindex $args 1]
+        if {$name eq "" || [string match "-*" $name]} {
+            return "scid_test_image"
+        }
+        return $name
+    }
+}
+
+proc ::gui_gamelist_header_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_gamelist_header_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    foreach path [array names ::gui_gamelist_header_menu_spec_test::treeColumnId] {
+        set tree [lindex [split $path ","] 0]
+        catch {rename $tree ""}
+    }
+    array unset ::gui_gamelist_header_menu_spec_test::treeColumnId
+    array set ::gui_gamelist_header_menu_spec_test::treeColumnId {}
+
+    unset -nocomplain ::tr
+}
+
+proc ::gui_gamelist_header_menu_spec_test::hasLabel {menuSnapshot label} {
+    expr {[catch {::scid_test::menu_spec::findEntryByLabel $menuSnapshot $label}]==0}
+}
+
+test gui-gamelist-header-menu-spec-stable-actions-1.0 {Game list header menu exposes stable layout and findbar controls} -setup {
+    ::gui_gamelist_header_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.header_menu]
+
+    list \
+        [::gui_gamelist_header_menu_spec_test::hasLabel $snapshot ResetSort] \
+        [::gui_gamelist_header_menu_spec_test::hasLabel $snapshot Layouts] \
+        [::gui_gamelist_header_menu_spec_test::hasLabel $snapshot FindBar]
+} -cleanup {
+    ::gui_gamelist_header_menu_spec_test::cleanup
+} -result {1 1 1}
+
+test gui-gamelist-header-menu-spec-addfield-disabled-when-no-empty-cols-1.0 {Game list header AddField cascade is disabled when all columns are already present} -setup {
+    ::gui_gamelist_header_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.header_menu]
+
+    ::scid_test::menu_spec::entryState $snapshot GlistAddField
+} -cleanup {
+    ::gui_gamelist_header_menu_spec_test::cleanup
+} -result disabled
+
+cleanupTests

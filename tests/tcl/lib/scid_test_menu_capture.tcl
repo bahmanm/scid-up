@@ -90,6 +90,11 @@ proc ::scid_test::menu_capture::createMenu {path args} {
     interp alias {} $path {} ::scid_test::menu_capture::dispatchMenu $path
     lappend created $path
 
+    # A menu path can be destroyed and later re-created within a single test.
+    # Clear any prior captured state for that path.
+    set menuEntries($path) {}
+    array unset menuOptions "$path,*"
+
     set menuOptions($path,-tearoff) $tearoff
     if {$tearoff} {
         # Mimic Tk's implicit tearoff entry at index 0.
@@ -152,6 +157,14 @@ proc ::scid_test::menu_capture::dispatchMenu {menu subcmd args} {
     variable menuOptions
 
     switch -- $subcmd {
+        activate -
+        post -
+        unpost {
+            # No-op UI actions for tests: posting/unposting menus and
+            # activating entries are visual behaviours not required for
+            # structural snapshots.
+            return
+        }
         configure {
             if {[llength $args] % 2 != 0} {
                 error "menu $menu configure expects option/value pairs, got: $args"

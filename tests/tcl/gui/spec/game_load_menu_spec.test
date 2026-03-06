@@ -1,0 +1,66 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_game_load_menu_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_game_load_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_game_load_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_game_load_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    namespace eval ::game {}
+
+    array set ::tr {
+        BrowseGame BrowseGame
+        LoadGame LoadGame
+        MergeGame MergeGame
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_game_load_menu_spec_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} {
+            error "winfo $subcmd not stubbed in tests"
+        }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_game_load_menu_spec_test::stubbedCommands event {subcmd args} {
+        if {$subcmd ne "generate"} {
+            error "event $subcmd not stubbed in tests"
+        }
+        return
+    }
+}
+
+proc ::gui_game_load_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_game_load_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+    unset -nocomplain ::tr
+}
+
+test gui-game-load-menu-spec-structure-1.0 {Game load menu exposes stable Browse/Load/Merge actions without duplication} -setup {
+    ::gui_game_load_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] game.tcl]
+
+    set w .glist
+    set base 1
+    set gnum 42
+    ::game::LoadMenu $w $base $gnum 10 20
+    ::game::LoadMenu $w $base $gnum 10 20
+
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.gLoadMenu]
+    ::scid_test::menu_spec::typeLabelPairs $snapshot
+} -cleanup {
+    ::gui_game_load_menu_spec_test::cleanup
+} -result {{command BrowseGame} {command LoadGame} {command MergeGame}}
+
+cleanupTests

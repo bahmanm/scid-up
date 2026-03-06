@@ -1,0 +1,159 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_docking_tab_menu_spec_test {
+    variable stubbedCommands {}
+    variable identifiedTab ""
+
+    variable notebookTabs
+    variable notebookSelected
+    array set notebookTabs {}
+    array set notebookSelected {}
+}
+
+proc ::gui_docking_tab_menu_spec_test::defineNotebook {path tabs} {
+    if {[llength [info commands $path]]} {
+        catch {rename $path ""}
+    }
+    set ::gui_docking_tab_menu_spec_test::notebookTabs($path) $tabs
+    set ::gui_docking_tab_menu_spec_test::notebookSelected($path) ""
+    interp alias {} $path {} ::gui_docking_tab_menu_spec_test::dispatchNotebook $path
+    return $path
+}
+
+proc ::gui_docking_tab_menu_spec_test::dispatchNotebook {path subcmd args} {
+    switch -- $subcmd {
+        identify {
+            set op [lindex $args 0]
+            if {$op ne "tab"} {
+                error "Notebook $path identify $op not stubbed"
+            }
+            return $::gui_docking_tab_menu_spec_test::identifiedTab
+        }
+        tab {
+            # Minimal support for `tab <idx> -image` queried by `identify_tab_`.
+            set opt [lindex $args 1]
+            if {$opt ne "-image"} {
+                return ""
+            }
+            return ""
+        }
+        tabs {
+            return $::gui_docking_tab_menu_spec_test::notebookTabs($path)
+        }
+        select {
+            set ::gui_docking_tab_menu_spec_test::notebookSelected($path) [lindex $args 0]
+            return
+        }
+        default {
+            error "Notebook $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::gui_docking_tab_menu_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_docking_tab_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_docking_tab_menu_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    namespace eval ::win {}
+    namespace eval ::docking {}
+
+    set ::gui_docking_tab_menu_spec_test::identifiedTab ""
+
+    ::scid_test::mocks::stubCommand ::gui_docking_tab_menu_spec_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} {
+            error "winfo $subcmd not stubbed in tests"
+        }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_docking_tab_menu_spec_test::stubbedCommands destroy {w} {
+        catch {rename $w ""}
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_docking_tab_menu_spec_test::stubbedCommands tk_popup {menu x y} {
+        return
+    }
+
+    # Force token labels.
+    ::scid_test::mocks::stubCommand ::gui_docking_tab_menu_spec_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+
+}
+
+proc ::gui_docking_tab_menu_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_docking_tab_menu_spec_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    foreach path [array names ::gui_docking_tab_menu_spec_test::notebookTabs] {
+        catch {rename $path ""}
+    }
+    catch {unset ::gui_docking_tab_menu_spec_test::notebookTabs}
+    array set ::gui_docking_tab_menu_spec_test::notebookTabs {}
+    catch {unset ::gui_docking_tab_menu_spec_test::notebookSelected}
+    array set ::gui_docking_tab_menu_spec_test::notebookSelected {}
+}
+
+proc ::gui_docking_tab_menu_spec_test::hasLabel {menuSnapshot label} {
+    foreach entry [::scid_test::menu_spec::entries $menuSnapshot] {
+        set d [::scid_test::menu_spec::entryDict $entry]
+        if {[dict get $d label] eq $label} {
+            return 1
+        }
+    }
+    return 0
+}
+
+test gui-docking-tab-menu-spec-main-tab-has-no-close-or-undock-1.0 {Docking tab menu forbids closing/undocking the main board tab} -setup {
+    ::gui_docking_tab_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] utils win.tcl]
+
+    set noteb .nb
+    ::gui_docking_tab_menu_spec_test::defineNotebook $noteb [list .main .pgnWin]
+
+    set ::gui_docking_tab_menu_spec_test::identifiedTab 0
+    ::docking::manage_rightclick_ $noteb 10 20 1 1
+
+    set snapshot [::scid_test::menu_structure::snapshot .ctxtMenu]
+
+    list \
+        [::gui_docking_tab_menu_spec_test::hasLabel $snapshot Undock] \
+        [::gui_docking_tab_menu_spec_test::hasLabel $snapshot Close]
+} -cleanup {
+    ::gui_docking_tab_menu_spec_test::cleanup
+} -result {0 0}
+
+test gui-docking-tab-menu-spec-single-tab-disables-dock-moves-1.0 {Docking tab menu disables docking moves when only one tab exists} -setup {
+    ::gui_docking_tab_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] utils win.tcl]
+
+    set noteb .nb
+    ::gui_docking_tab_menu_spec_test::defineNotebook $noteb [list .pgnWin]
+
+    set ::gui_docking_tab_menu_spec_test::identifiedTab 0
+    ::docking::manage_rightclick_ $noteb 10 20 1 1
+
+    set snapshot [::scid_test::menu_structure::snapshot .ctxtMenu]
+
+    list \
+        [::scid_test::menu_spec::entryState $snapshot DockTop] \
+        [::scid_test::menu_spec::entryState $snapshot DockBottom] \
+        [::scid_test::menu_spec::entryState $snapshot DockLeft] \
+        [::scid_test::menu_spec::entryState $snapshot DockRight]
+} -cleanup {
+    ::gui_docking_tab_menu_spec_test::cleanup
+} -result {disabled disabled disabled disabled}
+
+cleanupTests

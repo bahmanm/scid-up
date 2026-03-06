@@ -1,0 +1,157 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_board_toolbar_baseline_test {
+    variable stubbedCommands {}
+    variable createdImages {}
+    variable fakeImgRoot ""
+}
+
+proc ::gui_board_toolbar_baseline_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_board_toolbar_baseline_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_board_toolbar_baseline_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    set ::MB3 3
+
+    # Ensure required namespaces exist before sourcing modules that write
+    # namespace variables at file scope.
+    namespace eval ::board {}
+    namespace eval ::board::mark {}
+
+    # Minimal board globals required by InitBoard (executed at file scope).
+    set ::boardStyles {Merida}
+    set ::boardStyle Merida
+    set ::boardSize 20
+
+    # Provide a fake pieces directory so `setPieceFont` sees at least one image.
+    set ::gui_board_toolbar_baseline_test::fakeImgRoot [::scid_test::makeTempRoot [namespace current]]
+    set piecesDir [file join $::gui_board_toolbar_baseline_test::fakeImgRoot sets pieces Merida]
+    file mkdir $piecesDir
+    set fakePng [file join $piecesDir fake.png]
+    if {![file exists $fakePng]} {
+        set ch [open $fakePng w]
+        close $ch
+    }
+    set ::scidImgDir $::gui_board_toolbar_baseline_test::fakeImgRoot
+
+    # Force token-based labels regardless of any translation tables that may be
+    # initialised by sourced modules.
+    ::scid_test::mocks::stubCommand ::gui_board_toolbar_baseline_test::stubbedCommands tr {tag {lang ""}} {
+        return $tag
+    }
+
+    # `board.tcl` creates Tk photo images at file scope. Provide a minimal stub
+    # so it can be sourced under plain `tclsh`, and define per-image commands
+    # that accept the `copy` subcommand used during InitBoard initialisation.
+    ::scid_test::mocks::stubCommand ::gui_board_toolbar_baseline_test::stubbedCommands image {subcmd args} {
+        switch -- $subcmd {
+            create {
+                set type [lindex $args 0]
+                if {$type ne "photo"} {
+                    error "image create $type not stubbed in tests"
+                }
+                set name [lindex $args 1]
+                if {$name eq ""} {
+                    return ""
+                }
+                if {[llength [info commands $name]]} {
+                    catch {rename $name ""}
+                }
+                proc $name {imgSubcmd args} {
+                    switch -- $imgSubcmd {
+                        copy { return }
+                        get { return {0 0 0} }
+                        default { return }
+                    }
+                }
+                lappend ::gui_board_toolbar_baseline_test::createdImages $name
+                return $name
+            }
+            delete {
+                foreach name $args {
+                    if {[llength [info commands $name]]} {
+                        catch {rename $name ""}
+                    }
+                }
+                return
+            }
+            height - width { return 20 }
+            default { error "image $subcmd not stubbed in tests" }
+        }
+    }
+}
+
+proc ::gui_board_toolbar_baseline_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_board_toolbar_baseline_test::stubbedCommands
+    ::scid_test::menu_capture::reset
+
+    foreach img $::gui_board_toolbar_baseline_test::createdImages {
+        catch {rename $img ""}
+    }
+    set ::gui_board_toolbar_baseline_test::createdImages {}
+
+    if {$::gui_board_toolbar_baseline_test::fakeImgRoot ne ""} {
+        catch {::scid_test::deleteTempRoot $::gui_board_toolbar_baseline_test::fakeImgRoot}
+        set ::gui_board_toolbar_baseline_test::fakeImgRoot ""
+    }
+
+    unset -nocomplain ::MB3
+}
+
+test gui-board-toolbar-baseline-compare-1.0 {Board navigation toolbar menus match the approved baseline structure} -setup {
+    ::gui_board_toolbar_baseline_test::setup
+} -body {
+    # Arrange/Act: source the module and build the toolbar menus under the harness.
+    source [file join [::scid_test::tclDir] board.tcl]
+
+    set w .main.board
+    set varname toolbar_cmds
+    ::board::newToolBar_ $w $varname
+
+    set backSnapshot [::scid_test::menu_structure::snapshot ${w}.menu_back]
+    set forwSnapshot [::scid_test::menu_structure::snapshot ${w}.menu_forw]
+    set mainSnapshot [::scid_test::menu_structure::snapshot ${w}.menu]
+
+    set backFormatted [::scid_test::menu_structure::format $backSnapshot]
+    set forwFormatted [::scid_test::menu_structure::format $forwSnapshot]
+    set mainFormatted [::scid_test::menu_structure::format $mainSnapshot]
+
+    set actual [join [list \
+        "MENU_BACK" \
+        $backFormatted \
+        "MENU_FORW" \
+        $forwFormatted \
+        "MENU_MAIN" \
+        $mainFormatted \
+    ] "\n"]
+
+    set baselineFile [file join [file dirname [info script]] board_toolbar_menus.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: board toolbar context menus (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/board_toolbar_menus.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Board toolbar baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_board_toolbar_baseline_test::cleanup
+} -result 1
+
+cleanupTests

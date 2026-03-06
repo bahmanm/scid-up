@@ -1,0 +1,215 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_switcher_window_spec_test {
+    variable stubbedCommands {}
+    variable afterCalls {}
+    variable canvasCounter 0
+
+    variable canvasWindowByTag
+    array set canvasWindowByTag {}
+
+    variable canvasState
+    array set canvasState {}
+}
+
+proc ::gui_switcher_window_spec_test::defineCanvas {path} {
+    catch {rename $path ""}
+    interp alias {} $path {} ::gui_switcher_window_spec_test::dispatchCanvas $path
+    return $path
+}
+
+proc ::gui_switcher_window_spec_test::dispatchCanvas {path subcmd args} {
+    switch -- $subcmd {
+        configure {
+            if {[llength $args] % 2 != 0} {
+                error "canvas $path configure expects option/value pairs, got: $args"
+            }
+            foreach {opt val} $args {
+                set ::gui_switcher_window_spec_test::canvasState($path,$opt) $val
+            }
+            return
+        }
+        cget {
+            set opt [lindex $args 0]
+            if {![info exists ::gui_switcher_window_spec_test::canvasState($path,$opt)]} {
+                error "canvas $path missing option $opt"
+            }
+            return $::gui_switcher_window_spec_test::canvasState($path,$opt)
+        }
+        create {
+            set type [lindex $args 0]
+            if {$type ne "window"} {
+                return 0
+            }
+
+            # Expected: create window <x> <y> -window <path> -anchor <a> -tag <tag>
+            set opts [lrange $args 3 end]
+            set win ""
+            set tag ""
+            for {set i 0} {$i < [llength $opts]} {incr i 2} {
+                set opt [lindex $opts $i]
+                set val [lindex $opts [expr {$i + 1}]]
+                if {$opt eq "-window"} { set win $val }
+                if {$opt eq "-tag"} { set tag $val }
+            }
+            if {$tag ne "" && $win ne ""} {
+                set ::gui_switcher_window_spec_test::canvasWindowByTag($path,$tag) $win
+            }
+            incr ::gui_switcher_window_spec_test::canvasCounter
+            return $::gui_switcher_window_spec_test::canvasCounter
+        }
+        itemconfigure -
+        coords -
+        yview -
+        xview {
+            return
+        }
+        default {
+            error "canvas $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::gui_switcher_window_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_switcher_window_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_switcher_window_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 0
+
+    namespace eval ::windows {}
+    namespace eval ::windows::switcher {}
+
+    set ::MB3 3
+
+    set ::gui_switcher_window_spec_test::afterCalls {}
+    set ::gui_switcher_window_spec_test::canvasCounter 0
+    array unset ::gui_switcher_window_spec_test::canvasWindowByTag
+    array set ::gui_switcher_window_spec_test::canvasWindowByTag {}
+    array unset ::gui_switcher_window_spec_test::canvasState
+    array set ::gui_switcher_window_spec_test::canvasState {}
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands sc_info {subcmd args} {
+        switch -- $subcmd {
+            limit {
+                if {[llength $args] >= 1 && [lindex $args 0] eq "bases"} {
+                    return 3
+                }
+                return 0
+            }
+            default { return "" }
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        set type [lindex $args 0]
+        if {$type ne "photo"} {
+            error "image create $type not stubbed in tests"
+        }
+        set name [lindex $args 1]
+        if {$name eq "" || [string match "-*" $name]} {
+            return "scid_test_image"
+        }
+        return $name
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands canvas {path args} {
+        ::gui_switcher_window_spec_test::defineCanvas $path
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands ::ttk::frame {path args} {
+        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands ::ttk::label {path args} {
+        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands grid {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands bind {args} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands autoscrollBars {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands applyThemeStyle {args} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_switcher_window_spec_test::stubbedCommands after {args} {
+        lappend ::gui_switcher_window_spec_test::afterCalls $args
+        return "after#scid_test"
+    }
+}
+
+proc ::gui_switcher_window_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_switcher_window_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::MB3
+}
+
+test gui-switcher-window-spec-skeleton-1.0 {Switcher window creates per-base tiles and schedules initial Update_} -setup {
+    ::gui_switcher_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows switcher.tcl]
+
+    set w .baseWin
+    if {![llength [info commands $w]]} { ::scid_test::widgets::defineWidget $w }
+
+    ::windows::switcher::Create $w
+
+    foreach p [list $w.border $w.c $w.c.f1 $w.c.f2 $w.c.f3] {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    # Canvas windows were created for each base tag and point at each frame.
+    foreach {tag winPath} [list tag1 $w.c.f1 tag2 $w.c.f2 tag3 $w.c.f3] {
+        if {![info exists ::gui_switcher_window_spec_test::canvasWindowByTag($w.c,$tag)]} {
+            error "Missing canvas window for $tag"
+        }
+        if {$::gui_switcher_window_spec_test::canvasWindowByTag($w.c,$tag) ne $winPath} {
+            error "Canvas window mismatch for $tag"
+        }
+    }
+
+    # Each base tile defines three labels and a context menu with -tearoff 0.
+    foreach i {1 2 3} {
+        set f $w.c.f$i
+        foreach p [list $f.img $f.name $f.ngames $f.menu] {
+            if {![llength [info commands $p]]} {
+                error "Expected widget command to exist: $p"
+            }
+        }
+        if {[$f.menu cget -tearoff] ne "0"} {
+            error "Expected $f.menu -tearoff to be 0"
+        }
+    }
+
+    list \
+        [::scid_test::widgets::getState $w.c.f1.img -image] \
+        [::scid_test::widgets::getState $w.c.f1.name -width] \
+        [::scid_test::widgets::getState $w.c.f1.name -anchor] \
+        [::scid_test::widgets::getState $w.c.f1.ngames -text] \
+        $::gui_switcher_window_spec_test::afterCalls
+} -cleanup {
+    ::gui_switcher_window_spec_test::cleanup
+} -result {dbt0 12 w 0 {{idle {::windows::switcher::Update_ .baseWin}}}}
+
+cleanupTests
+

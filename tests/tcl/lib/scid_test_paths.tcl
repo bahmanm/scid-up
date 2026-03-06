@@ -25,3 +25,31 @@ proc ::scid_test::tempDir {} {
     file mkdir $dir
     return $dir
 }
+
+proc ::scid_test::makeTempRoot {suiteName} {
+    # Creates a per-suite temp root under `tests/tcl/_tmp` and returns it.
+    # The caller is responsible for deleting it (typically in suite cleanup).
+    set base [::scid_test::tempDir]
+    set safeName [string map {:: _ / _ \\ _ " " _ : _} $suiteName]
+    set root [file join $base ${safeName}__[pid]__[clock clicks -milliseconds]]
+    file mkdir $root
+    return $root
+}
+
+proc ::scid_test::deleteTempRoot {path} {
+    if {$path eq ""} {
+        return
+    }
+    if {![file exists $path]} {
+        return
+    }
+
+    set base [file normalize [::scid_test::tempDir]]
+    set normPath [file normalize $path]
+    set basePrefix "${base}[file separator]"
+    if {$normPath ne $base && ![string match "${basePrefix}*" $normPath]} {
+        error "Refusing to delete temp path outside $base: $path"
+    }
+
+    file delete -force $normPath
+}
