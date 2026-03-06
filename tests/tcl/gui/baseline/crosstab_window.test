@@ -1,0 +1,188 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_crosstab_window_baseline_test {
+    variable stubbedCommands {}
+    variable bindCalls {}
+}
+
+proc ::gui_crosstab_window_baseline_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_crosstab_window_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_crosstab_window_baseline_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 0
+
+    set ::gui_crosstab_window_baseline_test::bindCalls {}
+
+    set ::language E
+
+    array set ::tr {
+        ToolsCross ToolsCross
+        Stop Stop
+        Update Update
+        Close Close
+        SetFilter SetFilter
+        AddToFilter AddToFilter
+        CrosstabOptAll CrosstabOptAll
+        CrosstabOptSwiss CrosstabOptSwiss
+        CrosstabOptKnockout CrosstabOptKnockout
+        CrosstabOptAuto CrosstabOptAuto
+        CrosstabFile CrosstabFile
+        CrosstabEdit CrosstabEdit
+        CrosstabOpt CrosstabOpt
+        CrosstabSort CrosstabSort
+        CrosstabText CrosstabText
+        CrosstabHelp CrosstabHelp
+        CrosstabHelpCross CrosstabHelpCross
+        CrosstabHelpIndex CrosstabHelpIndex
+        CrosstabFileText CrosstabFileText
+        CrosstabFileHtml CrosstabFileHtml
+        CrosstabFileLaTeX CrosstabFileLaTeX
+        CrosstabFileClose CrosstabFileClose
+        CrosstabEditEvent CrosstabEditEvent
+        CrosstabEditSite CrosstabEditSite
+        CrosstabEditDate CrosstabEditDate
+        CrosstabOptAll CrosstabOptAll
+        CrosstabOptSwiss CrosstabOptSwiss
+        CrosstabOptKnockout CrosstabOptKnockout
+        CrosstabOptAuto CrosstabOptAuto
+        CrosstabOptAges CrosstabOptAges
+        CrosstabOptNats CrosstabOptNats
+        CrosstabOptRatings CrosstabOptRatings
+        CrosstabOptTitles CrosstabOptTitles
+        CrosstabOptBreaks CrosstabOptBreaks
+        CrosstabOptDeleted CrosstabOptDeleted
+        CrosstabOptColors CrosstabOptColors
+        CrosstabOptColumnNumbers CrosstabOptColumnNumbers
+        CrosstabOptGroup CrosstabOptGroup
+        CrosstabSortName CrosstabSortName
+        CrosstabSortRating CrosstabSortRating
+        CrosstabSortScore CrosstabSortScore
+        CrosstabColorPlain CrosstabColorPlain
+        CrosstabColorHyper CrosstabColorHyper
+    }
+
+    namespace eval ::win {}
+    namespace eval ::htext {}
+    namespace eval ::crosstab {}
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands tr {tag {lang ""}} {
+        if {[info exists ::tr($tag)]} { return $::tr($tag) }
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands ::win::createWindow {w title args} {
+        if {[llength [info commands $w]]} { return 0 }
+        ::scid_test::widgets::defineWidget $w
+        return 1
+    }
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands ::win::makeVisible {w} { return }
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands ::win::closeWindow {w} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands ::setMenu {w menuPath} { return }
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands translateMenuLabels {menuPath} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands ::htext::init {w} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands autoscrollText {bars frame widget style} {
+        if {![llength [info commands $frame]]} { ::scid_test::widgets::defineWidget $frame }
+        if {![llength [info commands $widget]]} { ::scid_test::widgets::defineTextWidget $widget }
+        return
+    }
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    foreach cmd {frame button menubutton} {
+        ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands ::ttk::$cmd {path args} {
+            if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
+            if {[llength $args]} { $path configure {*}$args }
+            return $path
+        }
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands pack {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands bind {w seq script} {
+        lappend ::gui_crosstab_window_baseline_test::bindCalls [list $w $seq $script]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands focus {w} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} {
+            error "winfo $subcmd not stubbed in tests"
+        }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+}
+
+proc ::gui_crosstab_window_baseline_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_crosstab_window_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::tr
+    unset -nocomplain ::language
+}
+
+proc ::gui_crosstab_window_baseline_test::formatSnapshot {} {
+    set lines {}
+
+    lappend lines [list text .crosstableWin.f.text \
+        -wrap [::scid_test::widgets::getState .crosstableWin.f.text -wrap] \
+        -font [::scid_test::widgets::getState .crosstableWin.f.text -font] \
+        -state [::scid_test::widgets::getState .crosstableWin.f.text -state] \
+    ]
+
+    lappend lines [list menu.format [::scid_test::menu_structure::format [::scid_test::menu_structure::snapshot .crosstableWin.menu]]]
+
+    set sequencesByWidget {}
+    foreach call $::gui_crosstab_window_baseline_test::bindCalls {
+        lassign $call w seq script
+        dict lappend sequencesByWidget $w $seq
+    }
+    foreach w [lsort [dict keys $sequencesByWidget]] {
+        lappend lines [list binds $w [lsort -unique [dict get $sequencesByWidget $w]]]
+    }
+
+    return [join $lines "\n"]
+}
+
+test gui-crosstab-window-baseline-compare-1.0 {Crosstable window skeleton matches the approved baseline structure} -setup {
+    ::gui_crosstab_window_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows crosstab.tcl]
+
+    ::scid_test::mocks::stubCommand ::gui_crosstab_window_baseline_test::stubbedCommands ::crosstab::Refresh {} { return }
+
+    ::crosstab::Open
+    set actual [::gui_crosstab_window_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] crosstab_window.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: Crosstable window skeleton (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/crosstab_window.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Crosstable window baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_crosstab_window_baseline_test::cleanup
+} -result 1
+
+cleanupTests
+
