@@ -1,0 +1,177 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_import_pgn_dialog_baseline_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_import_pgn_dialog_baseline_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_import_pgn_dialog_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_import_pgn_dialog_baseline_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 0
+
+    set ::MB3 3
+
+    array set ::tr {
+        ImportPGN ImportPGN
+        ImportHelp1 ImportHelp1
+        ImportHelp2 ImportHelp2
+        PasteCurrentGame PasteCurrentGame
+        Clear Clear
+        Import Import
+        Close Close
+    }
+
+    namespace eval ::win {}
+    namespace eval ::utils {}
+    namespace eval ::utils::pane {}
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} {
+            error "winfo $subcmd not stubbed in tests"
+        }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands wm {subcmd args} { return }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands focus {w} { return }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands pack {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands grid {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands packdlgbuttons {args} { return }
+
+    array set ::scid_test_bind_scripts {}
+    set ::scid_test_bind_scripts(all,<Key-Tab>) ""
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands bind {tag args} {
+        if {[llength $args] == 0} { return "" }
+        set sequence [lindex $args 0]
+        if {[llength $args] == 1} {
+            set key "$tag,$sequence"
+            if {[info exists ::scid_test_bind_scripts($key)]} {
+                return $::scid_test_bind_scripts($key)
+            }
+            return ""
+        }
+        set script [lindex $args 1]
+        set ::scid_test_bind_scripts($tag,$sequence) $script
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands tk_popup {menu x y} { return }
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands ::ttk::frame {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands ::ttk::button {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands ::utils::pane::Create {pane editName errName w h frac} {
+        if {![llength [info commands $pane]]} { ::scid_test::widgets::defineWidget $pane }
+        if {![llength [info commands ${pane}.${editName}]]} { ::scid_test::widgets::defineWidget ${pane}.${editName} }
+        if {![llength [info commands ${pane}.${errName}]]} { ::scid_test::widgets::defineWidget ${pane}.${errName} }
+        return $pane
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands autoscrollText {bars frame widget style} {
+        if {![llength [info commands $frame]]} { ::scid_test::widgets::defineWidget $frame }
+        if {![llength [info commands $widget]]} { ::scid_test::widgets::defineTextWidget $widget }
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_baseline_test::stubbedCommands ::win::createDialog {w} {
+        if {![llength [info commands $w]]} { ::scid_test::widgets::defineWidget $w }
+        return
+    }
+}
+
+proc ::gui_import_pgn_dialog_baseline_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_import_pgn_dialog_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::tr
+    unset -nocomplain ::MB3
+    unset -nocomplain ::scid_test_bind_scripts
+}
+
+proc ::gui_import_pgn_dialog_baseline_test::formatSnapshot {} {
+    set lines {}
+
+    lappend lines "EDIT_TEXT"
+    lappend lines [list widget .importWin.pane.edit.text \
+        -height [::scid_test::widgets::getState .importWin.pane.edit.text -height] \
+        -width [::scid_test::widgets::getState .importWin.pane.edit.text -width] \
+        -wrap [::scid_test::widgets::getState .importWin.pane.edit.text -wrap] \
+        -setgrid [::scid_test::widgets::getState .importWin.pane.edit.text -setgrid] \
+        -state [::scid_test::widgets::getState .importWin.pane.edit.text -state] \
+    ]
+
+    lappend lines "ERR_TEXT"
+    lappend lines [list widget .importWin.pane.err.text \
+        -height [::scid_test::widgets::getState .importWin.pane.err.text -height] \
+        -width [::scid_test::widgets::getState .importWin.pane.err.text -width] \
+        -wrap [::scid_test::widgets::getState .importWin.pane.err.text -wrap] \
+        -setgrid [::scid_test::widgets::getState .importWin.pane.err.text -setgrid] \
+        -state [::scid_test::widgets::getState .importWin.pane.err.text -state] \
+    ]
+
+    lappend lines "BUTTONS"
+    lappend lines [list widget .importWin.b.paste -text [::scid_test::widgets::getState .importWin.b.paste -text]]
+    lappend lines [list widget .importWin.b.clear -text [::scid_test::widgets::getState .importWin.b.clear -text]]
+    lappend lines [list widget .importWin.b.ok -text [::scid_test::widgets::getState .importWin.b.ok -text]]
+    lappend lines [list widget .importWin.b.cancel -textvar [::scid_test::widgets::getState .importWin.b.cancel -textvar]]
+
+    lappend lines "RMENU"
+    set menuSnapshot [::scid_test::menu_structure::snapshot .importWin.pane.edit.text.rmenu]
+    lappend lines [::scid_test::menu_structure::format $menuSnapshot]
+
+    return [join $lines "\n"]
+}
+
+test gui-import-pgn-dialog-baseline-compare-1.0 {Import PGN dialog matches the approved baseline structure} -setup {
+    ::gui_import_pgn_dialog_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] tools import.tcl]
+
+    importPgnGame
+    set actual [::gui_import_pgn_dialog_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] import_pgn_dialog.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: Import PGN dialog skeleton (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/import_pgn_dialog.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Import PGN dialog baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_import_pgn_dialog_baseline_test::cleanup
+} -result 1
+
+cleanupTests
+

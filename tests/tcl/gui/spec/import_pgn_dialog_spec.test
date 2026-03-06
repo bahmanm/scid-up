@@ -1,0 +1,184 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_import_pgn_dialog_spec_test {
+    variable stubbedCommands {}
+    variable lastFocus ""
+}
+
+proc ::gui_import_pgn_dialog_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_import_pgn_dialog_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_import_pgn_dialog_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 0
+
+    set ::gui_import_pgn_dialog_spec_test::lastFocus ""
+
+    set ::MB3 3
+
+    array set ::tr {
+        ImportPGN ImportPGN
+        ImportHelp1 ImportHelp1
+        ImportHelp2 ImportHelp2
+        PasteCurrentGame PasteCurrentGame
+        Clear Clear
+        Import Import
+        Close Close
+    }
+
+    namespace eval ::win {}
+    namespace eval ::utils {}
+    namespace eval ::utils::pane {}
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} {
+            error "winfo $subcmd not stubbed in tests"
+        }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands wm {subcmd args} {
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands focus {w} {
+        set ::gui_import_pgn_dialog_spec_test::lastFocus $w
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands pack {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands grid {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands packdlgbuttons {args} { return }
+
+    # Minimal bind stub: supports querying `bind all <Key-Tab>`.
+    array set ::scid_test_bind_scripts {}
+    set ::scid_test_bind_scripts(all,<Key-Tab>) ""
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands bind {tag args} {
+        if {[llength $args] == 0} { return "" }
+        set sequence [lindex $args 0]
+        if {[llength $args] == 1} {
+            set key "$tag,$sequence"
+            if {[info exists ::scid_test_bind_scripts($key)]} {
+                return $::scid_test_bind_scripts($key)
+            }
+            return ""
+        }
+        set script [lindex $args 1]
+        set ::scid_test_bind_scripts($tag,$sequence) $script
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands tk_popup {menu x y} { return }
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands ::ttk::frame {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands ::ttk::button {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands ::utils::pane::Create {pane editName errName w h frac} {
+        if {![llength [info commands $pane]]} { ::scid_test::widgets::defineWidget $pane }
+        if {![llength [info commands ${pane}.${editName}]]} { ::scid_test::widgets::defineWidget ${pane}.${editName} }
+        if {![llength [info commands ${pane}.${errName}]]} { ::scid_test::widgets::defineWidget ${pane}.${errName} }
+        return $pane
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands autoscrollText {bars frame widget style} {
+        if {![llength [info commands $frame]]} { ::scid_test::widgets::defineWidget $frame }
+        if {![llength [info commands $widget]]} { ::scid_test::widgets::defineTextWidget $widget }
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_import_pgn_dialog_spec_test::stubbedCommands ::win::createDialog {w} {
+        if {![llength [info commands $w]]} { ::scid_test::widgets::defineWidget $w }
+        return
+    }
+}
+
+proc ::gui_import_pgn_dialog_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_import_pgn_dialog_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::tr
+    unset -nocomplain ::MB3
+    unset -nocomplain ::scid_test_bind_scripts
+}
+
+proc ::gui_import_pgn_dialog_spec_test::entryLabels {menuSnapshot} {
+    set labels {}
+    foreach entry [::scid_test::menu_spec::entries $menuSnapshot] {
+        set d [::scid_test::menu_spec::entryDict $entry]
+        lappend labels [dict get $d label]
+    }
+    return $labels
+}
+
+test gui-import-pgn-dialog-spec-skeleton-1.0 {Import PGN dialog creates key widgets and the edit rmenu} -setup {
+    ::gui_import_pgn_dialog_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] tools import.tcl]
+
+    importPgnGame
+
+    set requiredWidgets [list \
+        .importWin \
+        .importWin.pane \
+        .importWin.pane.edit \
+        .importWin.pane.edit.text \
+        .importWin.pane.err \
+        .importWin.pane.err.text \
+        .importWin.b \
+        .importWin.b.paste \
+        .importWin.b.clear \
+        .importWin.b.ok \
+        .importWin.b.cancel \
+    ]
+    foreach p $requiredWidgets {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    if {[::scid_test::widgets::getState .importWin.pane.edit.text -wrap] ne "none"} {
+        error "Expected edit text -wrap to be 'none'"
+    }
+    if {[::scid_test::widgets::getState .importWin.pane.edit.text -state] ne "normal"} {
+        error "Expected edit text -state to be 'normal'"
+    }
+    if {[::scid_test::widgets::getState .importWin.pane.err.text -wrap] ne "word"} {
+        error "Expected err text -wrap to be 'word'"
+    }
+    if {[::scid_test::widgets::getState .importWin.pane.err.text -state] ne "disabled"} {
+        error "Expected err text -state to be 'disabled'"
+    }
+
+    if {$::gui_import_pgn_dialog_spec_test::lastFocus ne ".importWin.pane.edit.text"} {
+        error "Expected focus to land on the edit text widget"
+    }
+
+    set rmenuSnapshot [::scid_test::menu_structure::snapshot .importWin.pane.edit.text.rmenu]
+    ::gui_import_pgn_dialog_spec_test::entryLabels $rmenuSnapshot
+} -cleanup {
+    ::gui_import_pgn_dialog_spec_test::cleanup
+} -result {Cut Copy Paste {Select all}}
+
+cleanupTests
+
