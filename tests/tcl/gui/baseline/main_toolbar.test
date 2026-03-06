@@ -1,0 +1,152 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_main_toolbar_baseline_test {
+    variable stubbedCommands {}
+    variable tempRoot ""
+}
+
+proc ::gui_main_toolbar_baseline_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_main_toolbar_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_main_toolbar_baseline_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    set ::macOS 0
+
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_baseline_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        set type [lindex $args 0]
+        if {$type ne "photo"} {
+            error "image create $type not stubbed in tests"
+        }
+        return
+    }
+
+    set ::gui_main_toolbar_baseline_test::tempRoot [::scid_test::makeTempRoot [namespace current]]
+    set _photosRoot $::gui_main_toolbar_baseline_test::tempRoot
+    foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
+        set $dirVar $_photosRoot
+    }
+    file mkdir [file join $::scidShareDir photos]
+    unset _photosRoot
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    if {![namespace exists ::bookmarks]} { namespace eval ::bookmarks {} }
+
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_baseline_test::stubbedCommands ::ttk::frame {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_baseline_test::stubbedCommands ::ttk::button {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_baseline_test::stubbedCommands ::ttk::menubutton {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+}
+
+proc ::gui_main_toolbar_baseline_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_main_toolbar_baseline_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::deleteTempRoot $::gui_main_toolbar_baseline_test::tempRoot
+    set ::gui_main_toolbar_baseline_test::tempRoot ""
+}
+
+proc ::gui_main_toolbar_baseline_test::formatSnapshot {} {
+    set lines {}
+
+    lappend lines [list widget .main.tb \
+        -relief [::scid_test::widgets::getState .main.tb -relief] \
+        -border [::scid_test::widgets::getState .main.tb -border] \
+    ]
+
+    # Capture a small, stable subset of toolbar items (avoid -command bodies).
+    foreach w {open save finder bkm switcher glist pgn help} img {tb_open tb_save tb_finder tb_bkm tb_switcher tb_glist tb_pgn tb_help} {
+        set path ".main.tb.$w"
+        set entry [list widget $path \
+            -image [::scid_test::widgets::getState $path -image] \
+            -takefocus [::scid_test::widgets::getState $path -takefocus] \
+        ]
+        if {$w eq "bkm"} {
+            lappend entry -menu [::scid_test::widgets::getState $path -menu]
+        }
+        lappend lines $entry
+    }
+
+    if {![llength [info commands .main.tb.bkm.menu]]} {
+        error "Expected bookmarks menu widget command to exist: .main.tb.bkm.menu"
+    }
+    lappend lines "menu .main.tb.bkm.menu exists 1"
+
+    return [join $lines "\n"]
+}
+
+test gui-main-toolbar-baseline-compare-1.0 {Main toolbar skeleton matches the approved baseline structure} -setup {
+    ::gui_main_toolbar_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] main.tcl]
+
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_baseline_test::stubbedCommands ::bookmarks::RefreshMenu {menuPath} {
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_baseline_test::stubbedCommands setToolbarTooltips {tb} {
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_baseline_test::stubbedCommands redrawToolbar {} {
+        return
+    }
+
+    InitToolbar .main.tb
+    set actual [::gui_main_toolbar_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] main_toolbar.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: main toolbar skeleton (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/main_toolbar.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Main toolbar baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_main_toolbar_baseline_test::cleanup
+} -result 1
+
+cleanupTests

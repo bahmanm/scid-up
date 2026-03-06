@@ -1,0 +1,178 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_main_toolbar_spec_test {
+    variable stubbedCommands {}
+    variable tempRoot ""
+    variable refreshMenuCalls {}
+}
+
+proc ::gui_main_toolbar_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_main_toolbar_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_main_toolbar_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 1
+
+    set ::macOS 0
+
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_spec_test::stubbedCommands image {subcmd args} {
+        if {$subcmd ne "create"} {
+            error "image $subcmd not stubbed in tests"
+        }
+        set type [lindex $args 0]
+        if {$type ne "photo"} {
+            error "image create $type not stubbed in tests"
+        }
+        return
+    }
+
+    set ::gui_main_toolbar_spec_test::tempRoot [::scid_test::makeTempRoot [namespace current]]
+    set _photosRoot $::gui_main_toolbar_spec_test::tempRoot
+    foreach dirVar {::scidDataDir ::scidUserDir ::scidConfigDir ::scidShareDir} {
+        set $dirVar $_photosRoot
+    }
+    file mkdir [file join $::scidShareDir photos]
+    unset _photosRoot
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    if {![namespace exists ::bookmarks]} { namespace eval ::bookmarks {} }
+
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_spec_test::stubbedCommands ::ttk::frame {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_spec_test::stubbedCommands ::ttk::button {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_spec_test::stubbedCommands ::ttk::menubutton {path args} {
+        if {![llength [info commands $path]]} {
+            ::scid_test::widgets::defineWidget $path
+        }
+        if {[llength $args]} {
+            $path configure {*}$args
+        }
+        return $path
+    }
+
+    set ::gui_main_toolbar_spec_test::refreshMenuCalls {}
+}
+
+proc ::gui_main_toolbar_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_main_toolbar_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::deleteTempRoot $::gui_main_toolbar_spec_test::tempRoot
+    set ::gui_main_toolbar_spec_test::tempRoot ""
+}
+
+proc ::gui_main_toolbar_spec_test::assertWidgetsExist {paths} {
+    foreach p $paths {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+}
+
+test gui-main-toolbar-spec-skeleton-1.0 {InitToolbar creates the main toolbar button skeleton and wires the bookmarks menu} -setup {
+    ::gui_main_toolbar_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] main.tcl]
+
+    set setTooltipsCalls {}
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_spec_test::stubbedCommands setToolbarTooltips {tb} {
+        lappend ::setTooltipsCalls $tb
+        return
+    }
+
+    set redrawCalls {}
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_spec_test::stubbedCommands redrawToolbar {} {
+        lappend ::redrawCalls 1
+        return
+    }
+
+    set ::gui_main_toolbar_spec_test::refreshMenuCalls {}
+    ::scid_test::mocks::stubCommand ::gui_main_toolbar_spec_test::stubbedCommands ::bookmarks::RefreshMenu {menuPath} {
+        lappend ::gui_main_toolbar_spec_test::refreshMenuCalls $menuPath
+        return
+    }
+
+    InitToolbar .main.tb
+
+    set expectedWidgets [list \
+        .main.tb \
+        .main.tb.newdb \
+        .main.tb.open \
+        .main.tb.save \
+        .main.tb.closedb \
+        .main.tb.finder \
+        .main.tb.bkm \
+        .main.tb.newgame \
+        .main.tb.copy \
+        .main.tb.paste \
+        .main.tb.gprev \
+        .main.tb.gnext \
+        .main.tb.boardsearch \
+        .main.tb.headersearch \
+        .main.tb.materialsearch \
+        .main.tb.switcher \
+        .main.tb.glist \
+        .main.tb.pgn \
+        .main.tb.tmt \
+        .main.tb.maint \
+        .main.tb.eco \
+        .main.tb.tree \
+        .main.tb.crosstab \
+        .main.tb.engine \
+        .main.tb.help \
+    ]
+    ::gui_main_toolbar_spec_test::assertWidgetsExist $expectedWidgets
+
+    if {[::scid_test::widgets::getState .main.tb.bkm -menu] ne ".main.tb.bkm.menu"} {
+        error "Bookmarks menubutton should reference .main.tb.bkm.menu"
+    }
+    if {![llength [info commands .main.tb.bkm.menu]]} {
+        error "Expected bookmarks menu widget command to exist: .main.tb.bkm.menu"
+    }
+
+    if {$::gui_main_toolbar_spec_test::refreshMenuCalls ne [list .main.tb.bkm.menu]} {
+        error "Expected ::bookmarks::RefreshMenu to be invoked for .main.tb.bkm.menu"
+    }
+
+    if {$setTooltipsCalls ne [list .main.tb]} {
+        error "Expected setToolbarTooltips to be invoked for .main.tb"
+    }
+    if {[llength $redrawCalls] != 1} {
+        error "Expected redrawToolbar to be invoked once"
+    }
+
+    # Ensure toolbar items are made non-focusable.
+    set sampleTakefocus [list \
+        [::scid_test::widgets::getState .main.tb.open -takefocus] \
+        [::scid_test::widgets::getState .main.tb.bkm -takefocus] \
+        [::scid_test::widgets::getState .main.tb.help -takefocus] \
+    ]
+
+    return $sampleTakefocus
+} -cleanup {
+    ::gui_main_toolbar_spec_test::cleanup
+} -result {0 0 0}
+
+cleanupTests
