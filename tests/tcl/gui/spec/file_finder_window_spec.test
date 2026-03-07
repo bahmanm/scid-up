@@ -3,149 +3,20 @@ namespace import ::tcltest::*
 
 set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
 source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures file_finder_window.tcl]
 
 namespace eval ::gui_file_finder_window_spec_test {
     variable stubbedCommands {}
 }
 
 proc ::gui_file_finder_window_spec_test::setup {} {
-    ::scid_test::mocks::restoreStubs ::gui_file_finder_window_spec_test::stubbedCommands
-    ::scid_test::widgets::reset
-    ::scid_test::menu_capture::reset
-
-    ::scid_test::menu_capture::install ::gui_file_finder_window_spec_test::stubbedCommands \
-        -defaultTearoff 1 \
-        -stubBind 0
-
-    set ::windowsOS 0
-    set ::language E
-
-    array set ::tr {
-        FileFinder FileFinder
-        FinderSortType FinderSortType
-        FinderTypesScid FinderTypesScid
-        FinderTypesOld FinderTypesOld
-        FinderTypesPGN FinderTypesPGN
-        FinderTypesRep FinderTypesRep
-        FinderTypesEPD FinderTypesEPD
-        Stop Stop
-        FinderFileSubdirs FinderFileSubdirs
-        FinderDir FinderDir
-    }
-
-    # Minimal menuLabel table used by Open() for the labelframe title and tooltips.
-    array set ::menuLabel {
-        E,FinderSortType FinderSortType
-        E,FinderTypesScid FinderTypesScid
-        E,FinderTypesOld FinderTypesOld
-        E,FinderTypesPGN FinderTypesPGN
-        E,FinderTypesRep FinderTypesRep
-        E,FinderTypesEPD FinderTypesEPD
-    }
-
-    namespace eval ::file {}
-    namespace eval ::file::finder {}
-    namespace eval ::win {}
-    namespace eval ::utils {}
-    namespace eval ::utils::tooltip {}
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands tr {tag {lang ""}} {
-        if {[info exists ::tr($tag)]} { return $::tr($tag) }
-        return $tag
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands winfo {subcmd args} {
-        if {$subcmd ne "exists"} {
-            error "winfo $subcmd not stubbed in tests"
-        }
-        set w [lindex $args 0]
-        expr {[llength [info commands $w]] > 0}
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands wm {subcmd args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands bind {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands pack {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands grid {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands update {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands busyCursor {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands unbusyCursor {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands setWinLocation {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands recordWinSize {args} { return }
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::utils::tooltip::Set {w msg} {
-        return
-    }
-
-    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::ttk::frame {path args} {
-        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
-        if {[llength $args]} { $path configure {*}$args }
-        return $path
-    }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::ttk::labelframe {path args} {
-        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
-        if {[llength $args]} { $path configure {*}$args }
-        return $path
-    }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::ttk::checkbutton {path args} {
-        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
-        if {[llength $args]} { $path configure {*}$args }
-        return $path
-    }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::ttk::button {path args} {
-        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
-        if {[llength $args]} { $path configure {*}$args }
-        return $path
-    }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::ttk::label {path args} {
-        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
-        if {[llength $args]} { $path configure {*}$args }
-        return $path
-    }
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::ttk::menubutton {path args} {
-        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
-        if {[llength $args]} { $path configure {*}$args }
-        return $path
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands ::win::createDialog {w} {
-        if {![llength [info commands $w]]} { ::scid_test::widgets::defineWidget $w }
-        return
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands tk_optionMenu {path varName args} {
-        # Return a menu path; the caller stores it in ::file::finder::data(menu).
-        set menuPath "${path}.menu"
-        if {![llength [info commands $menuPath]]} {
-            menu $menuPath
-        }
-        return $menuPath
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands autoscrollText {bars frame widget style} {
-        if {![llength [info commands $frame]]} { ::scid_test::widgets::defineWidget $frame }
-        if {![llength [info commands $widget]]} { ::scid_test::widgets::defineTextWidget $widget }
-        return
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_file_finder_window_spec_test::stubbedCommands font {subcmd args} {
-        if {$subcmd ne "measure"} {
-            return "scid_test_font"
-        }
-        # Return a plausible pixel width.
-        return 8
-    }
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::file_finder_window::setup stubbedCommands
 }
 
 proc ::gui_file_finder_window_spec_test::cleanup {} {
-    ::scid_test::mocks::restoreStubs ::gui_file_finder_window_spec_test::stubbedCommands
-    ::scid_test::widgets::reset
-    ::scid_test::menu_capture::reset
-
-    unset -nocomplain ::tr
-    unset -nocomplain ::menuLabel
-    unset -nocomplain ::windowsOS
-    unset -nocomplain ::language
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::file_finder_window::cleanup stubbedCommands
 }
 
 test gui-file-finder-window-spec-skeleton-1.0 {File Finder window creates the main text widget with stable core configuration} -setup {
