@@ -3,310 +3,51 @@ namespace import ::tcltest::*
 
 set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
 source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures preferences_window.tcl]
 
 namespace eval ::gui_preferences_window_baseline_test {
     variable stubbedCommands {}
-    variable bindCalls {}
-    variable focusCalls {}
-    variable winCreateCalls {}
-    variable initCalls {}
-
-    variable treeviewState
-    array set treeviewState {}
-
-    variable treeviewInserted
-    array set treeviewInserted {}
-
-    variable treeviewSelection
-    array set treeviewSelection {}
-
-    variable canvasState
-    array set canvasState {}
-
-    variable canvasCreateCalls
-    array set canvasCreateCalls {}
-}
-
-proc ::gui_preferences_window_baseline_test::defineTreeview {path} {
-    catch {rename $path ""}
-    interp alias {} $path {} ::gui_preferences_window_baseline_test::dispatchTreeview $path
-    return $path
-}
-
-proc ::gui_preferences_window_baseline_test::dispatchTreeview {path subcmd args} {
-    switch -- $subcmd {
-        configure {
-            if {[llength $args] % 2 != 0} {
-                error "treeview $path configure expects option/value pairs, got: $args"
-            }
-            foreach {opt val} $args {
-                set ::gui_preferences_window_baseline_test::treeviewState($path,$opt) $val
-            }
-            return
-        }
-        insert {
-            set parent [lindex $args 0]
-            set index [lindex $args 1]
-            set opts [lrange $args 2 end]
-
-            set itemId ""
-            set values {}
-            for {set i 0} {$i < [llength $opts]} {incr i 2} {
-                set opt [lindex $opts $i]
-                set val [lindex $opts [expr {$i + 1}]]
-                if {$opt eq "-id"} { set itemId $val }
-                if {$opt eq "-values"} { set values $val }
-            }
-            if {$itemId eq ""} {
-                error "treeview $path insert missing -id (parent=$parent index=$index opts=$opts)"
-            }
-
-            lappend ::gui_preferences_window_baseline_test::treeviewInserted($path) [list \
-                -parent $parent \
-                -index $index \
-                -id $itemId \
-                -values $values \
-            ]
-            return $itemId
-        }
-        column {
-            set col [lindex $args 0]
-            set opts [lrange $args 1 end]
-            if {[llength $opts] % 2 != 0} {
-                error "treeview $path column expects option/value pairs, got: $opts"
-            }
-            foreach {opt val} $opts {
-                set ::gui_preferences_window_baseline_test::treeviewState($path,column,$col,$opt) $val
-            }
-            return
-        }
-        selection {
-            if {![llength $args]} {
-                if {![info exists ::gui_preferences_window_baseline_test::treeviewSelection($path)]} {
-                    return ""
-                }
-                return $::gui_preferences_window_baseline_test::treeviewSelection($path)
-            }
-
-            set op [lindex $args 0]
-            switch -- $op {
-                set {
-                    set ids [lrange $args 1 end]
-                    set ::gui_preferences_window_baseline_test::treeviewSelection($path) $ids
-                    return
-                }
-                default {
-                    error "treeview $path selection $op not stubbed"
-                }
-            }
-        }
-        default {
-            error "treeview $path subcommand $subcmd not stubbed"
-        }
-    }
-}
-
-proc ::gui_preferences_window_baseline_test::defineCanvas {path} {
-    catch {rename $path ""}
-    interp alias {} $path {} ::gui_preferences_window_baseline_test::dispatchCanvas $path
-    return $path
-}
-
-proc ::gui_preferences_window_baseline_test::dispatchCanvas {path subcmd args} {
-    switch -- $subcmd {
-        configure {
-            if {[llength $args] % 2 != 0} {
-                error "canvas $path configure expects option/value pairs, got: $args"
-            }
-            foreach {opt val} $args {
-                set ::gui_preferences_window_baseline_test::canvasState($path,$opt) $val
-            }
-            return
-        }
-        create {
-            set type [lindex $args 0]
-            if {$type ne "window"} {
-                return 0
-            }
-            lappend ::gui_preferences_window_baseline_test::canvasCreateCalls($path) $args
-            return [llength $::gui_preferences_window_baseline_test::canvasCreateCalls($path)]
-        }
-        xview -
-        yview {
-            return
-        }
-        default {
-            error "canvas $path subcommand $subcmd not stubbed"
-        }
-    }
 }
 
 proc ::gui_preferences_window_baseline_test::setup {} {
-    ::scid_test::mocks::restoreStubs ::gui_preferences_window_baseline_test::stubbedCommands
-    ::scid_test::widgets::reset
-    ::scid_test::menu_capture::reset
-
-    set ::language E
-    array set ::menuLabel {E,ConfigureScid ConfigureScid}
-
-    array set ::tr {
-        OptionsBoard OptionsBoard
-        OptionsFonts OptionsFonts
-        OptionsToolbar OptionsToolbar
-        OptionsInternationalization OptionsInternationalization
-        OptionsRecent OptionsRecent
-        OptionsSounds OptionsSounds
-        OptionsMoves OptionsMoves
-        ConfigureInformant ConfigureInformant
-    }
-
-    namespace eval ::win {}
-    namespace eval ::preferences {}
-    namespace eval ::recentFiles {}
-    namespace eval ::utils {}
-    namespace eval ::utils::sound {}
-
-    set ::gui_preferences_window_baseline_test::bindCalls {}
-    set ::gui_preferences_window_baseline_test::focusCalls {}
-    set ::gui_preferences_window_baseline_test::winCreateCalls {}
-    set ::gui_preferences_window_baseline_test::initCalls {}
-
-    array unset ::gui_preferences_window_baseline_test::treeviewState
-    array set ::gui_preferences_window_baseline_test::treeviewState {}
-    array unset ::gui_preferences_window_baseline_test::treeviewInserted
-    array set ::gui_preferences_window_baseline_test::treeviewInserted {}
-    array unset ::gui_preferences_window_baseline_test::treeviewSelection
-    array set ::gui_preferences_window_baseline_test::treeviewSelection {}
-    array unset ::gui_preferences_window_baseline_test::canvasState
-    array set ::gui_preferences_window_baseline_test::canvasState {}
-    array unset ::gui_preferences_window_baseline_test::canvasCreateCalls
-    array set ::gui_preferences_window_baseline_test::canvasCreateCalls {}
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands tr {tag {lang ""}} {
-        if {[info exists ::tr($tag)]} { return $::tr($tag) }
-        return $tag
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands winfo {subcmd args} {
-        switch -- $subcmd {
-            exists {
-                set w [lindex $args 0]
-                expr {[llength [info commands $w]] > 0}
-            }
-            reqwidth -
-            reqheight {
-                return 100
-            }
-            default {
-                error "winfo $subcmd not stubbed in tests"
-            }
-        }
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands bind {w seq script} {
-        lappend ::gui_preferences_window_baseline_test::bindCalls [list $w $seq $script]
-        return
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands focus {w} {
-        lappend ::gui_preferences_window_baseline_test::focusCalls $w
-        return
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands grid {args} { return }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands autoscrollBars {args} { return }
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands ::applyThemeColor_background {args} { return }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands ::win::createWindow {w title} {
-        lappend ::gui_preferences_window_baseline_test::winCreateCalls [list $w $title]
-        if {[llength [info commands $w]]} {
-            return 0
-        }
-        ::scid_test::widgets::defineWidget $w
-        return 1
-    }
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands ::win::makeVisible {w} { return }
-
-    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands ::ttk::frame {path args} {
-        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
-        if {[llength $args]} { $path configure {*}$args }
-        return $path
-    }
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands ::ttk::treeview {path args} {
-        ::gui_preferences_window_baseline_test::defineTreeview $path
-        if {[llength $args]} {
-            $path configure {*}$args
-        }
-        return $path
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands canvas {path args} {
-        ::gui_preferences_window_baseline_test::defineCanvas $path
-        if {[llength $args]} {
-            $path configure {*}$args
-        }
-        return $path
-    }
-
-    ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands font {subcmd args} {
-        if {$subcmd eq "measure"} {
-            set text [lindex $args 1]
-            return [expr {[string length $text] * 8}]
-        }
-
-        if {$subcmd eq "create"} {
-            set name "scid_test_font"
-            if {[llength $args] > 0 && ![string match "-*" [lindex $args 0]]} {
-                set name [lindex $args 0]
-            }
-            return $name
-        }
-
-        return "scid_test_font"
-    }
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::preferences_window::setup stubbedCommands
 }
 
 proc ::gui_preferences_window_baseline_test::cleanup {} {
-    ::scid_test::mocks::restoreStubs ::gui_preferences_window_baseline_test::stubbedCommands
-    ::scid_test::widgets::reset
-    ::scid_test::menu_capture::reset
-
-    unset -nocomplain ::tr
-    unset -nocomplain ::menuLabel
-    unset -nocomplain ::language
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::preferences_window::cleanup stubbedCommands
 }
 
 proc ::gui_preferences_window_baseline_test::formatSnapshot {} {
     set lines {}
 
-    lappend lines [list win::createWindow {*}[lindex $::gui_preferences_window_baseline_test::winCreateCalls 0]]
+    lappend lines [list win::createWindow {*}[lindex [::scid_test::gui_fixtures::preferences_window::winCreateCalls] 0]]
 
-    lappend lines [list widget .preferences.c -highlightthickness $::gui_preferences_window_baseline_test::canvasState(.preferences.c,-highlightthickness)]
+    lappend lines [list widget .preferences.c -highlightthickness [::scid_test::gui_fixtures::preferences_window::canvasState .preferences.c -highlightthickness]]
 
-    set createCall [lindex $::gui_preferences_window_baseline_test::canvasCreateCalls(.preferences.c) 0]
+    set createCall [lindex [::scid_test::gui_fixtures::preferences_window::canvasCreateCalls .preferences.c] 0]
     lappend lines [list canvas .preferences.c create {*}$createCall]
 
     lappend lines [list treeview .preferences.options.list \
-        -height $::gui_preferences_window_baseline_test::treeviewState(.preferences.options.list,-height) \
-        column0.width $::gui_preferences_window_baseline_test::treeviewState(.preferences.options.list,column,0,-width) \
-        selection $::gui_preferences_window_baseline_test::treeviewSelection(.preferences.options.list) \
+        -height [::scid_test::gui_fixtures::preferences_window::treeviewState .preferences.options.list -height] \
+        column0.width [::scid_test::gui_fixtures::preferences_window::treeviewColumnState .preferences.options.list 0 -width] \
+        selection [::scid_test::gui_fixtures::preferences_window::treeviewSelection .preferences.options.list] \
     ]
 
-    foreach item $::gui_preferences_window_baseline_test::treeviewInserted(.preferences.options.list) {
+    foreach item [::scid_test::gui_fixtures::preferences_window::treeviewInserted .preferences.options.list] {
         set id [lindex $item [expr {[lsearch -exact $item -id] + 1}]]
         set values [lindex $item [expr {[lsearch -exact $item -values] + 1}]]
         lappend lines [list treeview.item $id values $values]
     }
 
-    foreach call $::gui_preferences_window_baseline_test::bindCalls {
+    foreach call [::scid_test::gui_fixtures::preferences_window::bindCalls] {
         lassign $call w seq script
         lappend lines [list bind $w $seq $script]
     }
 
-    lappend lines [list initCalls $::gui_preferences_window_baseline_test::initCalls]
-    lappend lines [list focusCalls $::gui_preferences_window_baseline_test::focusCalls]
+    lappend lines [list initCalls [::scid_test::gui_fixtures::preferences_window::initCalls]]
+    lappend lines [list focusCalls [::scid_test::gui_fixtures::preferences_window::focusCalls]]
 
     return [join $lines "\n"]
 }
@@ -316,22 +57,7 @@ test gui-preferences-window-baseline-compare-1.0 {Preferences window skeleton ma
 } -body {
     source [file join [::scid_test::tclDir] windows preferences.tcl]
 
-    foreach initProc {
-        chooseBoardColors
-        ::preferences::fonts
-        ConfigToolbar
-        ::preferences::internationalization
-        ::recentFiles::configure
-        ::utils::sound::OptionsDialog
-        ::preferences::moves
-        configInformant
-    } {
-        set body [string map [list @P@ $initProc] {
-            lappend ::gui_preferences_window_baseline_test::initCalls [list @P@ $frame]
-            return
-        }]
-        ::scid_test::mocks::stubCommand ::gui_preferences_window_baseline_test::stubbedCommands $initProc {frame} $body
-    }
+    ::scid_test::gui_fixtures::preferences_window::stubPaneInitialisers stubbedCommands
 
     ::preferences::Open
     set actual [::gui_preferences_window_baseline_test::formatSnapshot]
