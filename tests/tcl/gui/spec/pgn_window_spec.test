@@ -1,0 +1,134 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+
+namespace eval ::gui_pgn_window_spec_test {
+    variable stubbedCommands {}
+    variable bindCalls {}
+}
+
+proc ::gui_pgn_window_spec_test::setup {} {
+    ::scid_test::mocks::restoreStubs ::gui_pgn_window_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    ::scid_test::menu_capture::install ::gui_pgn_window_spec_test::stubbedCommands \
+        -defaultTearoff 1 \
+        -stubBind 0
+
+    set ::gui_pgn_window_spec_test::bindCalls {}
+
+    set ::language E
+    set ::MB3 3
+
+    array set ::tr {
+        PgnWindowTitle PgnWindowTitle
+    }
+
+    namespace eval ::win {}
+    namespace eval ::pgn {}
+
+    set ::pgn::boldMainLine 0
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands tr {tag {lang ""}} {
+        if {[info exists ::tr($tag)]} { return $::tr($tag) }
+        return $tag
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands ::win::createWindow {w title args} {
+        if {[llength [info commands $w]]} {
+            return 0
+        }
+        ::scid_test::widgets::defineWidget $w
+        return 1
+    }
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands ::win::closeWindow {w} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands ::setMenu {w menuPath} { return }
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands translateMenuLabels {menuPath} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands ttk_text {path args} {
+        if {![llength [info commands $path]]} { ::scid_test::widgets::defineTextWidget $path }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+
+    if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands ::ttk::frame {path args} {
+        if {![llength [info commands $path]]} { ::scid_test::widgets::defineWidget $path }
+        if {[llength $args]} { $path configure {*}$args }
+        return $path
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands autoscrollBars {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands grid {args} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands bind {w seq script} {
+        lappend ::gui_pgn_window_spec_test::bindCalls [list $w $seq $script]
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands focus {w} { return }
+
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands winfo {subcmd args} {
+        if {$subcmd ne "exists"} {
+            error "winfo $subcmd not stubbed in tests"
+        }
+        set w [lindex $args 0]
+        expr {[llength [info commands $w]] > 0}
+    }
+}
+
+proc ::gui_pgn_window_spec_test::cleanup {} {
+    ::scid_test::mocks::restoreStubs ::gui_pgn_window_spec_test::stubbedCommands
+    ::scid_test::widgets::reset
+    ::scid_test::menu_capture::reset
+
+    unset -nocomplain ::tr
+    unset -nocomplain ::language
+    unset -nocomplain ::MB3
+    unset -nocomplain ::pgnWin
+}
+
+test gui-pgn-window-spec-skeleton-1.0 {PGN window creates stable menu skeleton, text widget, and binds right click for context menu} -setup {
+    ::gui_pgn_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows pgn.tcl]
+
+    # Avoid deep dependencies (htext/sc_game/sc_pos/etc.) during window creation.
+    ::scid_test::mocks::stubCommand ::gui_pgn_window_spec_test::stubbedCommands ::pgn::ResetColors {} { return }
+
+    ::pgn::OpenClose
+
+    foreach p {.pgnWin .pgnWin.menu .pgnWin.menu.file .pgnWin.menu.opt .pgnWin.menu.color .pgnWin.menu.helpmenu .pgnWin.frame .pgnWin.text} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    if {[.pgnWin.menu.file cget -tearoff] ne "0"} {
+        error "Expected .pgnWin.menu.file -tearoff 0"
+    }
+
+    set menuSnapshot [::scid_test::menu_structure::snapshot .pgnWin.menu]
+    set formatted [::scid_test::menu_structure::format $menuSnapshot]
+
+    set sequencesByWidget {}
+    foreach call $::gui_pgn_window_spec_test::bindCalls {
+        lassign $call w seq script
+        dict lappend sequencesByWidget $w $seq
+    }
+
+    list \
+        [::scid_test::widgets::getState .pgnWin.text -wrap] \
+        [::scid_test::widgets::getState .pgnWin.text -tabs] \
+        [string match "*type cascade label PgnFile*" $formatted] \
+        [lsort -unique [dict get $sequencesByWidget .pgnWin.text]] \
+        [lsort -unique [dict get $sequencesByWidget .pgnWin]]
+} -cleanup {
+    ::gui_pgn_window_spec_test::cleanup
+} -result {word {1c right 2c 4c} 1 {<ButtonPress-1> <ButtonPress-3>} <Destroy>}
+
+cleanupTests

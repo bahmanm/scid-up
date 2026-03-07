@@ -233,8 +233,34 @@ proc ::scid_test::widgets::dispatchText {path subcmd args} {
     variable seeCalls
     variable yviewCalls
     variable indexCalls
+    variable state
 
     switch -- $subcmd {
+        get {
+            # get <startIndex> ?endIndex?
+            #
+            # Keep this intentionally simple: many tests only care that `get`
+            # returns the current text contents, not Tk's exact index slicing.
+            return [::scid_test::widgets::getText $path]
+        }
+        edit {
+            # edit modified ?bool?
+            set editSubcmd [lindex $args 0]
+            if {$editSubcmd ne "modified"} {
+                error "Widget $path edit $editSubcmd not stubbed"
+            }
+
+            if {[llength $args] == 1} {
+                if {![info exists state($path,edit.modified)]} {
+                    return 0
+                }
+                return $state($path,edit.modified)
+            }
+
+            set val [lindex $args 1]
+            set state($path,edit.modified) [expr {$val ? 1 : 0}]
+            return
+        }
         mark {
             # mark set <markName> <index>
             set markSubcmd [lindex $args 0]

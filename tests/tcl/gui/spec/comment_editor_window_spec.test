@@ -1,0 +1,53 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures comment_editor_window.tcl]
+
+namespace eval ::gui_comment_editor_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_comment_editor_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::comment_editor_window::setup stubbedCommands
+}
+
+proc ::gui_comment_editor_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::comment_editor_window::cleanup stubbedCommands
+}
+
+test gui-comment-editor-window-spec-skeleton-1.0 {Comment editor creates stable widget skeleton and loads comment/NAG values} -setup {
+    ::gui_comment_editor_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows comment.tcl]
+
+    ::windows::commenteditor::createWin 1
+
+    set w .commentWin
+    foreach p [list \
+        $w \
+        $w.nf $w.nf.label $w.nf.clear $w.nf.text $w.nf.b $w.nf.b.b0 $w.nf.b.b17 \
+        $w.cf $w.cf.label $w.cf.clear $w.cf.txtframe $w.cf.txtframe.text \
+    ] {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set nagButtons [winfo children $w.nf.b]
+
+    list \
+        [::scid_test::widgets::getState $w.cf.txtframe.text -wrap] \
+        [::scid_test::widgets::getState $w.cf.txtframe.text -state] \
+        [::scid_test::widgets::getText $w.cf.txtframe.text] \
+        [::scid_test::widgets::getText $w.nf.text] \
+        [llength $nagButtons] \
+        [lindex [::scid_test::gui_fixtures::comment_editor_window::afterCalls] end]
+} -cleanup {
+    ::gui_comment_editor_window_spec_test::cleanup
+} -result {word normal {sample comment} !! 18 {idle focus .commentWin.cf.txtframe.text}}
+
+cleanupTests

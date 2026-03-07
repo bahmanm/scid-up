@@ -1,0 +1,60 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures preferences_window.tcl]
+
+namespace eval ::gui_preferences_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_preferences_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::preferences_window::setup stubbedCommands
+}
+
+proc ::gui_preferences_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::preferences_window::cleanup stubbedCommands
+}
+
+test gui-preferences-window-spec-skeleton-1.0 {Preferences window creates the option list, config canvas, and invokes each config pane initialiser} -setup {
+    ::gui_preferences_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows preferences.tcl]
+
+    ::scid_test::gui_fixtures::preferences_window::stubPaneInitialisers stubbedCommands
+
+    ::preferences::Open
+
+    foreach p {.preferences .preferences.options .preferences.options.list .preferences.config .preferences.c .preferences.c.f} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set createCalls [::scid_test::gui_fixtures::preferences_window::canvasCreateCalls .preferences.c]
+    if {![llength $createCalls]} {
+        error "Expected .preferences.c to create a canvas window for .preferences.c.f"
+    }
+    set createCall [lindex $createCalls 0]
+
+    set inserted [::scid_test::gui_fixtures::preferences_window::treeviewInserted .preferences.options.list]
+    if {[llength $inserted] != 8} {
+        error "Expected 8 preference entries inserted, got [llength $inserted]"
+    }
+
+    list \
+        [::scid_test::gui_fixtures::preferences_window::canvasState .preferences.c -highlightthickness] \
+        [::scid_test::gui_fixtures::preferences_window::treeviewState .preferences.options.list -height] \
+        $createCall \
+        [lsort [::scid_test::gui_fixtures::preferences_window::treeviewSelection .preferences.options.list]] \
+        [::scid_test::gui_fixtures::preferences_window::initCalls] \
+        [::scid_test::gui_fixtures::preferences_window::focusCalls] \
+        [::scid_test::gui_fixtures::preferences_window::winCreateCalls]
+} -cleanup {
+    ::gui_preferences_window_spec_test::cleanup
+} -result {0 8 {window 0 0 -window .preferences.c.f -anchor nw} 0 {{chooseBoardColors .preferences.c.f.0} {::preferences::fonts .preferences.c.f.1} {ConfigToolbar .preferences.c.f.2} {::preferences::internationalization .preferences.c.f.3} {::recentFiles::configure .preferences.c.f.4} {::utils::sound::OptionsDialog .preferences.c.f.5} {::preferences::moves .preferences.c.f.6} {configInformant .preferences.c.f.7}} .preferences.options {{.preferences ConfigureScid}}}
+
+cleanupTests
