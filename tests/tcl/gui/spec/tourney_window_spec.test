@@ -1,0 +1,69 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures tourney_window.tcl]
+
+namespace eval ::gui_tourney_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_tourney_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::tourney_window::setup stubbedCommands
+}
+
+proc ::gui_tourney_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::tourney_window::cleanup stubbedCommands
+    unset -nocomplain ::tourneyWin
+}
+
+test gui-tourney-window-spec-skeleton-1.0 {Tournament window creates stable text widget structure (tabs/tags) and key bindings} -setup {
+    ::gui_tourney_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows tourney.tcl]
+
+    # Avoid DB/search logic.
+    ::scid_test::mocks::stubCommand ::gui_tourney_window_spec_test::stubbedCommands ::tourney::refresh {args} { return }
+
+    ::tourney::Open
+
+    foreach p {.tourney .tourney.t .tourney.t.text .tourney.o1 .tourney.o2 .tourney.o3 .tourney.b .tourney.o3.site} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set sequences {}
+    foreach call [::scid_test::gui_fixtures::tourney_window::bindCalls] {
+        lappend sequences [lindex $call 1]
+    }
+    set sequences [lsort -unique $sequences]
+
+    set tagsConfigured {}
+    foreach tag {date np elo best event title} {
+        set found 0
+        foreach call [::scid_test::widgets::getTagConfigureCalls .tourney.t.text] {
+            if {[lindex $call 0] eq $tag} {
+                set found 1
+                break
+            }
+        }
+        lappend tagsConfigured $found
+    }
+
+    list \
+        [::scid_test::widgets::getState .tourney.t.text -wrap] \
+        [::scid_test::widgets::getState .tourney.t.text -font] \
+        [::scid_test::widgets::getState .tourney.t.text -state] \
+        [::scid_test::widgets::getState .tourney.t.text -tabs] \
+        $tagsConfigured \
+        [lindex [::scid_test::gui_fixtures::tourney_window::focusCalls] end] \
+        $sequences
+} -cleanup {
+    ::gui_tourney_window_spec_test::cleanup
+} -result {none font_Small normal {24 r 32 l 144 r 184 r 240 r 256 l 440 l} {1 1 1 1 1 1} .tourney.o3.site {<Destroy> <Down> <F1> <Key-End> <Key-Home> <Next> <Prior> <Return> <Up>}}
+
+cleanupTests
