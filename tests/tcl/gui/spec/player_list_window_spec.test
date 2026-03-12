@@ -1,0 +1,71 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures player_list_window.tcl]
+
+namespace eval ::gui_player_list_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_player_list_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::player_list_window::setup stubbedCommands
+}
+
+proc ::gui_player_list_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::player_list_window::cleanup stubbedCommands
+
+    unset -nocomplain ::plistWin
+    catch {namespace delete ::plist}
+}
+
+test gui-player-list-window-spec-skeleton-1.0 {Player list window creates stable text widget structure (tabs/tags), focuses search, and binds keys} -setup {
+    ::gui_player_list_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows pfinder.tcl]
+
+    # Avoid DB/search logic.
+    ::scid_test::mocks::stubCommand ::gui_player_list_window_spec_test::stubbedCommands ::plist::refresh {args} { return }
+
+    ::plist::Open
+
+    foreach p {.plist .plist.t .plist.t.text .plist.o1 .plist.o1.name .plist.o1.esize .plist.o2 .plist.b} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set sequences {}
+    foreach call [::scid_test::gui_fixtures::player_list_window::bindCalls] {
+        lappend sequences [lindex $call 1]
+    }
+    set sequences [lsort -unique $sequences]
+
+    set tagsConfigured {}
+    foreach tag {ng date elo title} {
+        set found 0
+        foreach call [::scid_test::widgets::getTagConfigureCalls .plist.t.text] {
+            if {[lindex $call 0] eq $tag} {
+                set found 1
+                break
+            }
+        }
+        lappend tagsConfigured $found
+    }
+
+    list \
+        [::scid_test::widgets::getState .plist.t.text -wrap] \
+        [::scid_test::widgets::getState .plist.t.text -font] \
+        [::scid_test::widgets::getState .plist.t.text -state] \
+        [::scid_test::widgets::getState .plist.t.text -tabs] \
+        $tagsConfigured \
+        [lindex [::scid_test::gui_fixtures::player_list_window::focusCalls] end] \
+        $sequences
+} -cleanup {
+    ::gui_player_list_window_spec_test::cleanup
+} -result {none font_Small normal {32 r 80 r 144 r 192 r 256 r 280 l} {1 1 1 1} .plist.o1.name {<Destroy> <F1> <Return>}}
+
+cleanupTests

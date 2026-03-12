@@ -1,0 +1,82 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures eco_browser_window.tcl]
+
+namespace eval ::gui_eco_browser_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_eco_browser_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::eco_browser_window::setup stubbedCommands
+}
+
+proc ::gui_eco_browser_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::eco_browser_window::cleanup stubbedCommands
+    catch {unset ::windows::eco::isOpen}
+    catch {unset ::windows::eco::code}
+    catch {unset ::windows::eco::count}
+}
+
+test gui-eco-browser-window-spec-skeleton-1.0 {ECO browser window creates stable text widget structure (tabs/tags) and key bindings} -setup {
+    ::gui_eco_browser_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows eco.tcl]
+
+    # Avoid graph/data logic.
+    ::scid_test::mocks::stubCommand ::gui_eco_browser_window_spec_test::stubbedCommands ::windows::eco::update {args} { return }
+
+    ::windows::eco::Refresh
+
+    foreach p {.ecograph .ecograph.title .ecograph.b .ecograph.b.classify .ecograph.b.help .ecograph.b.close .ecograph.pane .ecograph.pane.graph .ecograph.pane.graph.c .ecograph.pane.text .ecograph.pane.text.f .ecograph.pane.text.text} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set sequences {}
+    foreach call [::scid_test::gui_fixtures::eco_browser_window::bindCalls] {
+        lappend sequences [lindex $call 1]
+    }
+    set sequences [lsort -unique $sequences]
+
+    set tagsConfigured {}
+    foreach tag {bold indent} {
+        set found 0
+        foreach call [::scid_test::widgets::getTagConfigureCalls .ecograph.pane.text.text] {
+            if {[lindex $call 0] eq $tag} {
+                set found 1
+                break
+            }
+        }
+        lappend tagsConfigured $found
+    }
+
+    list \
+        [::scid_test::widgets::getState .ecograph.pane.text.text -wrap] \
+        [::scid_test::widgets::getState .ecograph.pane.text.text -state] \
+        [::scid_test::widgets::getState .ecograph.pane.text.text -height] \
+        [::scid_test::widgets::getState .ecograph.pane.text.text -width] \
+        $tagsConfigured \
+        [expr {[lsearch -exact $sequences "<Escape>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<F1>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<Home>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<End>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<Up>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<Down>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<Prior>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<Next>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<KeyPress-0>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<KeyPress-A>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<KeyPress-a>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<KeyPress-z>"] >= 0}] \
+        [expr {[lsearch -exact $sequences "<KeyPress-BackSpace>"] >= 0}]
+} -cleanup {
+    ::gui_eco_browser_window_spec_test::cleanup
+} -result {word normal 12 75 {1 1} 1 1 1 1 1 1 1 1 1 1 1 1 1}
+
+cleanupTests
