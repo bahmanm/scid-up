@@ -1,0 +1,82 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures engine_window.tcl]
+
+namespace eval ::gui_engine_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_engine_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::engine_window::setup stubbedCommands
+}
+
+proc ::gui_engine_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::engine_window::cleanup stubbedCommands
+
+    catch {namespace delete ::enginewin}
+    unset -nocomplain ::enginewin::engState
+    unset -nocomplain ::enginewin_lastengine
+}
+
+test gui-engine-window-spec-skeleton-1.0 {Engine window creates stable display/debug widgets (tabs/tags) and binds} -setup {
+    ::gui_engine_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows engine.tcl]
+
+    # Avoid complex toolbar/menu construction.
+    ::scid_test::mocks::stubCommand ::gui_engine_window_spec_test::stubbedCommands ::enginewin::createButtonsBar {args} { return }
+
+    # Avoid engine backend logic invoked at the end of ::enginewin::Open.
+    ::scid_test::mocks::stubCommand ::gui_engine_window_spec_test::stubbedCommands ::enginewin::connectEngine {args} { return }
+
+    set id [::enginewin::Open]
+
+    foreach p {.engineWin1 .engineWin1.header_info .engineWin1.header_info.text .engineWin1.main .engineWin1.pane .engineWin1.config .engineWin1.config.btn .engineWin1.config.options .engineWin1.display .engineWin1.display.pv_lines .engineWin1.debug .engineWin1.debug.lines .engineWin1.btn} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set tagsConfigured {}
+    foreach tag {lmargin markmove} {
+        set found 0
+        foreach call [::scid_test::widgets::getTagConfigureCalls .engineWin1.display.pv_lines] {
+            if {[lindex $call 0] eq $tag} {
+                set found 1
+                break
+            }
+        }
+        lappend tagsConfigured $found
+    }
+
+    set tagBinds {}
+    foreach call [::scid_test::widgets::getTagBindCalls .engineWin1.display.pv_lines] {
+        lappend tagBinds [list [lindex $call 0] [lindex $call 1]]
+    }
+    set tagBinds [lsort -unique $tagBinds]
+
+    set sequencesByWidget {}
+    foreach call [::scid_test::gui_fixtures::engine_window::bindCalls] {
+        lassign $call w seq script
+        dict lappend sequencesByWidget $w $seq
+    }
+    foreach w [dict keys $sequencesByWidget] {
+        dict set sequencesByWidget $w [lsort -unique [dict get $sequencesByWidget $w]]
+    }
+
+    list \
+        $id \
+        [::scid_test::widgets::getState .engineWin1.display.pv_lines -tabs] \
+        $tagsConfigured \
+        $tagBinds \
+        [dict get $sequencesByWidget .engineWin1]
+} -cleanup {
+    ::gui_engine_window_spec_test::cleanup
+} -result {1 {16 right 17} {1 1} {{moves <Any-Leave>} {moves <ButtonRelease-1>} {moves <Motion>}} <<NotifyNewGame>>}
+
+cleanupTests

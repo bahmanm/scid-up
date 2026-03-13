@@ -1,0 +1,53 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures stats_window.tcl]
+
+namespace eval ::gui_stats_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_stats_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::stats_window::setup stubbedCommands
+}
+
+proc ::gui_stats_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::stats_window::cleanup stubbedCommands
+}
+
+test gui-stats-window-spec-skeleton-1.0 {Filter Statistics window creates the main text widget with stable core configuration and binds close/help keys} -setup {
+    ::gui_stats_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows stats.tcl]
+
+    # Avoid sc_filter and formatting dependencies.
+    ::scid_test::mocks::stubCommand ::gui_stats_window_spec_test::stubbedCommands ::windows::stats::refresh_wnd {} { return }
+
+    ::windows::stats::Open
+
+    foreach p {.statsWin .statsWin.statsasb .statsWin.stats .statsWin.fbuttons .statsWin.fbuttons.print .statsWin.fbuttons.graphyear .statsWin.fbuttons.graphelo .statsWin.fbuttons.setup} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set sequences {}
+    foreach call [::scid_test::gui_fixtures::stats_window::bindCalls] {
+        lappend sequences [lindex $call 1]
+    }
+    set sequences [lsort -unique $sequences]
+
+    list \
+        [::scid_test::widgets::getState .statsWin.stats -wrap] \
+        [::scid_test::widgets::getState .statsWin.stats -font] \
+        [::scid_test::widgets::getState .statsWin.stats -state] \
+        $sequences
+} -cleanup {
+    ::gui_stats_window_spec_test::cleanup
+} -result {none font_Fixed normal {<Configure> <Control-q> <Destroy> <Escape> <F1>}}
+
+cleanupTests
