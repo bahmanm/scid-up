@@ -145,6 +145,18 @@ proc ::scid_test::widgets::defineComboboxWidget {path} {
     return $path
 }
 
+proc ::scid_test::widgets::definePanedwindowWidget {path} {
+    variable created
+
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::scid_test::widgets::dispatchPanedwindow $path
+    lappend created $path
+    return $path
+}
+
 proc ::scid_test::widgets::dispatch {path subcmd args} {
     variable state
     variable text
@@ -191,6 +203,38 @@ proc ::scid_test::widgets::dispatch {path subcmd args} {
         }
         default {
             error "Widget $path subcommand $subcmd not stubbed"
+        }
+    }
+}
+
+proc ::scid_test::widgets::dispatchPanedwindow {path subcmd args} {
+    variable state
+
+    switch -- $subcmd {
+        add {
+            set child [lindex $args 0]
+            lappend state($path,paned.addCalls) [list {*}$args]
+            if {![info exists state($path,paned.children)]} {
+                set state($path,paned.children) {}
+            }
+            if {[lsearch -exact $state($path,paned.children) $child] < 0} {
+                lappend state($path,paned.children) $child
+            }
+            return
+        }
+        forget {
+            set child [lindex $args 0]
+            lappend state($path,paned.forgetCalls) [list {*}$args]
+            if {[info exists state($path,paned.children)]} {
+                set idx [lsearch -exact $state($path,paned.children) $child]
+                if {$idx >= 0} {
+                    set state($path,paned.children) [lreplace $state($path,paned.children) $idx $idx]
+                }
+            }
+            return
+        }
+        default {
+            return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
         }
     }
 }
