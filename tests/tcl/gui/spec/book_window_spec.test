@@ -1,0 +1,57 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures book_window.tcl]
+
+namespace eval ::gui_book_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_book_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::book_window::setup stubbedCommands
+}
+
+proc ::gui_book_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::book_window::cleanup stubbedCommands
+
+    catch {unset ::book::isOpen}
+    catch {unset ::book::currentBook}
+    catch {namespace delete ::book}
+}
+
+test gui-book-window-spec-skeleton-1.0 {Book browser window creates stable widget structure and binds} -setup {
+    ::gui_book_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows book.tcl]
+
+    # Avoid book DB logic. `::book::open` calls `bookSelect` at the end.
+    ::scid_test::mocks::stubCommand ::gui_book_window_spec_test::stubbedCommands ::book::bookSelect {args} { return }
+    ::scid_test::mocks::stubCommand ::gui_book_window_spec_test::stubbedCommands ::book::closeMainBook {args} { return }
+
+    ::book::open
+
+    foreach p {.bookWin .bookWin.f .bookWin.f.combo .bookWin.f.fscroll .bookWin.f.text .bookWin.f.b .bookWin.f.fscroll1 .bookWin.f.text1} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set bindsByWidget {}
+    foreach call [::scid_test::gui_fixtures::book_window::bindCalls] {
+        lassign $call w seq script
+        dict lappend bindsByWidget $w $seq
+    }
+
+    list \
+        [::scid_test::widgets::getState .bookWin.f.combo -values] \
+        [lsort -unique [dict get $bindsByWidget .bookWin.f.combo]] \
+        [lsort -unique [dict get $bindsByWidget .bookWin]]
+} -cleanup {
+    ::gui_book_window_spec_test::cleanup
+} -result {{a.bin b.bin} <<ComboboxSelected>> <Destroy>}
+
+cleanupTests

@@ -212,10 +212,15 @@ proc ::scid_test::widgets::dispatchCombobox {path subcmd args} {
     variable state
 
     if {$subcmd eq "current"} {
-        if {![info exists state($path,-current)]} {
-            error "Widget $path current index is not set (use ::scid_test::widgets::setState $path -current <n>)"
+        if {[llength $args] == 0} {
+            if {![info exists state($path,-current)]} {
+                error "Widget $path current index is not set (use ::scid_test::widgets::setState $path -current <n>)"
+            }
+            return $state($path,-current)
         }
-        return $state($path,-current)
+        set idx [lindex $args 0]
+        set state($path,-current) $idx
+        return
     }
 
     return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
