@@ -7,14 +7,21 @@ source [file join $tclTestsDir lib support.tcl]
 namespace eval ::gui_gamelist_header_menu_spec_test {
     variable stubbedCommands {}
     variable treeColumnId
+    variable treeColumnAnchor
+    variable popupCalls {}
+    variable removeColCalls {}
+    variable sortCalls {}
     array set treeColumnId {}
+    array set treeColumnAnchor {}
 }
 
 proc ::gui_gamelist_header_menu_spec_test::defineTreeview {path columnIdByColumnToken} {
     catch {rename $path ""}
     array unset ::gui_gamelist_header_menu_spec_test::treeColumnId "$path,*"
+    array unset ::gui_gamelist_header_menu_spec_test::treeColumnAnchor "$path,*"
     foreach {colToken colId} $columnIdByColumnToken {
         set ::gui_gamelist_header_menu_spec_test::treeColumnId($path,$colToken) $colId
+        set ::gui_gamelist_header_menu_spec_test::treeColumnAnchor($path,$colToken) w
     }
     interp alias {} $path {} ::gui_gamelist_header_menu_spec_test::dispatchTreeview $path
     return $path
@@ -33,13 +40,21 @@ proc ::gui_gamelist_header_menu_spec_test::dispatchTreeview {path subcmd args} {
         column {
             set colToken [lindex $args 0]
             set opt [lindex $args 1]
-            if {$opt ne "-id"} {
+            if {$opt ni {"-id" "-anchor"}} {
                 error "treeview column $opt not stubbed"
             }
             if {![info exists ::gui_gamelist_header_menu_spec_test::treeColumnId($path,$colToken)]} {
                 error "treeview $path missing column id for $colToken"
             }
-            return $::gui_gamelist_header_menu_spec_test::treeColumnId($path,$colToken)
+            if {$opt eq "-id"} {
+                return $::gui_gamelist_header_menu_spec_test::treeColumnId($path,$colToken)
+            }
+            if {[llength $args] == 2} {
+                return $::gui_gamelist_header_menu_spec_test::treeColumnAnchor($path,$colToken)
+            }
+            set value [lindex $args 2]
+            set ::gui_gamelist_header_menu_spec_test::treeColumnAnchor($path,$colToken) $value
+            return
         }
         default {
             error "treeview $path subcommand $subcmd not stubbed"
@@ -50,6 +65,9 @@ proc ::gui_gamelist_header_menu_spec_test::dispatchTreeview {path subcmd args} {
 proc ::gui_gamelist_header_menu_spec_test::setup {} {
     ::scid_test::mocks::restoreStubs ::gui_gamelist_header_menu_spec_test::stubbedCommands
     ::scid_test::menu_capture::reset
+    set ::gui_gamelist_header_menu_spec_test::popupCalls {}
+    set ::gui_gamelist_header_menu_spec_test::removeColCalls {}
+    set ::gui_gamelist_header_menu_spec_test::sortCalls {}
 
     ::scid_test::menu_capture::install ::gui_gamelist_header_menu_spec_test::stubbedCommands \
         -defaultTearoff 1 \
@@ -87,6 +105,7 @@ proc ::gui_gamelist_header_menu_spec_test::setup {} {
     }
 
     ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands tk_popup {menu x y} {
+        lappend ::gui_gamelist_header_menu_spec_test::popupCalls [list $menu $x $y]
         return
     }
 
@@ -116,18 +135,42 @@ proc ::gui_gamelist_header_menu_spec_test::cleanup {} {
     }
     array unset ::gui_gamelist_header_menu_spec_test::treeColumnId
     array set ::gui_gamelist_header_menu_spec_test::treeColumnId {}
+    array unset ::gui_gamelist_header_menu_spec_test::treeColumnAnchor
+    array set ::gui_gamelist_header_menu_spec_test::treeColumnAnchor {}
 
     unset -nocomplain ::tr
+}
+
+proc ::gui_gamelist_header_menu_spec_test::installRuntimeStubs {} {
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands glist.removecol_ {w layout col} {
+        lappend ::gui_gamelist_header_menu_spec_test::removeColCalls [list $w $layout $col]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands glist.sort_ {w idx layout clear} {
+        lappend ::gui_gamelist_header_menu_spec_test::sortCalls [list $w $idx $layout $clear]
+        return
+    }
 }
 
 proc ::gui_gamelist_header_menu_spec_test::hasLabel {menuSnapshot label} {
     expr {[catch {::scid_test::menu_spec::findEntryByLabel $menuSnapshot $label}]==0}
 }
 
+proc ::gui_gamelist_header_menu_spec_test::invokeMenuLabel {menuPath label} {
+    foreach entry [::scid_test::menu_capture::entries $menuPath] {
+        if {[dict get $entry -label] eq $label} {
+            uplevel #0 [dict get $entry -command]
+            return
+        }
+    }
+    error "Menu $menuPath has no entry labelled: $label"
+}
+
 test gui-gamelist-header-menu-spec-stable-actions-1.0 {Game list header menu exposes stable layout and findbar controls} -setup {
     ::gui_gamelist_header_menu_spec_test::setup
 } -body {
     source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_spec_test::installRuntimeStubs
 
     set w .glistWin1.games.glist
     ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
@@ -153,6 +196,7 @@ test gui-gamelist-header-menu-spec-addfield-disabled-when-no-empty-cols-1.0 {Gam
     ::gui_gamelist_header_menu_spec_test::setup
 } -body {
     source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_spec_test::installRuntimeStubs
 
     set w .glistWin1.games.glist
     ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
@@ -170,5 +214,36 @@ test gui-gamelist-header-menu-spec-addfield-disabled-when-no-empty-cols-1.0 {Gam
 } -cleanup {
     ::gui_gamelist_header_menu_spec_test::cleanup
 } -result disabled
+
+test gui-gamelist-header-menu-spec-actions-1.0 {Game list header actions keep callback wiring stable} -setup {
+    ::gui_gamelist_header_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_spec_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+
+    ::gui_gamelist_header_menu_spec_test::invokeMenuLabel ${w}.header_menu GlistAlignR
+    ::gui_gamelist_header_menu_spec_test::invokeMenuLabel ${w}.header_menu GlistDeleteField
+    ::gui_gamelist_header_menu_spec_test::invokeMenuLabel ${w}.header_menu ResetSort
+
+    list \
+        $::gui_gamelist_header_menu_spec_test::popupCalls \
+        [$w column #1 -anchor] \
+        [lindex $::glist_ColAnchor($layout) 0] \
+        $::gui_gamelist_header_menu_spec_test::removeColCalls \
+        $::gui_gamelist_header_menu_spec_test::sortCalls
+} -cleanup {
+    ::gui_gamelist_header_menu_spec_test::cleanup
+} -result {{{.glistWin1.games.glist.header_menu 100 200}} e e {{.glistWin1.games.glist Full #1}} {{.glistWin1.games.glist 0 Full 1}}}
 
 cleanupTests

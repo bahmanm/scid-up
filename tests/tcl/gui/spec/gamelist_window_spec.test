@@ -1,0 +1,158 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures gamelist_window.tcl]
+
+namespace eval ::gui_gamelist_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_gamelist_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::gamelist_window::setup stubbedCommands
+}
+
+proc ::gui_gamelist_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::gamelist_window::cleanup stubbedCommands
+    catch {namespace delete ::windows::gamelist}
+}
+
+proc ::gui_gamelist_window_spec_test::bindMap {} {
+    set out {}
+    foreach call [::scid_test::gui_fixtures::gamelist_window::bindCalls] {
+        lassign $call w seq script
+        dict set out $w,$seq $script
+    }
+    return $out
+}
+
+proc ::gui_gamelist_window_spec_test::applyBody {script} {
+    if {[llength $script] < 2 || [lindex $script 0] ne "apply"} {
+        return [string trim $script]
+    }
+    return [string trim [lindex [lindex $script 1] 1]]
+}
+
+proc ::gui_gamelist_window_spec_test::normalizedWhitespace {text} {
+    regsub -all {\s+} [string trim $text] { } text
+    return $text
+}
+
+proc ::gui_gamelist_window_spec_test::runScript {script} {
+    return [uplevel #0 $script]
+}
+
+test gui-gamelist-window-spec-first-paint-1.0 {Game list window keeps first paint live and preserves key callback wiring} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::windows::gamelist::createExportMenu_ .glistWin1 .glistWin1.menu_export
+
+    foreach p {
+        .glistWin1
+        .glistWin1.buttons
+        .glistWin1.buttons.filter
+        .glistWin1.buttons.stats
+        .glistWin1.buttons.boardFilter
+        .glistWin1.buttons.export
+        .glistWin1.filter
+        .glistWin1.filter.b
+        .glistWin1.filter.b.rfilter
+        .glistWin1.filter.b.bsearch
+        .glistWin1.filter.b.hsearch
+        .glistWin1.filter.b.msearch
+        .glistWin1.filter.b.tmt
+        .glistWin1.filter.b.crosst
+        .glistWin1.stats
+        .glistWin1.stats.b
+        .glistWin1.stats.b.c
+        .glistWin1.games
+        .glistWin1.games.glist
+        .glistWin1.progress
+        .glistWin1.menu_export
+    } {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set bindMap [::gui_gamelist_window_spec_test::bindMap]
+    set exportMenu [::scid_test::menu_structure::snapshot .glistWin1.menu_export]
+
+    list \
+        [::scid_test::gui_fixtures::gamelist_window::glistCreateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [::scid_test::widgets::getState .glistWin1.buttons.filter -image] \
+        [::scid_test::widgets::getState .glistWin1.buttons.boardFilter -image] \
+        [::scid_test::widgets::getState .glistWin1.buttons.export -state] \
+        [string match {*::windows::gamelist::createExportMenu_*} [::scid_test::widgets::getState .glistWin1.buttons.export -command]] \
+        [string match {*tk_popup*} [::scid_test::widgets::getState .glistWin1.buttons.export -command]] \
+        [string match {*::windows::gamelist::filterRelease_*} [dict get $bindMap .glistWin1,<Destroy>]] \
+        [::gui_gamelist_window_spec_test::normalizedWhitespace [::gui_gamelist_window_spec_test::applyBody [dict get $bindMap .glistWin1,<<NotifyFilter>>]] ] \
+        [::gui_gamelist_window_spec_test::normalizedWhitespace [::gui_gamelist_window_spec_test::applyBody [dict get $bindMap .glistWin1,<Control-l>]] ] \
+        [::scid_test::menu_spec::typeLabelPairs $exportMenu]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{.glistWin1.games ly.glistWin1}} {{.glistWin1.games 1 dbfilter 1}} {{.glistWin1 { base1 (3 / 10)}}} tb_search_on tb_BoardMask normal 1 1 1 {lassign %d dbase filter if {$::gamelistBase($w) eq $dbase && $filter in [sc_filter components $::gamelistBase($w) $::gamelistFilter($w)]} { ::windows::gamelist::update_ $w 1 ::windows::gamelist::updateStats_ $w }} {::windows::gamelist::Open $::gamelistBase($w)} {{command ToolsExpFilter} {separator {}} {command {Base 2: base2}}}}
+
+test gui-gamelist-window-spec-posmask-stats-1.0 {Game list positional toggle and stats canvas stay wired to meaningful callbacks} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+
+    set ::gamelistMenu(.glistWin1) stats
+    ::windows::gamelist::searchpos_ .glistWin1
+    ::windows::gamelist::updateStats_ .glistWin1
+
+    set canvasPath .glistWin1.stats.b.c
+    set bindCalls [::scid_test::widgets::getState $canvasPath canvas.bindCalls]
+    set perf0Script [lindex [lindex $bindCalls 0] 2]
+    set add0Script [lindex [lindex $bindCalls 1] 2]
+
+    ::gui_gamelist_window_spec_test::runScript $perf0Script
+    ::gui_gamelist_window_spec_test::runScript $add0Script
+
+    set stateAfterEnable [::scid_test::widgets::getState .glistWin1.buttons.boardFilter widget.states]
+    set filterAfterEnable $::gamelistFilter(.glistWin1)
+    set posMaskAfterEnable $::gamelistPosMask(.glistWin1)
+    set scrollregion [::scid_test::widgets::getState $canvasPath -scrollregion]
+    set width [::scid_test::widgets::getState $canvasPath -width]
+    set createCalls [::scid_test::widgets::getState $canvasPath canvas.createCalls]
+    set deleteCalls [::scid_test::widgets::getState $canvasPath canvas.deleteCalls]
+
+    ::windows::gamelist::searchpos_ .glistWin1
+
+    list \
+        $posMaskAfterEnable \
+        $filterAfterEnable \
+        $stateAfterEnable \
+        [::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls] \
+        [llength $createCalls] \
+        $deleteCalls \
+        $scrollregion \
+        $width \
+        [llength $bindCalls] \
+        [string match {*tk_messageBox*} [::gui_gamelist_window_spec_test::normalizedWhitespace $perf0Script]] \
+        [string match {*addSanMove $moveSAN*boardFilter invoke*} [::gui_gamelist_window_spec_test::normalizedWhitespace $add0Script]] \
+        [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls] \
+        $::gamelistPosMask(.glistWin1) \
+        $::gamelistFilter(.glistWin1) \
+        [::scid_test::widgets::getState .glistWin1.buttons.boardFilter widget.states]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {1 dbfilter+tree pressed 1 {{.glistWin1.progress 100 100}} {{1 dbfilter}} 20 all {0 0 158 36} 158 4 1 1 {{-message {Performance: 2505 (+205)}}} e4 0 dbfilter {}}
+
+cleanupTests

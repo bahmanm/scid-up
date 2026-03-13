@@ -1,0 +1,156 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures glist_widget.tcl]
+
+namespace eval ::gui_glist_widget_baseline_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_glist_widget_baseline_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::glist_widget::setup stubbedCommands
+}
+
+proc ::gui_glist_widget_baseline_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::glist_widget::cleanup stubbedCommands
+}
+
+proc ::gui_glist_widget_baseline_test::normalizedWhitespace {text} {
+    regsub -all {\s+} [string trim $text] { } text
+    return $text
+}
+
+proc ::gui_glist_widget_baseline_test::seedHeaderTranslations {} {
+    foreach col $::glist_Headers {
+        set ::tr($col) $col
+    }
+}
+
+proc ::gui_glist_widget_baseline_test::formatSnapshot {} {
+    set lines {}
+
+    lappend lines [list treeview .glistShell.glist \
+        -displaycolumns [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist -displaycolumns] \
+        -yscrollcommand [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist -yscrollcommand] \
+    ]
+    lappend lines [list ybar.command [::scid_test::widgets::getState .glistShell.ybar -command]]
+    lappend lines [list sortInit.calls [::scid_test::gui_fixtures::glist_widget::sortInitCalls]]
+    lappend lines [list mouseWheel.bindings [::scid_test::gui_fixtures::glist_widget::mouseWheelBindings]]
+    lappend lines [list treeview.tag.configure [::scid_test::gui_fixtures::glist_widget::treeviewTagConfigureCalls .glistShell.glist]]
+
+    foreach w {
+        .glistShell.find.advanced
+        .glistShell.find.reset
+        .glistShell.find.filter
+        .glistShell.find.b1_text
+        .glistShell.find.b2_text
+        .glistShell.find.scale
+    } {
+        set attrs {}
+        foreach opt {-image -command -style} {
+            if {[::scid_test::widgets::hasState $w $opt]} {
+                set value [::scid_test::widgets::getState $w $opt]
+                if {$opt eq "-command"} {
+                    set value [::gui_glist_widget_baseline_test::normalizedWhitespace $value]
+                }
+                lappend attrs $opt $value
+            }
+        }
+        lappend lines [list widget $w {*}$attrs]
+    }
+
+    foreach call [lsort [::scid_test::gui_fixtures::glist_widget::bindCalls]] {
+        lassign $call w seq script
+        lappend lines [list bind $w $seq [::gui_glist_widget_baseline_test::normalizedWhitespace $script]]
+    }
+
+    .glistShell.find.text insert 0 Carlsen
+    .glistShell.find.advanced invoke
+    .glistShell.find.reset invoke
+    glist.showfindbar_ .glistShell.glist TestLayout 1
+    glist.showfindbar_ .glistShell.glist TestLayout 0
+
+    lappend lines [list searchHeader.calls [::scid_test::gui_fixtures::glist_widget::searchHeaderCalls]]
+    lappend lines [list find.calls [::scid_test::gui_fixtures::glist_widget::findCalls]]
+    lappend lines [list entry.text [::scid_test::widgets::getText .glistShell.find.text]]
+    lappend lines [list focus.calls [::scid_test::gui_fixtures::glist_widget::focusCalls]]
+    lappend lines [list entry.selection.range [::scid_test::widgets::getState .glistShell.find.text selection.rangeCalls]]
+    lappend lines [list findbar.state $::glist_FindBar(TestLayout)]
+
+    set ::glistBase(.glistShell.glist) 1
+    set ::glistFilter(.glistShell.glist) dbfilter
+    set ::glistSortStr(.glistShell.glist) sortkey
+    set ::glistFirst(.glistShell.glist) 2
+    set ::glistVisibleLn(.glistShell.glist) 5
+
+    .glistShell.find.text insert 0 Query
+    glist.findgame_ .glistShell awe
+
+    .glistShell.find.text delete 0 end
+    .glistShell.find.text insert 0 77
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 77 none
+    glist.findgame_ .glistShell 1
+    lappend lines [list entry.style.notfound [::scid_test::widgets::getState .glistShell.find.text -style]]
+
+    .glistShell.find.text delete 0 end
+    .glistShell.find.text insert 0 Anand
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 7_0
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 7 4
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 0 Anand 5 1 12
+    glist.findgame_ .glistShell 1
+
+    lappend lines [list awesome.calls [::scid_test::gui_fixtures::glist_widget::awesomeCalls]]
+    lappend lines [list busy.calls [::scid_test::gui_fixtures::glist_widget::busyCalls]]
+    lappend lines [list update.calls [::scid_test::gui_fixtures::glist_widget::updateCalls]]
+    lappend lines [list gamelocation.calls [::scid_test::gui_fixtures::glist_widget::gamelocationCalls]]
+    lappend lines [list ybar.calls [::scid_test::gui_fixtures::glist_widget::ybarCalls]]
+    lappend lines [list after.calls [::scid_test::gui_fixtures::glist_widget::afterCalls]]
+    set successStyle {}
+    if {[::scid_test::widgets::hasState .glistShell.find.text -style]} {
+        set successStyle [::scid_test::widgets::getState .glistShell.find.text -style]
+    }
+    lappend lines [list entry.style.after.search $successStyle]
+    lappend lines [list glistFirst.after.search $::glistFirst(.glistShell.glist)]
+
+    return [join $lines "\n"]
+}
+
+test gui-glist-widget-baseline-compare-1.0 {glist widget find-bar shell matches the approved baseline} -setup {
+    ::gui_glist_widget_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_baseline_test::stubbedCommands 0
+    ::gui_glist_widget_baseline_test::seedHeaderTranslations
+
+    set ::gamelistBase(.glistShell) 1
+    set ::gamelistFilter(.glistShell) dbfilter
+
+    glist.create .glistShell TestLayout
+    set actual [::gui_glist_widget_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] glist_widget.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: glist widget find-bar shell (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/glist_widget.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "glist widget baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_glist_widget_baseline_test::cleanup
+} -result 1
+
+cleanupTests

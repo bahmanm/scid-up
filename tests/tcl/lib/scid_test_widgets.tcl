@@ -157,6 +157,18 @@ proc ::scid_test::widgets::definePanedwindowWidget {path} {
     return $path
 }
 
+proc ::scid_test::widgets::defineCanvasWidget {path} {
+    variable created
+
+    if {[llength [info commands $path]]} {
+        error "Widget command already exists: $path"
+    }
+
+    interp alias {} $path {} ::scid_test::widgets::dispatchCanvas $path
+    lappend created $path
+    return $path
+}
+
 proc ::scid_test::widgets::dispatch {path subcmd args} {
     variable state
     variable text
@@ -201,6 +213,34 @@ proc ::scid_test::widgets::dispatch {path subcmd args} {
             append text($path) $inserted
             return
         }
+        state {
+            if {![info exists state($path,widget.states)]} {
+                set state($path,widget.states) {}
+            }
+
+            if {![llength $args]} {
+                return $state($path,widget.states)
+            }
+
+            foreach flag $args {
+                if {[string match "!*" $flag]} {
+                    set normalized [string range $flag 1 end]
+                    set idx [lsearch -exact $state($path,widget.states) $normalized]
+                    if {$idx >= 0} {
+                        set state($path,widget.states) [lreplace $state($path,widget.states) $idx $idx]
+                    }
+                } elseif {[lsearch -exact $state($path,widget.states) $flag] < 0} {
+                    lappend state($path,widget.states) $flag
+                }
+            }
+            return $state($path,widget.states)
+        }
+        invoke {
+            if {![info exists state($path,-command)]} {
+                return
+            }
+            return [uplevel #0 $state($path,-command)]
+        }
         default {
             error "Widget $path subcommand $subcmd not stubbed"
         }
@@ -239,14 +279,52 @@ proc ::scid_test::widgets::dispatchPanedwindow {path subcmd args} {
     }
 }
 
+proc ::scid_test::widgets::dispatchCanvas {path subcmd args} {
+    variable state
+
+    switch -- $subcmd {
+        create {
+            lappend state($path,canvas.createCalls) [list {*}$args]
+            if {![info exists state($path,canvas.nextId)]} {
+                set state($path,canvas.nextId) 1
+            }
+            set id $state($path,canvas.nextId)
+            incr state($path,canvas.nextId)
+            return $id
+        }
+        bind {
+            lappend state($path,canvas.bindCalls) [list {*}$args]
+            return
+        }
+        delete {
+            lappend state($path,canvas.deleteCalls) [list {*}$args]
+            return
+        }
+        default {
+            return [::scid_test::widgets::dispatch $path $subcmd {*}$args]
+        }
+    }
+}
+
 proc ::scid_test::widgets::dispatchEntry {path subcmd args} {
     variable text
+    variable state
 
-    if {$subcmd eq "get"} {
-        if {![info exists text($path)]} {
-            return ""
+    switch -- $subcmd {
+        get {
+            if {![info exists text($path)]} {
+                return ""
+            }
+            return $text($path)
         }
-        return $text($path)
+        selection {
+            set selectionSubcmd [lindex $args 0]
+            if {$selectionSubcmd ne "range"} {
+                error "Widget $path selection $selectionSubcmd not stubbed"
+            }
+            lappend state($path,selection.rangeCalls) [lrange $args 1 end]
+            return
+        }
     }
 
     return [::scid_test::widgets::dispatch $path $subcmd {*}$args]

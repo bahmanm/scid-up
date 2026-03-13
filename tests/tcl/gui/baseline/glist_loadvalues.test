@@ -1,0 +1,117 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures glist_widget.tcl]
+
+namespace eval ::gui_glist_loadvalues_baseline_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_glist_loadvalues_baseline_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::glist_widget::setup stubbedCommands
+}
+
+proc ::gui_glist_loadvalues_baseline_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::glist_widget::cleanup stubbedCommands
+}
+
+proc ::gui_glist_loadvalues_baseline_test::seedHeaderTranslations {} {
+    foreach col $::glist_Headers {
+        set ::tr($col) $col
+    }
+}
+
+proc ::gui_glist_loadvalues_baseline_test::formatSnapshot {} {
+    set lines {}
+
+    set ::glistFilter(.glistShell.glist) dbfilter
+    set ::glistSortStr(.glistShell.glist) sortkey
+    set ::glistVisibleLn(.glistShell.glist) 2
+    set ::glistTotal(.glistShell.glist) 8
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 9_0
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewYview .glistShell.glist {0.0 0.8}
+    ::scid_test::gui_fixtures::glist_widget::setCurrentBase 1
+    ::scid_test::gui_fixtures::glist_widget::setCurrentGameNumber 9
+    ::scid_test::gui_fixtures::glist_widget::setGameslistResponse 1 0 3 dbfilter sortkey [list \
+        7_0 [list 7 "=-=" 35 White Black] "" \
+        8_0 [list 8 "1-0" 42 Alpha Beta] D \
+        9_0 [list 9 "0-1" 50 Current Opp] "" \
+    ]
+
+    glist.update_ .glistShell.glist 1
+
+    lappend lines [list pass1.sortcache.calls [::scid_test::gui_fixtures::glist_widget::sortcacheCalls]]
+    lappend lines [list pass1.gameslist.calls [::scid_test::gui_fixtures::glist_widget::gameslistCalls]]
+    lappend lines [list pass1.after.calls [::scid_test::gui_fixtures::glist_widget::afterCalls]]
+    lappend lines [list pass1.delete.calls [::scid_test::gui_fixtures::glist_widget::treeviewDeleteCalls .glistShell.glist]]
+    lappend lines [list pass1.rows [::scid_test::gui_fixtures::glist_widget::treeviewRows .glistShell.glist]]
+    lappend lines [list pass1.loaded $::glistLoaded(.glistShell.glist)]
+    lappend lines [list pass1.scrollproxy.calls [::scid_test::gui_fixtures::glist_widget::scrollProxyCalls]]
+
+    set ::glistFilter(.glistShell.glist) altfilter
+    set ::glistSortStr(.glistShell.glist) newsort
+    set ::glistVisibleLn(.glistShell.glist) 1
+    set ::glistTotal(.glistShell.glist) 4
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 11_0
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewYview .glistShell.glist {0.0 0.75}
+    ::scid_test::gui_fixtures::glist_widget::setCurrentBase 2
+    ::scid_test::gui_fixtures::glist_widget::setCurrentGameNumber 11
+    ::scid_test::gui_fixtures::glist_widget::setGameslistResponse 2 0 2 altfilter newsort [list \
+        10_0 [list 10 "1-0" 28 Other Side] "" \
+        11_0 [list 11 "0-1" 31 Current Again] "" \
+    ]
+
+    glist.update_ .glistShell.glist 2
+
+    lappend lines [list pass2.sortcache.calls [::scid_test::gui_fixtures::glist_widget::sortcacheCalls]]
+    lappend lines [list pass2.gameslist.calls [::scid_test::gui_fixtures::glist_widget::gameslistCalls]]
+    lappend lines [list pass2.after.calls [::scid_test::gui_fixtures::glist_widget::afterCalls]]
+    lappend lines [list pass2.delete.calls [::scid_test::gui_fixtures::glist_widget::treeviewDeleteCalls .glistShell.glist]]
+    lappend lines [list pass2.rows [::scid_test::gui_fixtures::glist_widget::treeviewRows .glistShell.glist]]
+    lappend lines [list pass2.scrollproxy.calls [::scid_test::gui_fixtures::glist_widget::scrollProxyCalls]]
+    lappend lines [list final.base $::glistBase(.glistShell.glist)]
+    lappend lines [list final.sortcache $::glistSortCache(.glistShell.glist)]
+    lappend lines [list final.loaded $::glistLoaded(.glistShell.glist)]
+    lappend lines [list final.visible $::glistVisibleLn(.glistShell.glist)]
+    lappend lines [list final.first $::glistFirst(.glistShell.glist)]
+    lappend lines [list final.selection [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]]
+
+    return [join $lines "\n"]
+}
+
+test gui-glist-loadvalues-baseline-compare-1.0 {glist.update_ row loading matches the approved baseline} -setup {
+    ::gui_glist_loadvalues_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_loadvalues_baseline_test::stubbedCommands
+    ::gui_glist_loadvalues_baseline_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+    set actual [::gui_glist_loadvalues_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] glist_loadvalues.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: glist.update_ row loading (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/glist_loadvalues.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "glist.update_ baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_glist_loadvalues_baseline_test::cleanup
+} -result 1
+
+cleanupTests
