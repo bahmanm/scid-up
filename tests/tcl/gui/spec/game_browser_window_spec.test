@@ -1,0 +1,80 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures game_browser_window.tcl]
+
+namespace eval ::gui_game_browser_window_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_game_browser_window_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::game_browser_window::setup stubbedCommands
+}
+
+proc ::gui_game_browser_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::game_browser_window::cleanup stubbedCommands
+    catch {namespace delete ::gbrowser}
+}
+
+proc ::gui_game_browser_window_spec_test::bindDescriptor {script} {
+    if {[llength $script] == 0} {
+        return ""
+    }
+
+    set head [lindex $script 0]
+    if {$head eq "list"} {
+        return [lindex $script 1]
+    }
+    if {$head eq "apply"} {
+        return "apply"
+    }
+    return $head
+}
+
+test gui-game-browser-window-spec-first-paint-1.0 {Game browser window performs first paint and preserves key callback wiring} -setup {
+    ::gui_game_browser_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows browser.tcl]
+
+    ::gbrowser::new 1 7
+
+    foreach p {.gb0 .gb0.b .gb0.bd .gb0.t .gb0.t.text .gb0.b.start .gb0.b.back .gb0.b.forward .gb0.b.end .gb0.b.autoplay .gb0.b.flip .gb0.b.load .gb0.b.merge .gb0.b.close} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set bindMap {}
+    foreach call [::scid_test::gui_fixtures::game_browser_window::bindCalls] {
+        lassign $call w seq script
+        dict set bindMap $w,$seq [::gui_game_browser_window_spec_test::bindDescriptor $script]
+    }
+
+    set tagBindMap {}
+    foreach call [::scid_test::widgets::getTagBindCalls .gb0.t.text] {
+        lassign $call tag seq script
+        dict set tagBindMap $tag,$seq $script
+    }
+
+    list \
+        [::scid_test::widgets::getState .gb0.t.text -state] \
+        [::scid_test::widgets::getState .gb0.t.text -width] \
+        [llength [::scid_test::gui_fixtures::game_browser_window::boardUpdateCalls]] \
+        [dict get $bindMap .gb0,<F1>] \
+        [dict get $bindMap .gb0,<Home>] \
+        [dict get $bindMap .gb0,<minus>] \
+        [dict get $tagBindMap m0,<ButtonRelease-1>] \
+        [dict get $tagBindMap m0,<Any-Enter>] \
+        [dict get $tagBindMap m0,<Any-Leave>] \
+        [::scid_test::gui_fixtures::game_browser_window::mouseWheelBindings]
+} -cleanup {
+    ::gui_game_browser_window_spec_test::cleanup
+} -result {disabled 45 1 helpWindow ::gbrowser::update apply {::gbrowser::update 0 0} {.gb0.t.text tag configure m0 -foreground red
+    .gb0.t.text configure -cursor hand2} {.gb0.t.text tag configure m0 -foreground {}
+    .gb0.t.text configure -cursor {}} {{.gb0 {::gbrowser::mousewheelHandler 0}}}}
+
+cleanupTests
