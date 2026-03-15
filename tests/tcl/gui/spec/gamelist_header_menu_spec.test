@@ -15,6 +15,9 @@ namespace eval ::gui_gamelist_header_menu_spec_test {
     variable forgetCalls {}
     variable focusCalls {}
     variable selectionCalls {}
+    variable layoutSaveCalls {}
+    variable layoutApplyCalls {}
+    variable insertColCalls {}
     array set treeColumnId {}
     array set treeColumnAnchor {}
 }
@@ -76,6 +79,9 @@ proc ::gui_gamelist_header_menu_spec_test::setup {} {
     set ::gui_gamelist_header_menu_spec_test::forgetCalls {}
     set ::gui_gamelist_header_menu_spec_test::focusCalls {}
     set ::gui_gamelist_header_menu_spec_test::selectionCalls {}
+    set ::gui_gamelist_header_menu_spec_test::layoutSaveCalls {}
+    set ::gui_gamelist_header_menu_spec_test::layoutApplyCalls {}
+    set ::gui_gamelist_header_menu_spec_test::insertColCalls {}
 
     ::scid_test::menu_capture::install ::gui_gamelist_header_menu_spec_test::stubbedCommands \
         -defaultTearoff 1 \
@@ -170,6 +176,18 @@ proc ::gui_gamelist_header_menu_spec_test::installRuntimeStubs {} {
     }
     ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands glist.sort_ {w idx layout clear} {
         lappend ::gui_gamelist_header_menu_spec_test::sortCalls [list $w $idx $layout $clear]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands glist.layout_save {layout} {
+        lappend ::gui_gamelist_header_menu_spec_test::layoutSaveCalls $layout
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands glist.layout_apply {w layout newLayout} {
+        lappend ::gui_gamelist_header_menu_spec_test::layoutApplyCalls [list $w $layout $newLayout]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands glist.insertcol_ {w layout col after} {
+        lappend ::gui_gamelist_header_menu_spec_test::insertColCalls [list $w $layout $col $after]
         return
     }
     ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands .glistWin1.find.text {subcmd args} {
@@ -323,5 +341,68 @@ test gui-gamelist-header-menu-spec-findbar-1.0 {Game list header FindBar checkbu
 } -cleanup {
     ::gui_gamelist_header_menu_spec_test::cleanup
 } -result {{{.glistWin1.games.glist.header_menu 100 200}} {{.glistWin1.find -row 0 -columnspan 2 -sticky news}} {.glistWin1.find.text .glistWin1.games.glist} {{.glistWin1.find.text 0 end}} .glistWin1.find 0}
+
+test gui-gamelist-header-menu-spec-layouts-1.0 {Game list header Layouts submenu keeps save/apply wiring stable} -setup {
+    ::gui_gamelist_header_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_spec_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+    set ::glist_Layouts {RatingDate DateEvent Full SavedLayout}
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+
+    ::gui_gamelist_header_menu_spec_test::invokeMenuLabel ${w}.header_menu.layouts Save
+    ::gui_gamelist_header_menu_spec_test::invokeMenuLabel ${w}.header_menu.layouts Defaults
+    ::gui_gamelist_header_menu_spec_test::invokeMenuLabel ${w}.header_menu.layouts SavedLayout
+
+    list \
+        $::gui_gamelist_header_menu_spec_test::popupCalls \
+        $::gui_gamelist_header_menu_spec_test::layoutSaveCalls \
+        $::gui_gamelist_header_menu_spec_test::layoutApplyCalls
+} -cleanup {
+    ::gui_gamelist_header_menu_spec_test::cleanup
+} -result {{{.glistWin1.games.glist.header_menu 100 200}} Full {{.glistWin1 Full DEFAULT} {.glistWin1 Full SavedLayout}}}
+
+test gui-gamelist-header-menu-spec-addfield-1.0 {Game list header AddField submenu keeps insert wiring stable} -setup {
+    ::gui_gamelist_header_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_spec_test::installRuntimeStubs
+
+    foreach h $::glist_Headers {
+        set ::tr($h) $h
+    }
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+    set ::glist_ColOrder($layout) {7}
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.header_menu]
+
+    ::gui_gamelist_header_menu_spec_test::invokeMenuLabel ${w}.header_menu.addcol GlistNumber
+
+    list \
+        $::gui_gamelist_header_menu_spec_test::popupCalls \
+        [::scid_test::menu_spec::entryState $snapshot GlistAddField] \
+        $::gui_gamelist_header_menu_spec_test::insertColCalls
+} -cleanup {
+    ::gui_gamelist_header_menu_spec_test::cleanup
+} -result {{{.glistWin1.games.glist.header_menu 100 200}} normal {{.glistWin1.games.glist Full 0 #1}}}
 
 cleanupTests
