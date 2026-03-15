@@ -7,14 +7,28 @@ source [file join $tclTestsDir lib support.tcl]
 namespace eval ::gui_gamelist_header_menu_baseline_test {
     variable stubbedCommands {}
     variable treeColumnId
+    variable treeColumnAnchor
+    variable popupCalls {}
+    variable removeColCalls {}
+    variable sortCalls {}
+    variable gridCalls {}
+    variable forgetCalls {}
+    variable focusCalls {}
+    variable selectionCalls {}
+    variable layoutSaveCalls {}
+    variable layoutApplyCalls {}
+    variable insertColCalls {}
     array set treeColumnId {}
+    array set treeColumnAnchor {}
 }
 
 proc ::gui_gamelist_header_menu_baseline_test::defineTreeview {path columnIdByColumnToken} {
     catch {rename $path ""}
     array unset ::gui_gamelist_header_menu_baseline_test::treeColumnId "$path,*"
+    array unset ::gui_gamelist_header_menu_baseline_test::treeColumnAnchor "$path,*"
     foreach {colToken colId} $columnIdByColumnToken {
         set ::gui_gamelist_header_menu_baseline_test::treeColumnId($path,$colToken) $colId
+        set ::gui_gamelist_header_menu_baseline_test::treeColumnAnchor($path,$colToken) w
     }
     interp alias {} $path {} ::gui_gamelist_header_menu_baseline_test::dispatchTreeview $path
     return $path
@@ -33,13 +47,21 @@ proc ::gui_gamelist_header_menu_baseline_test::dispatchTreeview {path subcmd arg
         column {
             set colToken [lindex $args 0]
             set opt [lindex $args 1]
-            if {$opt ne "-id"} {
+            if {$opt ni {"-id" "-anchor"}} {
                 error "treeview column $opt not stubbed"
             }
             if {![info exists ::gui_gamelist_header_menu_baseline_test::treeColumnId($path,$colToken)]} {
                 error "treeview $path missing column id for $colToken"
             }
-            return $::gui_gamelist_header_menu_baseline_test::treeColumnId($path,$colToken)
+            if {$opt eq "-id"} {
+                return $::gui_gamelist_header_menu_baseline_test::treeColumnId($path,$colToken)
+            }
+            if {[llength $args] == 2} {
+                return $::gui_gamelist_header_menu_baseline_test::treeColumnAnchor($path,$colToken)
+            }
+            set value [lindex $args 2]
+            set ::gui_gamelist_header_menu_baseline_test::treeColumnAnchor($path,$colToken) $value
+            return
         }
         default {
             error "treeview $path subcommand $subcmd not stubbed"
@@ -50,6 +72,16 @@ proc ::gui_gamelist_header_menu_baseline_test::dispatchTreeview {path subcmd arg
 proc ::gui_gamelist_header_menu_baseline_test::setup {} {
     ::scid_test::mocks::restoreStubs ::gui_gamelist_header_menu_baseline_test::stubbedCommands
     ::scid_test::menu_capture::reset
+    set ::gui_gamelist_header_menu_baseline_test::popupCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::removeColCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::sortCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::gridCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::forgetCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::focusCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::selectionCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::layoutSaveCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::layoutApplyCalls {}
+    set ::gui_gamelist_header_menu_baseline_test::insertColCalls {}
 
     ::scid_test::menu_capture::install ::gui_gamelist_header_menu_baseline_test::stubbedCommands \
         -defaultTearoff 1 \
@@ -86,7 +118,22 @@ proc ::gui_gamelist_header_menu_baseline_test::setup {} {
         return
     }
 
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands grid {args} {
+        if {[lindex $args 0] eq "forget"} {
+            lappend ::gui_gamelist_header_menu_baseline_test::forgetCalls [lindex $args 1]
+            return
+        }
+        lappend ::gui_gamelist_header_menu_baseline_test::gridCalls $args
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands focus {w} {
+        lappend ::gui_gamelist_header_menu_baseline_test::focusCalls $w
+        return
+    }
+
     ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands tk_popup {menu x y} {
+        lappend ::gui_gamelist_header_menu_baseline_test::popupCalls [list $menu $x $y]
         return
     }
 
@@ -116,14 +163,74 @@ proc ::gui_gamelist_header_menu_baseline_test::cleanup {} {
     }
     array unset ::gui_gamelist_header_menu_baseline_test::treeColumnId
     array set ::gui_gamelist_header_menu_baseline_test::treeColumnId {}
+    array unset ::gui_gamelist_header_menu_baseline_test::treeColumnAnchor
+    array set ::gui_gamelist_header_menu_baseline_test::treeColumnAnchor {}
 
     unset -nocomplain ::tr
+}
+
+proc ::gui_gamelist_header_menu_baseline_test::installRuntimeStubs {} {
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands glist.removecol_ {w layout col} {
+        lappend ::gui_gamelist_header_menu_baseline_test::removeColCalls [list $w $layout $col]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands glist.sort_ {w idx layout clear} {
+        lappend ::gui_gamelist_header_menu_baseline_test::sortCalls [list $w $idx $layout $clear]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands glist.layout_save {layout} {
+        lappend ::gui_gamelist_header_menu_baseline_test::layoutSaveCalls $layout
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands glist.layout_apply {w layout newLayout} {
+        lappend ::gui_gamelist_header_menu_baseline_test::layoutApplyCalls [list $w $layout $newLayout]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands glist.insertcol_ {w layout col after} {
+        lappend ::gui_gamelist_header_menu_baseline_test::insertColCalls [list $w $layout $col $after]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_baseline_test::stubbedCommands .glistWin1.find.text {subcmd args} {
+        if {$subcmd eq "selection" && [lindex $args 0] eq "range"} {
+            lappend ::gui_gamelist_header_menu_baseline_test::selectionCalls [list .glistWin1.find.text [lindex $args 1] [lindex $args 2]]
+            return
+        }
+        error ".glistWin1.find.text $subcmd not stubbed"
+    }
+}
+
+proc ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel {menuPath label} {
+    foreach entry [::scid_test::menu_capture::entries $menuPath] {
+        if {[dict get $entry -label] eq $label} {
+            uplevel #0 [dict get $entry -command]
+            return
+        }
+    }
+    error "Menu $menuPath has no entry labelled: $label"
+}
+
+proc ::gui_gamelist_header_menu_baseline_test::invokeCheckMenuLabel {menuPath label} {
+    foreach entry [::scid_test::menu_capture::entries $menuPath] {
+        if {[dict get $entry -label] ne $label} {
+            continue
+        }
+        if {[dict get $entry type] ne "checkbutton"} {
+            error "Menu entry $label in $menuPath is not a checkbutton"
+        }
+        set varName [dict get $entry -variable]
+        upvar #0 $varName value
+        set value [expr {![info exists value] || !$value}]
+        uplevel #0 [dict get $entry -command]
+        return
+    }
+    error "Menu $menuPath has no checkbutton labelled: $label"
 }
 
 test gui-gamelist-header-menu-baseline-compare-1.0 {Game list header menu matches the approved baseline structure} -setup {
     ::gui_gamelist_header_menu_baseline_test::setup
 } -body {
     source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_baseline_test::installRuntimeStubs
 
     set w .glistWin1.games.glist
     ::gui_gamelist_header_menu_baseline_test::defineTreeview $w [list "#1" "GlistWhite"]
@@ -154,6 +261,208 @@ test gui-gamelist-header-menu-baseline-compare-1.0 {Game list header menu matche
     if {$expected ne $actual} {
         set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
         error "Game list header menu baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_gamelist_header_menu_baseline_test::cleanup
+} -result 1
+
+test gui-gamelist-header-menu-actions-baseline-compare-1.0 {Game list header menu actions match the approved baseline} -setup {
+    ::gui_gamelist_header_menu_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_baseline_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_baseline_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+
+    ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel ${w}.header_menu GlistAlignR
+    ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel ${w}.header_menu GlistDeleteField
+    ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel ${w}.header_menu ResetSort
+
+    set lines {}
+    lappend lines [list popup.calls $::gui_gamelist_header_menu_baseline_test::popupCalls]
+    lappend lines [list column.anchor [$w column #1 -anchor]]
+    lappend lines [list layout.anchor [lindex $::glist_ColAnchor($layout) 0]]
+    lappend lines [list removecol.calls $::gui_gamelist_header_menu_baseline_test::removeColCalls]
+    lappend lines [list sort.calls $::gui_gamelist_header_menu_baseline_test::sortCalls]
+    set actual [join $lines "\n"]
+
+    set baselineFile [file join [file dirname [info script]] gamelist_header_menu_actions.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: game list header context menu actions (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/gamelist_header_menu.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Game list header menu actions baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_gamelist_header_menu_baseline_test::cleanup
+} -result 1
+
+test gui-gamelist-header-menu-findbar-baseline-compare-1.0 {Game list header FindBar action matches the approved baseline} -setup {
+    ::gui_gamelist_header_menu_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_baseline_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_baseline_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+    set ::glistFindBar($w) .glistWin1.find
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+
+    ::gui_gamelist_header_menu_baseline_test::invokeCheckMenuLabel ${w}.header_menu FindBar
+    ::gui_gamelist_header_menu_baseline_test::invokeCheckMenuLabel ${w}.header_menu FindBar
+
+    set lines {}
+    lappend lines [list popup.calls $::gui_gamelist_header_menu_baseline_test::popupCalls]
+    lappend lines [list grid.calls $::gui_gamelist_header_menu_baseline_test::gridCalls]
+    lappend lines [list focus.calls $::gui_gamelist_header_menu_baseline_test::focusCalls]
+    lappend lines [list selection.calls $::gui_gamelist_header_menu_baseline_test::selectionCalls]
+    lappend lines [list forget.calls $::gui_gamelist_header_menu_baseline_test::forgetCalls]
+    lappend lines [list findbar.value $::glist_FindBar($layout)]
+    set actual [join $lines "\n"]
+
+    set baselineFile [file join [file dirname [info script]] gamelist_header_menu_findbar.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: game list header context menu FindBar action (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/gamelist_header_menu.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Game list header menu FindBar baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_gamelist_header_menu_baseline_test::cleanup
+} -result 1
+
+test gui-gamelist-header-menu-layouts-baseline-compare-1.0 {Game list header Layouts actions match the approved baseline} -setup {
+    ::gui_gamelist_header_menu_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_baseline_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_baseline_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+    set ::glist_Layouts {RatingDate DateEvent Full SavedLayout}
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+
+    ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel ${w}.header_menu.layouts Save
+    ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel ${w}.header_menu.layouts Defaults
+    ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel ${w}.header_menu.layouts SavedLayout
+
+    set lines {}
+    lappend lines [list popup.calls $::gui_gamelist_header_menu_baseline_test::popupCalls]
+    lappend lines [list layoutsave.calls $::gui_gamelist_header_menu_baseline_test::layoutSaveCalls]
+    lappend lines [list layoutapply.calls $::gui_gamelist_header_menu_baseline_test::layoutApplyCalls]
+    set actual [join $lines "\n"]
+
+    set baselineFile [file join [file dirname [info script]] gamelist_header_menu_layouts.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: game list header context menu Layouts actions (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/gamelist_header_menu.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Game list header menu Layouts baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_gamelist_header_menu_baseline_test::cleanup
+} -result 1
+
+test gui-gamelist-header-menu-addfield-baseline-compare-1.0 {Game list header AddField action matches the approved baseline} -setup {
+    ::gui_gamelist_header_menu_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_baseline_test::installRuntimeStubs
+
+    foreach h $::glist_Headers {
+        set ::tr($h) $h
+    }
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_baseline_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+    set ::glist_ColOrder($layout) {7}
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.header_menu]
+
+    ::gui_gamelist_header_menu_baseline_test::invokeMenuLabel ${w}.header_menu.addcol GlistNumber
+
+    set lines {}
+    lappend lines [list popup.calls $::gui_gamelist_header_menu_baseline_test::popupCalls]
+    lappend lines [list addfield.state [::scid_test::menu_spec::entryState $snapshot GlistAddField]]
+    lappend lines [list insertcol.calls $::gui_gamelist_header_menu_baseline_test::insertColCalls]
+    set actual [join $lines "\n"]
+
+    set baselineFile [file join [file dirname [info script]] gamelist_header_menu_addfield.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: game list header context menu AddField action (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/gamelist_header_menu.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Game list header menu AddField baseline mismatch: $baselineFile\n\n$diff"
     }
 
     return 1

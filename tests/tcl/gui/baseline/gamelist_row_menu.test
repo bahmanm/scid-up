@@ -10,6 +10,14 @@ namespace eval ::gui_gamelist_row_menu_baseline_test {
     variable baseCurrent 1
     variable baseForWidget 1
     variable gameNumber 7
+    variable eventCalls {}
+    variable popupCalls {}
+    variable switchBaseCalls {}
+    variable loadCalls {}
+    variable browseCalls {}
+    variable delflagCalls {}
+    variable removeFromFilterCalls {}
+    variable findCurrentCalls {}
 }
 
 proc ::gui_gamelist_row_menu_baseline_test::defineTreeview {path} {
@@ -28,6 +36,14 @@ proc ::gui_gamelist_row_menu_baseline_test::dispatchTreeview {path subcmd args} 
             }
         }
         selection {
+            if {[llength $args]} {
+                set op [lindex $args 0]
+                if {$op eq "set"} {
+                    set ::gui_gamelist_row_menu_baseline_test::selected [lindex $args 1]
+                    return
+                }
+                error "treeview selection $op not stubbed"
+            }
             return $::gui_gamelist_row_menu_baseline_test::selected
         }
         default {
@@ -53,6 +69,14 @@ proc ::gui_gamelist_row_menu_baseline_test::setup {} {
     set ::gui_gamelist_row_menu_baseline_test::selected "42_0"
     set ::gui_gamelist_row_menu_baseline_test::baseCurrent 1
     set ::gui_gamelist_row_menu_baseline_test::gameNumber 7
+    set ::gui_gamelist_row_menu_baseline_test::eventCalls {}
+    set ::gui_gamelist_row_menu_baseline_test::popupCalls {}
+    set ::gui_gamelist_row_menu_baseline_test::switchBaseCalls {}
+    set ::gui_gamelist_row_menu_baseline_test::loadCalls {}
+    set ::gui_gamelist_row_menu_baseline_test::browseCalls {}
+    set ::gui_gamelist_row_menu_baseline_test::delflagCalls {}
+    set ::gui_gamelist_row_menu_baseline_test::removeFromFilterCalls {}
+    set ::gui_gamelist_row_menu_baseline_test::findCurrentCalls {}
 
     array set ::tr {
         LoadGame LoadGame
@@ -81,6 +105,7 @@ proc ::gui_gamelist_row_menu_baseline_test::setup {} {
     }
 
     ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands tk_popup {menu x y} {
+        lappend ::gui_gamelist_row_menu_baseline_test::popupCalls [list $menu $x $y]
         return
     }
 
@@ -88,6 +113,7 @@ proc ::gui_gamelist_row_menu_baseline_test::setup {} {
         if {$subcmd ne "generate"} {
             error "event $subcmd not stubbed in tests"
         }
+        lappend ::gui_gamelist_row_menu_baseline_test::eventCalls [list $subcmd {*}$args]
         return
     }
 
@@ -125,9 +151,18 @@ proc ::gui_gamelist_row_menu_baseline_test::setup {} {
     }
 
     ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands ::file::SwitchToBase {base {arg 0}} {
+        lappend ::gui_gamelist_row_menu_baseline_test::switchBaseCalls [list $base $arg]
         return
     }
-
+    namespace eval ::gbrowser {}
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands ::game::Load {idx {ply ""}} {
+        lappend ::gui_gamelist_row_menu_baseline_test::loadCalls [list $idx $ply]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands ::gbrowser::new {base idx ply} {
+        lappend ::gui_gamelist_row_menu_baseline_test::browseCalls [list $base $idx $ply]
+        return
+    }
     ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands image {subcmd args} {
         if {$subcmd ne "create"} {
             error "image $subcmd not stubbed in tests"
@@ -150,10 +185,36 @@ proc ::gui_gamelist_row_menu_baseline_test::cleanup {} {
     unset -nocomplain ::tr
 }
 
+proc ::gui_gamelist_row_menu_baseline_test::installRuntimeStubs {} {
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands glist.delflag_ {w idx} {
+        lappend ::gui_gamelist_row_menu_baseline_test::delflagCalls [list $w $idx]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands glist.removeFromFilter_ {w idx {dir ""}} {
+        lappend ::gui_gamelist_row_menu_baseline_test::removeFromFilterCalls [list $w $idx $dir]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_baseline_test::stubbedCommands glist.findcurrentgame_ {w gnum} {
+        lappend ::gui_gamelist_row_menu_baseline_test::findCurrentCalls [list $w $gnum]
+        return
+    }
+}
+
+proc ::gui_gamelist_row_menu_baseline_test::invokeMenuLabel {menuPath label} {
+    foreach entry [::scid_test::menu_capture::entries $menuPath] {
+        if {[dict get $entry -label] eq $label} {
+            uplevel #0 [dict get $entry -command]
+            return
+        }
+    }
+    error "Menu $menuPath has no entry labelled: $label"
+}
+
 test gui-gamelist-row-menu-baseline-compare-1.0 {Game list row context menu matches the approved baseline structure} -setup {
     ::gui_gamelist_row_menu_baseline_test::setup
 } -body {
     source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_row_menu_baseline_test::installRuntimeStubs
 
     set w .glistWin1.games.glist
     ::gui_gamelist_row_menu_baseline_test::defineTreeview $w
@@ -185,6 +246,67 @@ test gui-gamelist-row-menu-baseline-compare-1.0 {Game list row context menu matc
     if {$expected ne $actual} {
         set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
         error "Game list row menu baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_gamelist_row_menu_baseline_test::cleanup
+} -result 1
+
+test gui-gamelist-row-menu-actions-baseline-compare-1.0 {Game list row context menu actions match the approved baseline} -setup {
+    ::gui_gamelist_row_menu_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_row_menu_baseline_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_row_menu_baseline_test::defineTreeview $w
+
+    menu ${w}.game_menu
+
+    set layout Full
+    set ::glistBase($w) 1
+    set ::glistFilter($w) dbfilter
+    set ::glist_FindBar($layout) 0
+    set ::gui_gamelist_row_menu_baseline_test::gameNumber 7
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.game_menu]
+    set filterMenu ${w}.game_menu.filter
+
+    ::gui_gamelist_row_menu_baseline_test::invokeMenuLabel ${w}.game_menu LoadGame
+    ::gui_gamelist_row_menu_baseline_test::invokeMenuLabel ${w}.game_menu BrowseGame
+    ::gui_gamelist_row_menu_baseline_test::invokeMenuLabel ${w}.game_menu DeleteGame
+    ::gui_gamelist_row_menu_baseline_test::invokeMenuLabel $filterMenu GlistRemoveThisGameFromFilter
+    ::gui_gamelist_row_menu_baseline_test::invokeMenuLabel ${w}.game_menu FindCurrentGame
+
+    set lines {}
+    lappend lines [list event.calls $::gui_gamelist_row_menu_baseline_test::eventCalls]
+    lappend lines [list popup.calls $::gui_gamelist_row_menu_baseline_test::popupCalls]
+    lappend lines [list switchbase.calls $::gui_gamelist_row_menu_baseline_test::switchBaseCalls]
+    lappend lines [list load.calls $::gui_gamelist_row_menu_baseline_test::loadCalls]
+    lappend lines [list browse.calls $::gui_gamelist_row_menu_baseline_test::browseCalls]
+    lappend lines [list delflag.calls $::gui_gamelist_row_menu_baseline_test::delflagCalls]
+    lappend lines [list selection.after.delete $::gui_gamelist_row_menu_baseline_test::selected]
+    lappend lines [list findcurrent.state [::scid_test::menu_spec::entryState $snapshot FindCurrentGame]]
+    lappend lines [list remove.calls $::gui_gamelist_row_menu_baseline_test::removeFromFilterCalls]
+    lappend lines [list findcurrent.calls $::gui_gamelist_row_menu_baseline_test::findCurrentCalls]
+    set actual [join $lines "\n"]
+
+    set baselineFile [file join [file dirname [info script]] gamelist_row_menu_actions.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: game list row context menu actions (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/gamelist_row_menu.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Game list row menu actions baseline mismatch: $baselineFile\n\n$diff"
     }
 
     return 1

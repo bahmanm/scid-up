@@ -10,6 +10,14 @@ namespace eval ::gui_gamelist_row_menu_spec_test {
     variable baseCurrent 1
     variable baseForWidget 1
     variable gameNumber 1
+    variable eventCalls {}
+    variable popupCalls {}
+    variable switchBaseCalls {}
+    variable loadCalls {}
+    variable browseCalls {}
+    variable delflagCalls {}
+    variable removeFromFilterCalls {}
+    variable findCurrentCalls {}
 }
 
 proc ::gui_gamelist_row_menu_spec_test::defineTreeview {path} {
@@ -28,6 +36,14 @@ proc ::gui_gamelist_row_menu_spec_test::dispatchTreeview {path subcmd args} {
             }
         }
         selection {
+            if {[llength $args]} {
+                set op [lindex $args 0]
+                if {$op eq "set"} {
+                    set ::gui_gamelist_row_menu_spec_test::selected [lindex $args 1]
+                    return
+                }
+                error "treeview selection $op not stubbed"
+            }
             return $::gui_gamelist_row_menu_spec_test::selected
         }
         default {
@@ -54,6 +70,14 @@ proc ::gui_gamelist_row_menu_spec_test::setup {} {
     set ::gui_gamelist_row_menu_spec_test::baseCurrent 1
     set ::gui_gamelist_row_menu_spec_test::baseForWidget 1
     set ::gui_gamelist_row_menu_spec_test::gameNumber 1
+    set ::gui_gamelist_row_menu_spec_test::eventCalls {}
+    set ::gui_gamelist_row_menu_spec_test::popupCalls {}
+    set ::gui_gamelist_row_menu_spec_test::switchBaseCalls {}
+    set ::gui_gamelist_row_menu_spec_test::loadCalls {}
+    set ::gui_gamelist_row_menu_spec_test::browseCalls {}
+    set ::gui_gamelist_row_menu_spec_test::delflagCalls {}
+    set ::gui_gamelist_row_menu_spec_test::removeFromFilterCalls {}
+    set ::gui_gamelist_row_menu_spec_test::findCurrentCalls {}
 
     array set ::tr {
         LoadGame LoadGame
@@ -82,6 +106,7 @@ proc ::gui_gamelist_row_menu_spec_test::setup {} {
     }
 
     ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands tk_popup {menu x y} {
+        lappend ::gui_gamelist_row_menu_spec_test::popupCalls [list $menu $x $y]
         return
     }
 
@@ -89,6 +114,7 @@ proc ::gui_gamelist_row_menu_spec_test::setup {} {
         if {$subcmd ne "generate"} {
             error "event $subcmd not stubbed in tests"
         }
+        lappend ::gui_gamelist_row_menu_spec_test::eventCalls [list $subcmd {*}$args]
         return
     }
 
@@ -132,9 +158,18 @@ proc ::gui_gamelist_row_menu_spec_test::setup {} {
     }
 
     ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands ::file::SwitchToBase {base {arg 0}} {
+        lappend ::gui_gamelist_row_menu_spec_test::switchBaseCalls [list $base $arg]
         return
     }
-
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands ::game::Load {idx {ply ""}} {
+        lappend ::gui_gamelist_row_menu_spec_test::loadCalls [list $idx $ply]
+        return
+    }
+    namespace eval ::gbrowser {}
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands ::gbrowser::new {base idx ply} {
+        lappend ::gui_gamelist_row_menu_spec_test::browseCalls [list $base $idx $ply]
+        return
+    }
     ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands image {subcmd args} {
         if {$subcmd ne "create"} {
             error "image $subcmd not stubbed in tests"
@@ -158,10 +193,36 @@ proc ::gui_gamelist_row_menu_spec_test::cleanup {} {
     unset -nocomplain ::tr
 }
 
+proc ::gui_gamelist_row_menu_spec_test::installRuntimeStubs {} {
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands glist.delflag_ {w idx} {
+        lappend ::gui_gamelist_row_menu_spec_test::delflagCalls [list $w $idx]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands glist.removeFromFilter_ {w idx {dir ""}} {
+        lappend ::gui_gamelist_row_menu_spec_test::removeFromFilterCalls [list $w $idx $dir]
+        return
+    }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_row_menu_spec_test::stubbedCommands glist.findcurrentgame_ {w gnum} {
+        lappend ::gui_gamelist_row_menu_spec_test::findCurrentCalls [list $w $gnum]
+        return
+    }
+}
+
+proc ::gui_gamelist_row_menu_spec_test::invokeMenuLabel {menuPath label} {
+    foreach entry [::scid_test::menu_capture::entries $menuPath] {
+        if {[dict get $entry -label] eq $label} {
+            uplevel #0 [dict get $entry -command]
+            return
+        }
+    }
+    error "Menu $menuPath has no entry labelled: $label"
+}
+
 test gui-gamelist-row-menu-spec-find-current-game-gating-1.0 {Game list row menu disables FindCurrentGame when not in current base or no current game} -setup {
     ::gui_gamelist_row_menu_spec_test::setup
 } -body {
     source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_row_menu_spec_test::installRuntimeStubs
 
     set w .glistWin1.games.glist
     ::gui_gamelist_row_menu_spec_test::defineTreeview $w
@@ -197,5 +258,47 @@ test gui-gamelist-row-menu-spec-find-current-game-gating-1.0 {Game list row menu
 } -cleanup {
     ::gui_gamelist_row_menu_spec_test::cleanup
 } -result {disabled disabled normal}
+
+test gui-gamelist-row-menu-spec-actions-1.0 {Game list row menu actions keep callback wiring and popup behavior stable} -setup {
+    ::gui_gamelist_row_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_row_menu_spec_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_row_menu_spec_test::defineTreeview $w
+
+    menu ${w}.game_menu
+
+    set layout Full
+    set ::glistBase($w) 1
+    set ::glistFilter($w) dbfilter
+    set ::glist_FindBar($layout) 0
+    set ::gui_gamelist_row_menu_spec_test::gameNumber 7
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+    set snapshot [::scid_test::menu_structure::snapshot ${w}.game_menu]
+    set filterMenu ${w}.game_menu.filter
+
+    ::gui_gamelist_row_menu_spec_test::invokeMenuLabel ${w}.game_menu LoadGame
+    ::gui_gamelist_row_menu_spec_test::invokeMenuLabel ${w}.game_menu BrowseGame
+    ::gui_gamelist_row_menu_spec_test::invokeMenuLabel ${w}.game_menu DeleteGame
+    ::gui_gamelist_row_menu_spec_test::invokeMenuLabel $filterMenu GlistRemoveThisGameFromFilter
+    ::gui_gamelist_row_menu_spec_test::invokeMenuLabel ${w}.game_menu FindCurrentGame
+
+    list \
+        $::gui_gamelist_row_menu_spec_test::eventCalls \
+        $::gui_gamelist_row_menu_spec_test::popupCalls \
+        $::gui_gamelist_row_menu_spec_test::switchBaseCalls \
+        $::gui_gamelist_row_menu_spec_test::loadCalls \
+        $::gui_gamelist_row_menu_spec_test::browseCalls \
+        $::gui_gamelist_row_menu_spec_test::delflagCalls \
+        $::gui_gamelist_row_menu_spec_test::selected \
+        [::scid_test::menu_spec::entryState $snapshot FindCurrentGame] \
+        $::gui_gamelist_row_menu_spec_test::removeFromFilterCalls \
+        $::gui_gamelist_row_menu_spec_test::findCurrentCalls
+} -cleanup {
+    ::gui_gamelist_row_menu_spec_test::cleanup
+} -result {{{generate .glistWin1.games.glist <ButtonPress-1> -x 1 -y 1}} {{.glistWin1.games.glist.game_menu 100 200}} {{1 0}} {{42 0}} {{1 42 0}} {{.glistWin1.games.glist 42}} {} normal {{.glistWin1.games.glist 42 {}}} {{.glistWin1.games.glist 7}}}
 
 cleanupTests

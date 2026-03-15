@@ -1,0 +1,593 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures glist_widget.tcl]
+
+namespace eval ::gui_glist_widget_spec_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_glist_widget_spec_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::glist_widget::setup stubbedCommands
+}
+
+proc ::gui_glist_widget_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::glist_widget::cleanup stubbedCommands
+}
+
+proc ::gui_glist_widget_spec_test::bindMap {} {
+    set out {}
+    foreach call [::scid_test::gui_fixtures::glist_widget::bindCalls] {
+        lassign $call w seq script
+        dict set out $w,$seq [::gui_glist_widget_spec_test::normalizedWhitespace $script]
+    }
+    return $out
+}
+
+proc ::gui_glist_widget_spec_test::normalizedWhitespace {text} {
+    regsub -all {\s+} [string trim $text] { } text
+    return $text
+}
+
+proc ::gui_glist_widget_spec_test::seedHeaderTranslations {} {
+    foreach col $::glist_Headers {
+        set ::tr($col) $col
+    }
+}
+
+test gui-glist-widget-spec-findbar-1.0 {glist.create wires find-bar controls to stable callbacks} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    set ::gamelistBase(.glistShell) 1
+    set ::gamelistFilter(.glistShell) dbfilter
+
+    glist.create .glistShell TestLayout
+
+    foreach p {
+        .glistShell.glist
+        .glistShell.ybar
+        .glistShell.find
+        .glistShell.find.t
+        .glistShell.find.size
+        .glistShell.find.advanced
+        .glistShell.find.reset
+        .glistShell.find.t_text
+        .glistShell.find.text
+        .glistShell.find.filter
+        .glistShell.find.b1_text
+        .glistShell.find.b2_text
+        .glistShell.find.scale
+    } {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set bindMap [::gui_glist_widget_spec_test::bindMap]
+
+    .glistShell.find.text insert 0 Carlsen
+    .glistShell.find.advanced invoke
+    .glistShell.find.reset invoke
+    glist.showfindbar_ .glistShell.glist TestLayout 1
+    glist.showfindbar_ .glistShell.glist TestLayout 0
+
+    list \
+        [::scid_test::gui_fixtures::glist_widget::sortInitCalls] \
+        [::scid_test::gui_fixtures::glist_widget::mouseWheelBindings] \
+        [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist -displaycolumns] \
+        [dict get [::scid_test::gui_fixtures::glist_widget::treeviewHeadingCalls .glistShell.glist] GlistWhite -text] \
+        [dict get $bindMap .glistShell.glist,<Command-f>] \
+        [dict get $bindMap .glistShell,<<FindBarShow>>] \
+        [dict get $bindMap .glistShell,<<FindBarHide>>] \
+        [dict get $bindMap .glistShell.find.text,<Escape>] \
+        [dict get $bindMap .glistShell.find.text,<Return>] \
+        [dict get $bindMap .glistShell.find.text,<KeyPress-Down>] \
+        [dict get $bindMap .glistShell.find.text,<KeyPress-Up>] \
+        [::scid_test::gui_fixtures::glist_widget::searchHeaderCalls] \
+        [::scid_test::gui_fixtures::glist_widget::findCalls] \
+        [::scid_test::widgets::getText .glistShell.find.text] \
+        [::scid_test::gui_fixtures::glist_widget::focusCalls] \
+        [::scid_test::widgets::getState .glistShell.find.text selection.rangeCalls] \
+        $::glist_FindBar(TestLayout)
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{{.glistShell.glist TestLayout}} {{.glistShell.glist {glist.ybar_ .glistShell.glist}}} {7 3 4 5 6 1 2 23 8 10 9 16 17 22 21 18 11 12 13 14 15 0} GlistWhite {apply {{w} { event generate $w <<FindBarShow>> } ::} .glistShell} {glist.showfindbar_ .glistShell.glist TestLayout 1} {glist.showfindbar_ .glistShell.glist TestLayout 0} {apply {{w layout} { glist.showfindbar_ ${w}.glist $layout 0 } ::} .glistShell TestLayout} {.glistShell.find.filter invoke} {apply {{w} { ${w}.find.b1_text invoke return -code break } ::} .glistShell} {apply {{w} { ${w}.find.b2_text invoke return -code break } ::} .glistShell} {{1 dbfilter}} {{.glistShell awe}} {} {.glistShell.glist .glistShell.find.text .glistShell.glist} {{0 end}} 0}
+
+test gui-glist-widget-spec-search-behavior-1.0 {glist.findgame_ keeps error styling and search callbacks live} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands 0
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    set ::gamelistBase(.glistShell) 1
+    set ::gamelistFilter(.glistShell) dbfilter
+
+    glist.create .glistShell TestLayout
+
+    set ::glistBase(.glistShell.glist) 1
+    set ::glistFilter(.glistShell.glist) dbfilter
+    set ::glistSortStr(.glistShell.glist) sortkey
+    set ::glistFirst(.glistShell.glist) 2
+    set ::glistVisibleLn(.glistShell.glist) 5
+
+    .glistShell.find.text insert 0 Query
+    glist.findgame_ .glistShell awe
+
+    .glistShell.find.text delete 0 end
+    .glistShell.find.text insert 0 77
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 77 none
+    glist.findgame_ .glistShell 1
+    set notFoundStyle [::scid_test::widgets::getState .glistShell.find.text -style]
+
+    .glistShell.find.text delete 0 end
+    .glistShell.find.text insert 0 Anand
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 7_0
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 7 4
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 0 Anand 5 1 12
+    glist.findgame_ .glistShell 1
+    set successStyle {}
+    if {[::scid_test::widgets::hasState .glistShell.find.text -style]} {
+        set successStyle [::scid_test::widgets::getState .glistShell.find.text -style]
+    }
+
+    list \
+        [::scid_test::gui_fixtures::glist_widget::awesomeCalls] \
+        [::scid_test::gui_fixtures::glist_widget::busyCalls] \
+        [::scid_test::gui_fixtures::glist_widget::updateCalls] \
+        [::scid_test::gui_fixtures::glist_widget::gamelocationCalls] \
+        [::scid_test::gui_fixtures::glist_widget::ybarCalls] \
+        [::scid_test::gui_fixtures::glist_widget::afterCalls] \
+        $notFoundStyle \
+        $successStyle \
+        $::glistFirst(.glistShell.glist) \
+        [::scid_test::widgets::getState .glistShell.find.text selection.rangeCalls]
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{{.glistShell Query}} {{busyCursor .glistShell} {unbusyCursor .glistShell} {busyCursor .glistShell} {unbusyCursor .glistShell}} {idletasks idletasks} {{1 dbfilter sortkey 77} {1 dbfilter sortkey 7} {1 dbfilter sortkey 0 Anand 5 1}} {{.glistShell.glist scroll}} {{idle glist.select_ .glistShell.glist 13}} Error.TEntry {} 12 {{0 end}}}
+
+test gui-glist-widget-spec-update-1.0 {glist.update updates size/reset UI and delegates row loading} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands 1 1
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+
+    set ::glistFirst(.glistShell.glist) 7
+    ::scid_test::gui_fixtures::glist_widget::setFilterSizes 1 dbfilter {5 10 20}
+    glist.update .glistShell 1 dbfilter 1
+
+    set partialText [::scid_test::widgets::getState .glistShell.find.size -text]
+    set partialResetState [::scid_test::widgets::getState .glistShell.find.reset -state]
+    set firstAfterMoveUp $::glistFirst(.glistShell.glist)
+
+    set ::glistFirst(.glistShell.glist) 9
+    ::scid_test::gui_fixtures::glist_widget::setFilterSizes 1 dbfilter {10 10 10}
+    glist.update .glistShell 1 dbfilter 0
+
+    list \
+        [::scid_test::gui_fixtures::glist_widget::updateDelegateCalls] \
+        $partialText \
+        $partialResetState \
+        $firstAfterMoveUp \
+        [::scid_test::widgets::getState .glistShell.find.size -text] \
+        [::scid_test::widgets::getState .glistShell.find.reset -state] \
+        $::glistFirst(.glistShell.glist) \
+        $::glistFilter(.glistShell.glist) \
+        $::glistTotal(.glistShell.glist)
+} -cleanup {
+	::gui_glist_widget_spec_test::cleanup
+} -result {{{.glistShell.glist 1} {.glistShell.glist 1}} {(20) -> 5 / 10} normal 0 {all / 10} disabled 9 dbfilter 10}
+
+test gui-glist-widget-spec-loadvalues-1.0 {glist.update_ manages sortcache lifecycle and row loading} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+
+    set ::glistFilter(.glistShell.glist) dbfilter
+    set ::glistSortStr(.glistShell.glist) sortkey
+    set ::glistVisibleLn(.glistShell.glist) 2
+    set ::glistTotal(.glistShell.glist) 8
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 9_0
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewYview .glistShell.glist {0.0 0.8}
+    ::scid_test::gui_fixtures::glist_widget::setCurrentBase 1
+    ::scid_test::gui_fixtures::glist_widget::setCurrentGameNumber 9
+    ::scid_test::gui_fixtures::glist_widget::setGameslistResponse 1 0 3 dbfilter sortkey [list \
+        7_0 [list 7 "=-=" 35 White Black] "" \
+        8_0 [list 8 "1-0" 42 Alpha Beta] D \
+        9_0 [list 9 "0-1" 50 Current Opp] "" \
+    ]
+
+    glist.update_ .glistShell.glist 1
+
+    set firstLoaded $::glistLoaded(.glistShell.glist)
+    set firstRows [::scid_test::gui_fixtures::glist_widget::treeviewRows .glistShell.glist]
+    set firstDeleteCalls [::scid_test::gui_fixtures::glist_widget::treeviewDeleteCalls .glistShell.glist]
+    set firstScrollProxyCalls [::scid_test::gui_fixtures::glist_widget::scrollProxyCalls]
+
+    set ::glistFilter(.glistShell.glist) altfilter
+    set ::glistSortStr(.glistShell.glist) newsort
+    set ::glistVisibleLn(.glistShell.glist) 1
+    set ::glistTotal(.glistShell.glist) 4
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 11_0
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewYview .glistShell.glist {0.0 0.75}
+    ::scid_test::gui_fixtures::glist_widget::setCurrentBase 2
+    ::scid_test::gui_fixtures::glist_widget::setCurrentGameNumber 11
+    ::scid_test::gui_fixtures::glist_widget::setGameslistResponse 2 0 2 altfilter newsort [list \
+        10_0 [list 10 "1-0" 28 Other Side] "" \
+        11_0 [list 11 "0-1" 31 Current Again] "" \
+    ]
+
+    glist.update_ .glistShell.glist 2
+
+    list \
+        [::scid_test::gui_fixtures::glist_widget::sortcacheCalls] \
+        [::scid_test::gui_fixtures::glist_widget::gameslistCalls] \
+        [::scid_test::gui_fixtures::glist_widget::afterCalls] \
+        $firstDeleteCalls \
+        $firstRows \
+        $firstLoaded \
+        $firstScrollProxyCalls \
+        [::scid_test::gui_fixtures::glist_widget::treeviewDeleteCalls .glistShell.glist] \
+        [::scid_test::gui_fixtures::glist_widget::treeviewRows .glistShell.glist] \
+        [::scid_test::gui_fixtures::glist_widget::scrollProxyCalls] \
+        $::glistBase(.glistShell.glist) \
+        $::glistSortCache(.glistShell.glist) \
+        $::glistLoaded(.glistShell.glist) \
+        $::glistVisibleLn(.glistShell.glist) \
+        $::glistFirst(.glistShell.glist) \
+        [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]
+} -cleanup {
+	::gui_glist_widget_spec_test::cleanup
+} -result {{{1 create sortkey} {1 release sortkey} {2 create newsort}} {{1 0 3 dbfilter sortkey} {2 0 2 altfilter newsort}} {{cancel {glist.loadvalues_ .glistShell.glist}} {cancel {glist.loadvalues_ .glistShell.glist}}} {{{}}} {{7_0 {7 ½-½ 35 White Black} fsmall} {8_0 {8 1-0 42 Alpha Beta} {fsmall deleted}} {9_0 {9 0-1 50 Current Opp} {fsmall current}}} 3 {{0.0 0.25}} {{{}} {{7_0 8_0 9_0}}} {{10_0 {10 1-0 28 Other Side} fsmall} {11_0 {11 0-1 31 Current Again} {fsmall current}}} {{0.0 0.25} {0.0 0.25}} 2 newsort 2 1 0 11_0}
+
+test gui-glist-widget-spec-scroll-1.0 {glist scroll helpers clamp, schedule reloads, and translate fractions} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands 1 0 0
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+
+    set ::glistFirst(.glistShell.glist) 5
+    set ::glistVisibleLn(.glistShell.glist) 10
+    set ::glistTotal(.glistShell.glist) 40
+
+    glist.ybar_ .glistShell.glist scroll 1 units
+    set afterUnit [::scid_test::gui_fixtures::glist_widget::afterCalls]
+    set firstUnit $::glistFirst(.glistShell.glist)
+
+    glist.ybar_ .glistShell.glist scroll -1 pages
+    set afterPage [::scid_test::gui_fixtures::glist_widget::afterCalls]
+    set firstPage $::glistFirst(.glistShell.glist)
+
+    glist.ybar_ .glistShell.glist moveto 0.95
+    set afterMoveto [::scid_test::gui_fixtures::glist_widget::afterCalls]
+    set firstMoveto $::glistFirst(.glistShell.glist)
+
+    glist.ybar_ .glistShell.glist -1
+    set afterWheel [::scid_test::gui_fixtures::glist_widget::afterCalls]
+    set firstWheel $::glistFirst(.glistShell.glist)
+
+    set ::glistFirst(.glistShell.glist) 10
+    set ::glistVisibleLn(.glistShell.glist) 4
+    set ::glistLoaded(.glistShell.glist) 5
+    set ::glistTotal(.glistShell.glist) 40
+    glist.yscroll_ .glistShell.glist 0.2 0.6
+    set yviewCalls [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist yview.calls]
+
+    set ::glistFirst(.glistShell.glist) 0
+    set ::glistVisibleLn(.glistShell.glist) 4
+    set ::glistLoaded(.glistShell.glist) 5
+    set ::glistTotal(.glistShell.glist) 40
+    glist.yscroll_ .glistShell.glist 0 1
+    set afterGrow [::scid_test::gui_fixtures::glist_widget::afterCalls]
+    set visibleAfterGrow $::glistVisibleLn(.glistShell.glist)
+    set scrollProxyAfterGrow [::scid_test::gui_fixtures::glist_widget::scrollProxyCalls]
+
+    set ::glistFirst(.glistShell.glist) 10
+    set ::glistVisibleLn(.glistShell.glist) 4
+    set ::glistLoaded(.glistShell.glist) 5
+    set ::glistTotal(.glistShell.glist) 40
+    glist.yscroll_ .glistShell.glist 0 0.5
+
+    list \
+        $afterUnit \
+        $firstUnit \
+        $afterPage \
+        $firstPage \
+        $afterMoveto \
+        $firstMoveto \
+        $afterWheel \
+        $firstWheel \
+        $yviewCalls \
+        $afterGrow \
+        $visibleAfterGrow \
+        $scrollProxyAfterGrow \
+        [::scid_test::gui_fixtures::glist_widget::scrollProxyCalls] \
+        $::glistVisibleLn(.glistShell.glist)
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{{cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist}} 6 {{cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist}} 0 {{cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist}} 30 {{cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist}} 29 {{moveto 0.0}} {{cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel glist.loadvalues_ .glistShell.glist} {idle glist.loadvalues_ .glistShell.glist} {cancel {glist.loadvalues_ .glistShell.glist}} {idle {glist.loadvalues_ .glistShell.glist}}} 100 {} {{0.25 0.3}} 2}
+
+test gui-glist-widget-spec-selection-1.0 {glist selection helpers translate absolute rows and navigation edges} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewRows .glistShell.glist {
+        {10_0 {10 1-0 35 White Black} fsmall}
+        {11_0 {11 0-1 40 Alpha Beta} fsmall}
+        {12_0 {12 ½-½ 50 Current Opp} fsmall}
+    }
+    set ::glistFirst(.glistShell.glist) 10
+
+    glist.select_ .glistShell.glist 13
+    set selectedAbsolute [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]
+
+    glist.select_ .glistShell.glist end
+    set selectedEnd [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist {}
+    glist.movesel_ .glistShell.glist next +1 end
+    set selectedFromEmpty [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 10_0
+    glist.movesel_ .glistShell.glist next +1 end
+    set selectedVisibleNext [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewBBox .glistShell.glist 12_0 ""
+    glist.movesel_ .glistShell.glist next +1 end
+    set selectedHiddenNext [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 10_0
+    glist.movesel_ .glistShell.glist prev -1 0
+
+    list \
+        $selectedAbsolute \
+        $selectedEnd \
+        $selectedFromEmpty \
+        $selectedVisibleNext \
+        $selectedHiddenNext \
+        [::scid_test::gui_fixtures::glist_widget::ybarCalls] \
+        [::scid_test::gui_fixtures::glist_widget::afterCalls] \
+        [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection]
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {12_0 12_0 10_0 11_0 12_0 {{.glistShell.glist scroll +1} {.glistShell.glist scroll -1}} {{idle glist.select_ .glistShell.glist 0}} 10_0}
+
+test gui-glist-widget-spec-findcurrent-1.0 {glist.findcurrentgame_ jumps only when the game is present} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+    set ::glistBase(.glistShell.glist) 1
+    set ::glistFilter(.glistShell.glist) dbfilter
+    set ::glistSortStr(.glistShell.glist) sortkey
+    set ::glistFirst(.glistShell.glist) 2
+
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 42 17
+    glist.findcurrentgame_ .glistShell.glist 42
+    set foundFirst $::glistFirst(.glistShell.glist)
+    set foundYbar [::scid_test::gui_fixtures::glist_widget::ybarCalls]
+
+    ::scid_test::gui_fixtures::glist_widget::setGamelocationResponse 1 dbfilter sortkey 88 none
+    glist.findcurrentgame_ .glistShell.glist 88
+
+    list \
+        [::scid_test::gui_fixtures::glist_widget::gamelocationCalls] \
+        $foundFirst \
+        $foundYbar \
+        $::glistFirst(.glistShell.glist) \
+        [::scid_test::gui_fixtures::glist_widget::ybarCalls]
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{{1 dbfilter sortkey 42} {1 dbfilter sortkey 88}} 17 {{.glistShell.glist scroll}} 17 {{.glistShell.glist scroll}}}
+
+test gui-glist-widget-spec-removefilter-1.0 {glist.removeFromFilter_ updates filters, notifies, and optionally scrolls} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+    set ::glistBase(.glistShell.glist) 1
+    set ::glistFilter(.glistShell.glist) dbfilter
+    set ::glistSortStr(.glistShell.glist) sortkey
+
+    ::scid_test::gui_fixtures::glist_widget::setFilterComponents 1 dbfilter {rootfilter auxfilter}
+    glist.removeFromFilter_ .glistShell.glist 42
+    set ybarAfterPlain [::scid_test::gui_fixtures::glist_widget::ybarCalls]
+
+    ::scid_test::gui_fixtures::glist_widget::setFilterComponents 1 dbfilter {treefilter extra}
+    glist.removeFromFilter_ .glistShell.glist 51 +
+
+    list \
+        [::scid_test::gui_fixtures::glist_widget::filterRemoveCalls] \
+        [::scid_test::gui_fixtures::glist_widget::notifyFilterCalls] \
+        $ybarAfterPlain \
+        [::scid_test::gui_fixtures::glist_widget::ybarCalls]
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{{1 dbfilter 42} {1 dbfilter 51 + sortkey}} {{1 rootfilter} {1 treefilter}} {} {{.glistShell.glist moveto 1.0}}}
+
+test gui-glist-widget-spec-doubleclick-1.0 {glist.doubleclick_ dispatches heading, delete, remove-filter, and load paths correctly} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+    set ::glistBase(.glistShell.glist) 1
+    set ::glistFilter(.glistShell.glist) dbfilter
+    set ::glistSortStr(.glistShell.glist) sortkey
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyRegion .glistShell.glist 1 1 heading
+    glist.doubleclick_ .glistShell.glist 1 1 TestLayout
+    set headingState [list \
+        [::scid_test::gui_fixtures::glist_widget::delflagCalls] \
+        [::scid_test::gui_fixtures::glist_widget::filterRemoveCalls] \
+        [::scid_test::gui_fixtures::glist_widget::switchBaseCalls] \
+        [::scid_test::gui_fixtures::glist_widget::loadCalls]]
+
+    set ::glistClickOp(.glistShell.glist) 1
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewSelection .glistShell.glist 9_0
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyRegion .glistShell.glist 2 2 cell
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyItem .glistShell.glist 2 2 9_0
+    glist.doubleclick_ .glistShell.glist 2 2 TestLayout
+    set deleteState [list \
+        [::scid_test::gui_fixtures::glist_widget::delflagCalls] \
+        [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist selection] \
+        [::scid_test::gui_fixtures::glist_widget::switchBaseCalls] \
+        [::scid_test::gui_fixtures::glist_widget::loadCalls]]
+
+    set ::glistClickOp(.glistShell.glist) 2
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyItem .glistShell.glist 3 3 14_7
+    glist.doubleclick_ .glistShell.glist 3 3 TestLayout
+    set removeState [list \
+        [::scid_test::gui_fixtures::glist_widget::filterRemoveCalls] \
+        [::scid_test::gui_fixtures::glist_widget::notifyFilterCalls] \
+        [::scid_test::gui_fixtures::glist_widget::switchBaseCalls] \
+        [::scid_test::gui_fixtures::glist_widget::loadCalls]]
+
+    set ::glistClickOp(.glistShell.glist) 0
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyItem .glistShell.glist 4 4 21_3
+    glist.doubleclick_ .glistShell.glist 4 4 TestLayout
+
+    list \
+        $headingState \
+        $deleteState \
+        $removeState \
+        [::scid_test::gui_fixtures::glist_widget::switchBaseCalls] \
+        [::scid_test::gui_fixtures::glist_widget::loadCalls]
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{{} {} {} {}} {{{.glistShell.glist 9}} {} {} {}} {{{1 dbfilter 14}} {{1 dbfilter}} {} {}} {{1 0}} {{21 3}}}
+
+test gui-glist-widget-spec-press-release-1.0 {glist.press_ and glist.release_ handle resize, heading reorder, and sort dispatch} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyRegion .glistShell.glist 10 3 separator
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyColumn .glistShell.glist 9 3 #2
+    glist.press_ .glistShell.glist 10 3
+    set resizePress [list $::glist_pressMode(.glistShell.glist) $::glist_resizeColumn(.glistShell.glist) $::glist_activeHeading(.glistShell.glist)]
+    glist.release_ .glistShell.glist 10 3 0 TestLayout
+    set resizeAfter [::scid_test::gui_fixtures::glist_widget::afterCalls]
+    set resizeCallback [lindex [lindex $resizeAfter end] 1]
+    set resizedId [.glistShell.glist column #2 -id]
+    .glistShell.glist column $resizedId -width 77
+    uplevel #0 $resizeCallback
+    set resizedIndex [lsearch -exact $::glist_Headers $resizedId]
+    set resizedWidth [lindex $::glist_ColWidth(TestLayout) $resizedIndex]
+    set resizeCleared [list \
+        [info exists ::glist_pressMode(.glistShell.glist)] \
+        [info exists ::glist_resizeColumn(.glistShell.glist)] \
+        [info exists ::glist_activeHeading(.glistShell.glist)]]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyRegion .glistShell.glist 20 4 heading
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyRegion .glistShell.glist 30 4 heading
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyColumn .glistShell.glist 20 4 #1
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyColumn .glistShell.glist 30 4 #3
+    glist.press_ .glistShell.glist 20 4
+    glist.release_ .glistShell.glist 30 4 0 TestLayout
+    set reorderState [list $::glist_ColOrder(TestLayout) [::scid_test::gui_fixtures::glist_widget::treeviewState .glistShell.glist -displaycolumns]]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyRegion .glistShell.glist 40 5 heading
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyColumn .glistShell.glist 40 5 #2
+    glist.press_ .glistShell.glist 40 5
+    glist.release_ .glistShell.glist 40 5 5 TestLayout
+
+    list \
+        $resizePress \
+        $resizeAfter \
+        $resizedId \
+        $resizedWidth \
+        $resizeCleared \
+        $reorderState \
+        [::scid_test::gui_fixtures::glist_widget::sortClickCalls]
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{resize #2 {}} {{idle {glist.persistResizedColumn_ .glistShell.glist TestLayout #2}}} GlistWhite 77 {0 0 0} {{3 4 7 5 6 1 2 23 8 10 9 16 17 22 21 18 11 12 13 14 15 0} {3 4 7 5 6 1 2 23 8 10 9 16 17 22 21 18 11 12 13 14 15 0}} {{.glistShell.glist 40 5 5 TestLayout}}}
+
+test gui-glist-widget-spec-sortclick-1.0 {glist.sortClickEvent_ updates sort chains, arrows, and sort history} -setup {
+    ::gui_glist_widget_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::glist_widget::installRuntimeStubs ::gui_glist_widget_spec_test::stubbedCommands 1 1 1 1 0 0
+    ::gui_glist_widget_spec_test::seedHeaderTranslations
+
+    glist.create .glistShell TestLayout
+    set ::glistBase(.glistShell.glist) 1
+    ::scid_test::gui_fixtures::glist_widget::setBaseFilename 1 /tmp/base-1.si4
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyColumn .glistShell.glist 10 5 #2
+    glist.sortClickEvent_ .glistShell.glist 10 5 0 TestLayout
+    set firstState [list \
+        $::glist_Sort(TestLayout) \
+        $::glistSortStr(.glistShell.glist) \
+        [dict get [::scid_test::gui_fixtures::glist_widget::treeviewHeadingCalls .glistShell.glist] 3 -image] \
+        [::scid_test::gui_fixtures::glist_widget::updateDelegateCalls] \
+        [::scid_test::gui_fixtures::glist_widget::busyCalls] \
+        [::scid_test::gui_fixtures::glist_widget::updateCalls] \
+        $::recentSort]
+
+    glist.sortClickEvent_ .glistShell.glist 10 5 0 TestLayout
+    set secondState [list \
+        $::glist_Sort(TestLayout) \
+        $::glistSortStr(.glistShell.glist) \
+        [dict get [::scid_test::gui_fixtures::glist_widget::treeviewHeadingCalls .glistShell.glist] 3 -image] \
+        $::recentSort]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyColumn .glistShell.glist 11 5 #3
+    glist.sortClickEvent_ .glistShell.glist 11 5 4 TestLayout
+    set thirdState [list \
+        $::glist_Sort(TestLayout) \
+        $::glistSortStr(.glistShell.glist) \
+        [dict get [::scid_test::gui_fixtures::glist_widget::treeviewHeadingCalls .glistShell.glist] 3 -image] \
+        [dict get [::scid_test::gui_fixtures::glist_widget::treeviewHeadingCalls .glistShell.glist] 4 -image] \
+        $::recentSort]
+
+    ::scid_test::gui_fixtures::glist_widget::setTreeviewIdentifyColumn .glistShell.glist 12 5 #21
+    glist.sortClickEvent_ .glistShell.glist 12 5 0 TestLayout
+
+    list \
+        $firstState \
+        $secondState \
+        $thirdState \
+        $::glist_Sort(TestLayout) \
+        [::scid_test::gui_fixtures::glist_widget::updateDelegateCalls] \
+        [::scid_test::gui_fixtures::glist_widget::busyCalls]
+} -cleanup {
+    ::gui_glist_widget_spec_test::cleanup
+} -result {{{3 +} w+ ::glist_Arrows(0) {{.glistShell.glist 1}} {{busyCursor .glistShell.glist} {unbusyCursor .glistShell.glist}} idletasks {/tmp/base-1.si4 {3 +}}} {{3 -} w- ::glist_Arrows(1) {/tmp/base-1.si4 {3 -}}} {{3 - 4 -} w-W- ::glist_Arrows(1) ::glist_Arrows(3) {/tmp/base-1.si4 {3 - 4 -}}} {3 - 4 -} {{.glistShell.glist 1} {.glistShell.glist 1} {.glistShell.glist 1}} {{busyCursor .glistShell.glist} {unbusyCursor .glistShell.glist} {busyCursor .glistShell.glist} {unbusyCursor .glistShell.glist} {busyCursor .glistShell.glist} {unbusyCursor .glistShell.glist}}}
+
+cleanupTests

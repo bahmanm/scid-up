@@ -1,0 +1,190 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures gamelist_window.tcl]
+
+namespace eval ::gui_gamelist_window_baseline_test {
+    variable stubbedCommands {}
+}
+
+proc ::gui_gamelist_window_baseline_test::setup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::gamelist_window::setup stubbedCommands
+}
+
+proc ::gui_gamelist_window_baseline_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::gamelist_window::cleanup stubbedCommands
+    catch {namespace delete ::windows::gamelist}
+}
+
+proc ::gui_gamelist_window_baseline_test::normalizedWhitespace {text} {
+    regsub -all {\s+} [string trim $text] { } text
+    return $text
+}
+
+proc ::gui_gamelist_window_baseline_test::formatSnapshot {} {
+    ::windows::gamelist::createExportMenu_ .glistWin1 .glistWin1.menu_export
+
+    set lines {}
+
+    foreach w {
+        .glistWin1.buttons.filter
+        .glistWin1.buttons.stats
+        .glistWin1.buttons.boardFilter
+        .glistWin1.buttons.export
+        .glistWin1.filter.b.rfilter
+        .glistWin1.filter.b.bsearch
+        .glistWin1.filter.b.hsearch
+        .glistWin1.filter.b.msearch
+        .glistWin1.filter.b.tmt
+        .glistWin1.filter.b.crosst
+    } {
+        set attrs {}
+        foreach opt {-image -command -state} {
+            if {[::scid_test::widgets::hasState $w $opt]} {
+                set value [::scid_test::widgets::getState $w $opt]
+                if {$opt eq "-command"} {
+                    set value [::gui_gamelist_window_baseline_test::normalizedWhitespace $value]
+                }
+                lappend attrs $opt $value
+            }
+        }
+        lappend lines [list widget $w {*}$attrs]
+    }
+
+    set canvasCreateCalls {}
+    if {[::scid_test::widgets::hasState .glistWin1.progress canvas.createCalls]} {
+        set canvasCreateCalls [::scid_test::widgets::getState .glistWin1.progress canvas.createCalls]
+    }
+    lappend lines [list canvas.create .glistWin1.progress $canvasCreateCalls]
+    lappend lines [list glist.create.calls [::scid_test::gui_fixtures::gamelist_window::glistCreateCalls]]
+    lappend lines [list glist.update.calls [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls]]
+    lappend lines [list title.calls [::scid_test::gui_fixtures::gamelist_window::titleCalls]]
+    lappend lines [list glist.tag.configure [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist]]
+
+    foreach call [lsort [::scid_test::gui_fixtures::gamelist_window::bindCalls]] {
+        lassign $call w seq script
+        lappend lines [list bind $w $seq [::gui_gamelist_window_baseline_test::normalizedWhitespace $script]]
+    }
+
+    lappend lines [list menu.export [::scid_test::menu_structure::format [::scid_test::menu_structure::snapshot .glistWin1.menu_export]]]
+
+    set ::gamelistMenu(.glistWin1) stats
+    ::windows::gamelist::searchpos_ .glistWin1
+    ::windows::gamelist::updateStats_ .glistWin1
+
+    set canvasPath .glistWin1.stats.b.c
+    lappend lines [list posmask.enabled $::gamelistPosMask(.glistWin1)]
+    lappend lines [list filter.enabled $::gamelistFilter(.glistWin1)]
+    lappend lines [list boardFilter.states.enabled [::scid_test::widgets::getState .glistWin1.buttons.boardFilter widget.states]]
+    lappend lines [list updateTreeFilter.calls [::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls]]
+    lappend lines [list stats.canvas.delete [::scid_test::widgets::getState $canvasPath canvas.deleteCalls]]
+    lappend lines [list stats.canvas.create [::scid_test::widgets::getState $canvasPath canvas.createCalls]]
+    lappend lines [list stats.canvas.scrollregion [::scid_test::widgets::getState $canvasPath -scrollregion]]
+    lappend lines [list stats.canvas.width [::scid_test::widgets::getState $canvasPath -width]]
+
+    set normalizedCanvasBinds {}
+    foreach call [::scid_test::widgets::getState $canvasPath canvas.bindCalls] {
+        lassign $call tag seq script
+        lappend normalizedCanvasBinds [list $tag $seq [::gui_gamelist_window_baseline_test::normalizedWhitespace $script]]
+    }
+    lappend lines [list stats.canvas.bind $normalizedCanvasBinds]
+
+    ::windows::gamelist::searchpos_ .glistWin1
+    lappend lines [list posmask.disabled $::gamelistPosMask(.glistWin1)]
+    lappend lines [list filter.disabled $::gamelistFilter(.glistWin1)]
+    lappend lines [list boardFilter.states.disabled [::scid_test::widgets::getState .glistWin1.buttons.boardFilter widget.states]]
+    lappend lines [list cancelUpdateTreeFilter.calls [::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls]]
+    lappend lines [list notify.filter.calls [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls]]
+
+    return [join $lines "\n"]
+}
+
+test gui-gamelist-window-baseline-compare-1.0 {Game list window matches the approved baseline structure} -setup {
+    ::gui_gamelist_window_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_baseline_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    set actual [::gui_gamelist_window_baseline_test::formatSnapshot]
+
+    set baselineFile [file join [file dirname [info script]] gamelist_window.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: Game list window skeleton (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/gamelist_window.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Game list window baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_gamelist_window_baseline_test::cleanup
+} -result 1
+
+test gui-gamelist-window-actions-baseline-compare-1.0 {Game list window menu and filter actions match the approved baseline} -setup {
+    ::gui_gamelist_window_baseline_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_baseline_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::resetActionCalls
+
+    ::windows::gamelist::menu_ .glistWin1 filter
+    ::windows::gamelist::menu_ .glistWin1 filter
+    ::windows::gamelist::menu_ .glistWin1 stats
+
+    ::windows::gamelist::filter_ .glistWin1 r
+    ::windows::gamelist::filter_ .glistWin1 b
+    ::windows::gamelist::filter_ .glistWin1 h
+    ::windows::gamelist::filter_ .glistWin1 m
+    ::windows::gamelist::FilterNegate .glistWin1 1
+
+    set lines {}
+    lappend lines [list grid.calls [::scid_test::gui_fixtures::gamelist_window::gridCalls]]
+    lappend lines [list event.calls [::scid_test::gui_fixtures::gamelist_window::eventCalls]]
+    lappend lines [list menu.value $::gamelistMenu(.glistWin1)]
+    lappend lines [list filter.button.states [::scid_test::widgets::getState .glistWin1.buttons.filter widget.states]]
+    lappend lines [list stats.button.states [::scid_test::widgets::getState .glistWin1.buttons.stats widget.states]]
+    lappend lines [list filter.reset.calls [::scid_test::gui_fixtures::gamelist_window::filterResetCalls]]
+    lappend lines [list search.board.calls [::scid_test::gui_fixtures::gamelist_window::searchBoardCalls]]
+    lappend lines [list search.header.calls [::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls]]
+    lappend lines [list search.material.calls [::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls]]
+    lappend lines [list filter.negate.calls [::scid_test::gui_fixtures::gamelist_window::filterNegateCalls]]
+    lappend lines [list notify.filter.calls [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls]]
+    set actual [join $lines "\n"]
+
+    set baselineFile [file join [file dirname [info script]] gamelist_window_actions.linux-x11.baseline]
+
+    if {[info exists ::env(SCIDUP_UPDATE_UI_BASELINES)] && $::env(SCIDUP_UPDATE_UI_BASELINES) ne ""} {
+        ::scid_test::baseline_io::writeListFile $baselineFile $actual [list \
+            "ScidUp UI baseline: Game list window menu/filter actions (Linux/X11)" \
+            "Generated by: SCIDUP_UPDATE_UI_BASELINES=1 tclsh tests/tcl/run_one_test.tcl gui/baseline/gamelist_window.test" \
+        ]
+        return 1
+    }
+
+    set expected [::scid_test::baseline_io::readListFile $baselineFile]
+    if {$expected ne $actual} {
+        set diff [::scid_test::baseline_io::unifiedDiff $expected $actual]
+        error "Game list window actions baseline mismatch: $baselineFile\n\n$diff"
+    }
+
+    return 1
+} -cleanup {
+    ::gui_gamelist_window_baseline_test::cleanup
+} -result 1
+
+cleanupTests

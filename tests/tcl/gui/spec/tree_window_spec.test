@@ -1,0 +1,102 @@
+package require tcltest 2.5
+namespace import ::tcltest::*
+
+set tclTestsDir [file dirname [file dirname [file dirname [info script]]]]
+source [file join $tclTestsDir lib support.tcl]
+source [file join $tclTestsDir gui fixtures tree_window.tcl]
+
+namespace eval ::gui_tree_window_spec_test {
+    variable stubbedCommands {}
+    variable refreshCalls 0
+}
+
+proc ::gui_tree_window_spec_test::setup {} {
+    variable stubbedCommands
+    set ::gui_tree_window_spec_test::refreshCalls 0
+    ::scid_test::gui_fixtures::tree_window::setup stubbedCommands
+}
+
+proc ::gui_tree_window_spec_test::cleanup {} {
+    variable stubbedCommands
+    ::scid_test::gui_fixtures::tree_window::cleanup stubbedCommands
+    catch {unset ::treeWin}
+    catch {unset ::treeWin1}
+    catch {namespace delete ::tree}
+}
+
+proc ::gui_tree_window_spec_test::bindDescriptor {script} {
+    if {[llength $script] == 0} {
+        return ""
+    }
+    set head [lindex $script 0]
+    if {$head eq "list"} {
+        return [lindex $script 1]
+    }
+    if {$head eq "apply"} {
+        return "apply"
+    }
+    return $head
+}
+
+test gui-tree-window-spec-skeleton-1.0 {Tree window creates stable menu skeleton, text tags, and bind targets} -setup {
+    ::gui_tree_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows tree.tcl]
+
+    ::scid_test::mocks::stubCommand ::gui_tree_window_spec_test::stubbedCommands ::tree::refresh {baseNumber} {
+        incr ::gui_tree_window_spec_test::refreshCalls
+        return
+    }
+
+    ::tree::make
+
+    foreach p {.treeWin1 .treeWin1.menu .treeWin1.f .treeWin1.f.tl .treeWin1.statusframe .treeWin1.status .treeWin1.progress .treeWin1.buttons .treeWin1.buttons.best .treeWin1.buttons.graph .treeWin1.buttons.bStartStop .treeWin1.buttons.allgames .treeWin1.buttons.training .treeWin1.buttons.stop .treeWin1.buttons.close} {
+        if {![llength [info commands $p]]} {
+            error "Expected widget command to exist: $p"
+        }
+    }
+
+    set menuSnapshot [::scid_test::menu_structure::snapshot .treeWin1.menu]
+    set fileMenu [::scid_test::menu_spec::submenuOfCascade $menuSnapshot TreeFile]
+    set maskMenu [::scid_test::menu_spec::submenuOfCascade $menuSnapshot TreeMask]
+    set sortMenu [::scid_test::menu_spec::submenuOfCascade $menuSnapshot TreeSort]
+    set helpMenu [::scid_test::menu_spec::submenuOfCascade $menuSnapshot TreeHelp]
+    set sizeMenu [::scid_test::menu_spec::submenuOfCascade $fileMenu TreeFileSetCacheSize]
+    set recentMenu [::scid_test::menu_spec::submenuOfCascade $maskMenu TreeMaskOpenRecent]
+
+    set bindMap {}
+    foreach call [::scid_test::gui_fixtures::tree_window::bindCalls] {
+        lassign $call w seq script
+        dict set bindMap $w,$seq [::gui_tree_window_spec_test::bindDescriptor $script]
+    }
+
+    set tagsConfigured {}
+    foreach tag {bluefg greenfg redfg} {
+        set found 0
+        foreach call [::scid_test::widgets::getTagConfigureCalls .treeWin1.f.tl] {
+            if {[lindex $call 0] eq $tag} {
+                set found 1
+                break
+            }
+        }
+        lappend tagsConfigured $found
+    }
+
+    list \
+        [::scid_test::menu_spec::typeLabelPairs $menuSnapshot] \
+        [::scid_test::menu_spec::typeLabelPairs $fileMenu] \
+        [::scid_test::menu_spec::typeLabelPairs $maskMenu] \
+        [::scid_test::menu_spec::typeLabelPairs $sortMenu] \
+        [::scid_test::menu_spec::typeLabelPairs $helpMenu] \
+        [::scid_test::menu_spec::typeLabelPairs $sizeMenu] \
+        [::scid_test::menu_spec::typeLabelPairs $recentMenu] \
+        [dict get $bindMap .treeWin1,<Destroy>] \
+        [dict get $bindMap .treeWin1,<ButtonPress-1>] \
+        $tagsConfigured \
+        $::gui_tree_window_spec_test::refreshCalls \
+        $::tree::cachesize(1)
+} -cleanup {
+    ::gui_tree_window_spec_test::cleanup
+} -result {{{cascade TreeFile} {cascade TreeMask} {cascade TreeSort} {cascade TreeOpt} {cascade TreeHelp}} {{cascade TreeFileSetCacheSize} {command TreeFileGraph} {command TreeFileCopy} {command TreeFileClose}} {{command TreeMaskNew} {command TreeMaskOpen} {cascade TreeMaskOpenRecent} {command TreeMaskSave} {command TreeMaskClose} {command TreeMaskFillWithGame} {command TreeMaskFillWithBase} {command TreeMaskSearch} {command TreeMaskInfo} {command TreeMaskDisplay}} {{radiobutton TreeSortAlpha} {radiobutton TreeSortECO} {radiobutton TreeSortFreq} {radiobutton TreeSortScore}} {{command TreeHelpTree} {command TreeHelpIndex}} {{radiobutton 250} {radiobutton 500} {radiobutton 1000} {radiobutton 2000} {radiobutton 5000} {radiobutton 10000}} {{command mask-one} {command mask-two}} ::tree::closeTree ::tree::hideCtxtMenu {1 1 1} 1 1000}
+
+cleanupTests
