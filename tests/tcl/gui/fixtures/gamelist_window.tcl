@@ -10,6 +10,13 @@ namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable notifyFilterCalls {}
     variable messageBoxCalls {}
     variable addSanMoveCalls {}
+    variable gridCalls {}
+    variable eventCalls {}
+    variable searchBoardCalls {}
+    variable searchHeaderCalls {}
+    variable searchMaterialCalls {}
+    variable filterResetCalls {}
+    variable filterNegateCalls {}
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
@@ -32,6 +39,13 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::eventCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
 
     set ::language E
     set ::clipbase_db 9
@@ -63,6 +77,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     namespace eval ::tourney {}
     namespace eval ::crosstab {}
     namespace eval ::notify {}
+    namespace eval ::search {}
 
     ::scid_test::mocks::stubCommand stubbedCommands tr {tag {lang ""}} {
         if {[info exists ::tr($tag)]} { return $::tr($tag) }
@@ -143,10 +158,20 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
         return $path
     }
 
-    ::scid_test::mocks::stubCommand stubbedCommands grid {args} { return }
+    ::scid_test::mocks::stubCommand stubbedCommands grid {args} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::gridCalls $args
+        return
+    }
     ::scid_test::mocks::stubCommand stubbedCommands pack {args} { return }
     ::scid_test::mocks::stubCommand stubbedCommands update {args} { return }
     ::scid_test::mocks::stubCommand stubbedCommands tk_popup {args} { return }
+    ::scid_test::mocks::stubCommand stubbedCommands event {subcmd args} {
+        if {$subcmd ne "generate"} {
+            error "event $subcmd not stubbed in tests"
+        }
+        lappend ::scid_test::gui_fixtures::gamelist_window::eventCalls [list $subcmd {*}$args]
+        return
+    }
     ::scid_test::mocks::stubCommand stubbedCommands autoscrollBars {args} { return }
     ::scid_test::mocks::stubCommand stubbedCommands destroy {w} {
         catch {rename $w ""}
@@ -197,6 +222,18 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     }
     ::scid_test::mocks::stubCommand stubbedCommands ::file::BaseName {base} {
         return "base$base"
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands ::search::board {base filter} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls [list $base $filter]
+        return
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands ::search::header {base filter} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls [list $base $filter]
+        return
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands ::search::material {base} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls $base
+        return
     }
     ::scid_test::mocks::stubCommand stubbedCommands ::updateTreeFilter {base} {
         lappend ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls $base
@@ -252,6 +289,14 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
         switch -- $subcmd {
             sizes {
                 return {3 10 10}
+            }
+            reset {
+                lappend ::scid_test::gui_fixtures::gamelist_window::filterResetCalls $args
+                return
+            }
+            negate {
+                lappend ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls $args
+                return
             }
             components {
                 set filter [lindex $args 1]
@@ -317,6 +362,13 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::eventCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs {registryVar} {
@@ -369,4 +421,43 @@ proc ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {} {
 
 proc ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::gridCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::gridCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::eventCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::eventCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::searchBoardCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::filterResetCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::filterNegateCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::resetActionCalls {} {
+    set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::eventCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
 }
