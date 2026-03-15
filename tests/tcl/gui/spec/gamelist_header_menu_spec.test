@@ -11,6 +11,10 @@ namespace eval ::gui_gamelist_header_menu_spec_test {
     variable popupCalls {}
     variable removeColCalls {}
     variable sortCalls {}
+    variable gridCalls {}
+    variable forgetCalls {}
+    variable focusCalls {}
+    variable selectionCalls {}
     array set treeColumnId {}
     array set treeColumnAnchor {}
 }
@@ -68,6 +72,10 @@ proc ::gui_gamelist_header_menu_spec_test::setup {} {
     set ::gui_gamelist_header_menu_spec_test::popupCalls {}
     set ::gui_gamelist_header_menu_spec_test::removeColCalls {}
     set ::gui_gamelist_header_menu_spec_test::sortCalls {}
+    set ::gui_gamelist_header_menu_spec_test::gridCalls {}
+    set ::gui_gamelist_header_menu_spec_test::forgetCalls {}
+    set ::gui_gamelist_header_menu_spec_test::focusCalls {}
+    set ::gui_gamelist_header_menu_spec_test::selectionCalls {}
 
     ::scid_test::menu_capture::install ::gui_gamelist_header_menu_spec_test::stubbedCommands \
         -defaultTearoff 1 \
@@ -101,6 +109,20 @@ proc ::gui_gamelist_header_menu_spec_test::setup {} {
 
     ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands destroy {w} {
         catch {rename $w ""}
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands grid {args} {
+        if {[lindex $args 0] eq "forget"} {
+            lappend ::gui_gamelist_header_menu_spec_test::forgetCalls [lindex $args 1]
+            return
+        }
+        lappend ::gui_gamelist_header_menu_spec_test::gridCalls $args
+        return
+    }
+
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands focus {w} {
+        lappend ::gui_gamelist_header_menu_spec_test::focusCalls $w
         return
     }
 
@@ -150,6 +172,13 @@ proc ::gui_gamelist_header_menu_spec_test::installRuntimeStubs {} {
         lappend ::gui_gamelist_header_menu_spec_test::sortCalls [list $w $idx $layout $clear]
         return
     }
+    ::scid_test::mocks::stubCommand ::gui_gamelist_header_menu_spec_test::stubbedCommands .glistWin1.find.text {subcmd args} {
+        if {$subcmd eq "selection" && [lindex $args 0] eq "range"} {
+            lappend ::gui_gamelist_header_menu_spec_test::selectionCalls [list .glistWin1.find.text [lindex $args 1] [lindex $args 2]]
+            return
+        }
+        error ".glistWin1.find.text $subcmd not stubbed"
+    }
 }
 
 proc ::gui_gamelist_header_menu_spec_test::hasLabel {menuSnapshot label} {
@@ -164,6 +193,23 @@ proc ::gui_gamelist_header_menu_spec_test::invokeMenuLabel {menuPath label} {
         }
     }
     error "Menu $menuPath has no entry labelled: $label"
+}
+
+proc ::gui_gamelist_header_menu_spec_test::invokeCheckMenuLabel {menuPath label} {
+    foreach entry [::scid_test::menu_capture::entries $menuPath] {
+        if {[dict get $entry -label] ne $label} {
+            continue
+        }
+        if {[dict get $entry type] ne "checkbutton"} {
+            error "Menu entry $label in $menuPath is not a checkbutton"
+        }
+        set varName [dict get $entry -variable]
+        upvar #0 $varName value
+        set value [expr {![info exists value] || !$value}]
+        uplevel #0 [dict get $entry -command]
+        return
+    }
+    error "Menu $menuPath has no checkbutton labelled: $label"
 }
 
 test gui-gamelist-header-menu-spec-stable-actions-1.0 {Game list header menu exposes stable layout and findbar controls} -setup {
@@ -245,5 +291,37 @@ test gui-gamelist-header-menu-spec-actions-1.0 {Game list header actions keep ca
 } -cleanup {
     ::gui_gamelist_header_menu_spec_test::cleanup
 } -result {{{.glistWin1.games.glist.header_menu 100 200}} e e {{.glistWin1.games.glist Full #1}} {{.glistWin1.games.glist 0 Full 1}}}
+
+test gui-gamelist-header-menu-spec-findbar-1.0 {Game list header FindBar checkbutton keeps show-hide wiring stable} -setup {
+    ::gui_gamelist_header_menu_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::gui_gamelist_header_menu_spec_test::installRuntimeStubs
+
+    set w .glistWin1.games.glist
+    ::gui_gamelist_header_menu_spec_test::defineTreeview $w [list "#1" "GlistWhite"]
+
+    menu ${w}.header_menu
+    menu ${w}.header_menu.addcol
+
+    set layout Full
+    set ::glist_FindBar($layout) 0
+    set ::glistFindBar($w) .glistWin1.find
+
+    glist.popupmenu_ $w 1 1 100 200 $layout
+
+    ::gui_gamelist_header_menu_spec_test::invokeCheckMenuLabel ${w}.header_menu FindBar
+    ::gui_gamelist_header_menu_spec_test::invokeCheckMenuLabel ${w}.header_menu FindBar
+
+    list \
+        $::gui_gamelist_header_menu_spec_test::popupCalls \
+        $::gui_gamelist_header_menu_spec_test::gridCalls \
+        $::gui_gamelist_header_menu_spec_test::focusCalls \
+        $::gui_gamelist_header_menu_spec_test::selectionCalls \
+        $::gui_gamelist_header_menu_spec_test::forgetCalls \
+        $::glist_FindBar($layout)
+} -cleanup {
+    ::gui_gamelist_header_menu_spec_test::cleanup
+} -result {{{.glistWin1.games.glist.header_menu 100 200}} {{.glistWin1.find -row 0 -columnspan 2 -sticky news}} {.glistWin1.find.text .glistWin1.games.glist} {{.glistWin1.find.text 0 end}} .glistWin1.find 0}
 
 cleanupTests
