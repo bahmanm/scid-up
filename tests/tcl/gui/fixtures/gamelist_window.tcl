@@ -12,6 +12,14 @@ namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable updateTreeFilterCalls {}
     variable cancelUpdateTreeFilterCalls {}
     variable notifyFilterCalls {}
+    variable saveFileCalls {}
+    variable saveFileResponse ""
+    variable progressCalls {}
+    variable closeProgressCalls 0
+    variable filterExportCalls {}
+    variable exportError ""
+    variable exportErrorCode ""
+    variable errorMessageBoxCalls {}
     variable messageBoxCalls {}
     variable addSanMoveCalls {}
     variable gridCalls {}
@@ -46,6 +54,14 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::saveFileCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::saveFileResponse ""
+    set ::scid_test::gui_fixtures::gamelist_window::progressCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::closeProgressCalls 0
+    set ::scid_test::gui_fixtures::gamelist_window::filterExportCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::exportError ""
+    set ::scid_test::gui_fixtures::gamelist_window::exportErrorCode ""
+    set ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
@@ -65,6 +81,8 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
         ShowHideStatistic ShowHideStatistic
         BoardFilter BoardFilter
         ToolsExpFilter ToolsExpFilter
+        ScidUp ScidUp
+        Cancel Cancel
         all all
         noGames noGames
     }
@@ -88,6 +106,13 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     namespace eval ::crosstab {}
     namespace eval ::notify {}
     namespace eval ::search {}
+    namespace eval ::ERROR {}
+
+    set ::initialDir(base) /tmp/scid-base
+    set ::gamelistExport PGN
+    set ::exportStartFile(LaTeX) latex-start
+    set ::exportEndFile(LaTeX) latex-end
+    set ::ERROR::UserCancel SCID_TEST_USER_CANCEL
 
     ::scid_test::mocks::stubCommand stubbedCommands tr {tag {lang ""}} {
         if {[info exists ::tr($tag)]} { return $::tr($tag) }
@@ -189,6 +214,22 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     ::scid_test::mocks::stubCommand stubbedCommands autoscrollBars {args} { return }
     ::scid_test::mocks::stubCommand stubbedCommands destroy {w} {
         catch {rename $w ""}
+        return
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands tk_getSaveFile {args} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::saveFileCalls $args
+        return $::scid_test::gui_fixtures::gamelist_window::saveFileResponse
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands progressWindow {title message cancelLabel} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::progressCalls [list $title $message $cancelLabel]
+        return
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands closeProgressWindow {} {
+        incr ::scid_test::gui_fixtures::gamelist_window::closeProgressCalls
+        return
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands ::ERROR::MessageBox {args} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls $args
         return
     }
     ::scid_test::mocks::stubCommand stubbedCommands font {subcmd args} {
@@ -305,6 +346,14 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
 
     ::scid_test::mocks::stubCommand stubbedCommands sc_filter {subcmd args} {
         switch -- $subcmd {
+            export {
+                lappend ::scid_test::gui_fixtures::gamelist_window::filterExportCalls $args
+                if {$::scid_test::gui_fixtures::gamelist_window::exportError ne ""} {
+                    set ::errorCode $::scid_test::gui_fixtures::gamelist_window::exportErrorCode
+                    error $::scid_test::gui_fixtures::gamelist_window::exportError
+                }
+                return
+            }
             sizes {
                 return {3 10 10}
             }
@@ -358,6 +407,12 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     unset -nocomplain ::helpMessage
     unset -nocomplain ::language
     unset -nocomplain ::clipbase_db
+    catch {array unset ::initialDir}
+    unset -nocomplain ::gamelistExport
+    catch {array unset ::exportStartFile}
+    catch {array unset ::exportEndFile}
+    catch {unset ::errorCode}
+    catch {namespace delete ::ERROR}
     catch {array unset ::gamelistBase}
     catch {array unset ::gamelistFilter}
     catch {array unset ::gamelistPosMask}
@@ -382,6 +437,14 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::saveFileCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::saveFileResponse ""
+    set ::scid_test::gui_fixtures::gamelist_window::progressCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::closeProgressCalls 0
+    set ::scid_test::gui_fixtures::gamelist_window::filterExportCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::exportError ""
+    set ::scid_test::gui_fixtures::gamelist_window::exportErrorCode ""
+    set ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
@@ -468,6 +531,26 @@ proc ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::saveFileCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::saveFileCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::progressCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::progressCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::closeProgressCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::closeProgressCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::filterExportCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::filterExportCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::messageBoxCalls
 }
@@ -527,10 +610,30 @@ proc ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls {} {
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::resetExportCalls {} {
+    set ::scid_test::gui_fixtures::gamelist_window::saveFileCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::progressCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::closeProgressCalls 0
+    set ::scid_test::gui_fixtures::gamelist_window::filterExportCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::exportError ""
+    set ::scid_test::gui_fixtures::gamelist_window::exportErrorCode ""
+    set ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {}
+    catch {unset ::errorCode}
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::setCurrentBase {base} {
     set ::scid_test::gui_fixtures::gamelist_window::currentBase $base
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::setBaseInUse {base inUse} {
     set ::scid_test::gui_fixtures::gamelist_window::baseInUse($base) $inUse
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse {path} {
+    set ::scid_test::gui_fixtures::gamelist_window::saveFileResponse $path
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setExportError {{message ""} {errorCode ""}} {
+    set ::scid_test::gui_fixtures::gamelist_window::exportError $message
+    set ::scid_test::gui_fixtures::gamelist_window::exportErrorCode $errorCode
 }

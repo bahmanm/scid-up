@@ -45,6 +45,10 @@ proc ::gui_gamelist_window_spec_test::runScript {script} {
     return [uplevel #0 $script]
 }
 
+proc ::gui_gamelist_window_spec_test::asDict {items} {
+    return [dict create {*}$items]
+}
+
 test gui-gamelist-window-spec-first-paint-1.0 {Game list window keeps first paint live and preserves key callback wiring} -setup {
     ::gui_gamelist_window_spec_test::setup
 } -body {
@@ -298,5 +302,65 @@ test gui-gamelist-window-spec-refresh-1.0 {Game list window refresh updates acti
 } -cleanup {
     ::gui_gamelist_window_spec_test::cleanup
 } -result {{{.glistWin1.games 1 dbfilter 7}} {{.glistWin1 { base1 (3 / 10)}}} {{.glistWin2 3 dbfilter}}}
+
+test gui-gamelist-window-spec-filter-export-1.0 {Game list window export keeps save-dialog, extension, and error handling stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    set ::glistSortStr(.glistWin1.games.glist) W+
+
+    set ::gamelistExport PGN
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse /tmp/filter-export
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::FilterExport .glistWin1
+    set saveDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::saveFileCalls] 0]]
+    set pgnResult [list \
+        [dict get $saveDialog -initialdir] \
+        [dict get $saveDialog -typevariable] \
+        [dict get $saveDialog -title] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    set ::gamelistExport LaTeX
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse /tmp/filter-export-tex
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::FilterExport .glistWin1
+    set latexResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    set ::gamelistExport PGN
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse ""
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::FilterExport .glistWin1
+    set cancelSaveDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::saveFileCalls] 0]]
+    set cancelResult [list \
+        [dict get $cancelSaveDialog -initialdir] \
+        [dict get $cancelSaveDialog -typevariable] \
+        [dict get $cancelSaveDialog -title] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls]]
+
+    set ::gamelistExport PGN
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse /tmp/filter-export-error
+    ::scid_test::gui_fixtures::gamelist_window::setExportError export-failed NOT_USER_CANCEL
+    ::windows::gamelist::FilterExport .glistWin1
+    set errorResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    list $pgnResult $latexResult $cancelResult $errorResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{/tmp/scid-base ::gamelistExport ToolsExpFilter {{ScidUp {Exporting games...} Cancel}} {{1 dbfilter W+ /tmp/filter-export.pgn PGN}} 1 {}} {{{ScidUp {Exporting games...} Cancel}} {{1 dbfilter W+ /tmp/filter-export-tex.tex LaTeX latex-start latex-end}} 1 {}} {/tmp/scid-base ::gamelistExport ToolsExpFilter {} {} 0} {{{1 dbfilter W+ /tmp/filter-export-error.pgn PGN}} 1 {{}}}}
 
 cleanupTests
