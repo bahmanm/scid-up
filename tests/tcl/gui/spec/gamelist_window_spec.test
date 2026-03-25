@@ -49,6 +49,10 @@ proc ::gui_gamelist_window_spec_test::asDict {items} {
     return [dict create {*}$items]
 }
 
+proc ::gui_gamelist_window_spec_test::listTailFrom {items start} {
+    return [lrange $items $start end]
+}
+
 test gui-gamelist-window-spec-first-paint-1.0 {Game list window keeps first paint live and preserves key callback wiring} -setup {
     ::gui_gamelist_window_spec_test::setup
 } -body {
@@ -362,5 +366,52 @@ test gui-gamelist-window-spec-filter-export-1.0 {Game list window export keeps s
 } -cleanup {
     ::gui_gamelist_window_spec_test::cleanup
 } -result {{/tmp/scid-base ::gamelistExport ToolsExpFilter {{ScidUp {Exporting games...} Cancel}} {{1 dbfilter W+ /tmp/filter-export.pgn PGN}} 1 {}} {{{ScidUp {Exporting games...} Cancel}} {{1 dbfilter W+ /tmp/filter-export-tex.tex LaTeX latex-start latex-end}} 1 {}} {/tmp/scid-base ::gamelistExport ToolsExpFilter {} {} 0} {{{1 dbfilter W+ /tmp/filter-export-error.pgn PGN}} 1 {{}}}}
+
+test gui-gamelist-window-spec-list-tree-bases-1.0 {Game list window listTreeBases keeps busy-state updates and base filtering stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::windows::gamelist::Open 2 dbfilter
+
+    set ::gamelistPosMask(.glistWin1) 1
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+    set ::gamelistPosMask(.glistWin2) 1
+    set ::gamelistFilter(.glistWin2) second+tree
+
+    set tagCalls1Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist]]
+    set tagCalls2Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist]]
+    set allResult [::windows::gamelist::listTreeBases]
+    set allTagCalls1 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist] $tagCalls1Before]
+    set allTagCalls2 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist] $tagCalls2Before]
+    set allImage1 [::scid_test::widgets::getState .glistWin1.buttons.boardFilter -image]
+    set allImage2 [::scid_test::widgets::getState .glistWin2.buttons.boardFilter -image]
+
+    .glistWin1.buttons.boardFilter configure -image tb_BoardMask
+    .glistWin2.buttons.boardFilter configure -image tb_BoardMask
+    set tagCalls1Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist]]
+    set tagCalls2Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist]]
+    set constrainedResult [::windows::gamelist::listTreeBases 2]
+    set constrainedTagCalls1 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist] $tagCalls1Before]
+    set constrainedTagCalls2 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist] $tagCalls2Before]
+    set constrainedImage1 [::scid_test::widgets::getState .glistWin1.buttons.boardFilter -image]
+    set constrainedImage2 [::scid_test::widgets::getState .glistWin2.buttons.boardFilter -image]
+
+    list \
+        $allResult \
+        $allTagCalls1 \
+        $allTagCalls2 \
+        $allImage1 \
+        $allImage2 \
+        $constrainedResult \
+        $constrainedTagCalls1 \
+        $constrainedTagCalls2 \
+        $constrainedImage1 \
+        $constrainedImage2
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{1 dbfilter+tree {.glistWin1.progress 100 100}} {2 second+tree {.glistWin2.progress 100 100}}} {{fsmall -foreground #bababa}} {{fsmall -foreground #bababa}} tb_BoardMaskBusy tb_BoardMaskBusy {{2 second+tree {.glistWin2.progress 100 100}}} {} {{fsmall -foreground #bababa}} tb_BoardMask tb_BoardMaskBusy}
 
 cleanupTests
