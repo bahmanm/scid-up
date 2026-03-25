@@ -204,4 +204,74 @@ test gui-gamelist-window-spec-filter-actions-1.0 {Game list window filter button
     ::gui_gamelist_window_spec_test::cleanup
 } -result {{{1 dbfilter full}} {{1 dbfilter}} {{1 dbfilter}} 1 {{1 dbfilter}} {{1 dbfilter} {1 dbfilter}}}
 
+test gui-gamelist-window-spec-database-modified-1.0 {Game list window refresh dispatch stays stable across full and component filter updates} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::windows::gamelist::Open 2 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::DatabaseModified 1
+    ::windows::gamelist::DatabaseModified 1 tree
+    ::windows::gamelist::DatabaseModified 2 dbfilter
+    ::windows::gamelist::DatabaseModified 2 other
+
+    list \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateStatsCalls]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{.glistWin1.games 1 dbfilter+tree 0} {.glistWin1.games 1 dbfilter+tree 1} {.glistWin2.games 2 dbfilter 1}} {{.glistWin1 { base1 (3 / 10)}} {.glistWin1 { base1 (3 / 10)}} {.glistWin2 { base2 (3 / 10)}}} {.glistWin1 .glistWin1 .glistWin2}}
+
+test gui-gamelist-window-spec-setbase-1.0 {Game list window base switches preserve refresh scheduling and positional-filter teardown semantics} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::SetBase .glistWin1 2 newfilter
+    set regularResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::afterCalls] \
+        $::gamelistBase(.glistWin1) \
+        $::gamelistFilter(.glistWin1) \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateStatsCalls]]
+
+    set ::gamelistMenu(.glistWin1) stats
+    set ::gamelistPosMask(.glistWin1) 1
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::SetBase .glistWin1 3 dbfilter+tree
+
+    list \
+        $regularResult \
+        [::scid_test::gui_fixtures::gamelist_window::afterCalls] \
+        $::gamelistBase(.glistWin1) \
+        $::gamelistFilter(.glistWin1) \
+        $::gamelistPosMask(.glistWin1) \
+        $::gamelistMenu(.glistWin1) \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateStatsCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls] \
+        [::scid_test::widgets::getState .glistWin1.buttons.boardFilter widget.states]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{idle {::windows::gamelist::filterRelease_ 1 dbfilter+tree}}} 2 newfilter {{.glistWin1.games 2 newfilter 1}} {{.glistWin1 { base2 (3 / 10)}}} .glistWin1} {{idle {::windows::gamelist::filterRelease_ 2 newfilter}}} 3 dbfilter 0 {} {} {} {} {{.glistWin1.progress 100 100}} {{3 dbfilter}} {}}
+
 cleanupTests

@@ -2,9 +2,11 @@ namespace eval ::scid_test {}
 namespace eval ::scid_test::gui_fixtures {}
 namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable bindCalls {}
+    variable afterCalls {}
     variable glistCreateCalls {}
     variable glistUpdateCalls {}
     variable titleCalls {}
+    variable updateStatsCalls {}
     variable updateTreeFilterCalls {}
     variable cancelUpdateTreeFilterCalls {}
     variable notifyFilterCalls {}
@@ -31,9 +33,11 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
         -stubBind 0
 
     set ::scid_test::gui_fixtures::gamelist_window::bindCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
@@ -123,6 +127,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     ::scid_test::mocks::stubCommand stubbedCommands bind {w seq script} {
         lappend ::scid_test::gui_fixtures::gamelist_window::bindCalls [list $w $seq $script]
         return
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands after {args} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::afterCalls $args
+        return after#0
     }
 
     if {![namespace exists ::ttk]} { namespace eval ::ttk {} }
@@ -354,9 +362,11 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     catch {unset ::glist_Layouts}
 
     set ::scid_test::gui_fixtures::gamelist_window::bindCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
@@ -387,8 +397,21 @@ proc ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs {registryVa
     }
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::installRefreshRuntimeStubs {registryVar} {
+    upvar 1 $registryVar stubbedCommands
+
+    ::scid_test::mocks::stubCommand stubbedCommands ::windows::gamelist::updateStats_ {w} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls $w
+        return
+    }
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::bindCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::bindCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::afterCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::afterCalls
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {} {
@@ -401,6 +424,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {} {
 
 proc ::scid_test::gui_fixtures::gamelist_window::titleCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::titleCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::updateStatsCalls
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {} {
@@ -452,6 +479,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {} {
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::resetActionCalls {} {
+    set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::eventCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {}
@@ -459,5 +487,15 @@ proc ::scid_test::gui_fixtures::gamelist_window::resetActionCalls {} {
     set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls {} {
+    set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
 }
