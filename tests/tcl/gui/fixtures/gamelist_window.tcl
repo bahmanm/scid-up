@@ -7,6 +7,7 @@ namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable winCreateWindowCalls {}
     variable winCreateWindowResult 1
     variable winCloseWindowCalls {}
+    variable winMakeVisibleCalls {}
     variable glistCreateCalls {}
     variable glistUpdateCalls {}
     variable setBaseCalls {}
@@ -35,12 +36,14 @@ namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable filterResetCalls {}
     variable filterNegateCalls {}
     variable filterCountDefault 5
+    variable filterNewCalls {}
     variable copyGamesCalls {}
     variable copyGamesError ""
     variable databaseModifiedCalls {}
     variable gameChangedCalls 0
     variable clipbaseClearCalls 0
     array set baseInUse {}
+    array set baseNumGames {}
     array set filterCounts {}
 }
 
@@ -61,6 +64,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::winCreateWindowResult 1
     set ::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::winMakeVisibleCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {}
@@ -89,12 +93,14 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterCountDefault 5
+    set ::scid_test::gui_fixtures::gamelist_window::filterNewCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::copyGamesCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::copyGamesError ""
     set ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gameChangedCalls 0
     set ::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls 0
     array unset ::scid_test::gui_fixtures::gamelist_window::baseInUse
+    array unset ::scid_test::gui_fixtures::gamelist_window::baseNumGames
     array unset ::scid_test::gui_fixtures::gamelist_window::filterCounts
 
     set ::language E
@@ -191,7 +197,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
         lappend ::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls $w
         return
     }
-    ::scid_test::mocks::stubCommand stubbedCommands ::win::makeVisible {w} { return }
+    ::scid_test::mocks::stubCommand stubbedCommands ::win::makeVisible {w} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::winMakeVisibleCalls $w
+        return
+    }
 
     ::scid_test::mocks::stubCommand stubbedCommands bind {w seq script} {
         lappend ::scid_test::gui_fixtures::gamelist_window::bindCalls [list $w $seq $script]
@@ -386,6 +395,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
                 return 1
             }
             numGames {
+                set base [lindex $args 0]
+                if {[info exists ::scid_test::gui_fixtures::gamelist_window::baseNumGames($base)]} {
+                    return $::scid_test::gui_fixtures::gamelist_window::baseNumGames($base)
+                }
                 return 10
             }
             filename {
@@ -444,6 +457,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
                 return [split $filter +]
             }
             new {
+                lappend ::scid_test::gui_fixtures::gamelist_window::filterNewCalls $args
                 return "newfilter"
             }
             compose {
@@ -503,6 +517,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::winCreateWindowResult 1
     set ::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::winMakeVisibleCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {}
@@ -531,12 +546,14 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterCountDefault 5
+    set ::scid_test::gui_fixtures::gamelist_window::filterNewCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::copyGamesCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::copyGamesError ""
     set ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gameChangedCalls 0
     set ::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls 0
     array unset ::scid_test::gui_fixtures::gamelist_window::baseInUse
+    array unset ::scid_test::gui_fixtures::gamelist_window::baseNumGames
     array unset ::scid_test::gui_fixtures::gamelist_window::filterCounts
 }
 
@@ -588,6 +605,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls {} {
 
 proc ::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::winMakeVisibleCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::winMakeVisibleCalls
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {} {
@@ -698,6 +719,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::filterNegateCalls
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::filterNewCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::filterNewCalls
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::resetActionCalls {} {
     set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
@@ -762,6 +787,18 @@ proc ::scid_test::gui_fixtures::gamelist_window::resetOpenTreeBestCalls {} {
     set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::resetOpenCalls {} {
+    set ::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::winMakeVisibleCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterNewCalls {}
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::setCurrentBase {base} {
     set ::scid_test::gui_fixtures::gamelist_window::currentBase $base
 }
@@ -772,6 +809,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::setWinCreateWindowResult {resul
 
 proc ::scid_test::gui_fixtures::gamelist_window::setBaseInUse {base inUse} {
     set ::scid_test::gui_fixtures::gamelist_window::baseInUse($base) $inUse
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setBaseNumGames {base numGames} {
+    set ::scid_test::gui_fixtures::gamelist_window::baseNumGames($base) $numGames
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse {path} {
