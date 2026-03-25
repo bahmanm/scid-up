@@ -512,4 +512,37 @@ test gui-gamelist-window-spec-copy-games-1.0 {Game list window CopyGames keeps f
 "base1" -> "base2": 
 CopyErrSource CopyErrNoGames.} {} {} {}} {{} {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 9}} 9} {{} {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 2}} 2 copy-failed}}
 
+test gui-gamelist-window-spec-clear-clipbase-1.0 {Game list window ClearClipbase refreshes clipbase windows and emits the expected notifications} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 9 dbfilter
+    ::windows::gamelist::Open 1 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshDispatchStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::scid_test::gui_fixtures::gamelist_window::setCurrentBase 1
+    ::scid_test::gui_fixtures::gamelist_window::resetClearClipbaseCalls
+    ::windows::gamelist::ClearClipbase
+    set inactiveCurrentResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::setBaseCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::gameChangedCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::setCurrentBase 9
+    ::scid_test::gui_fixtures::gamelist_window::resetClearClipbaseCalls
+    ::windows::gamelist::ClearClipbase
+    set clipbaseCurrentResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::setBaseCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::gameChangedCalls]]
+
+    list $inactiveCurrentResult $clipbaseCurrentResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{.glistWin1 9 dbfilter}} 1 9 0} {{{.glistWin1 9 dbfilter}} 1 9 1}}
+
 cleanupTests

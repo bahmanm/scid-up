@@ -723,6 +723,13 @@ proc ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls {} {
     catch {unset ::errorCode}
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::resetClearClipbaseCalls {} {
+    set ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::gameChangedCalls 0
+    set ::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls 0
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::setCurrentBase {base} {
     set ::scid_test::gui_fixtures::gamelist_window::currentBase $base
 }
