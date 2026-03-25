@@ -274,4 +274,29 @@ test gui-gamelist-window-spec-setbase-1.0 {Game list window base switches preser
     ::gui_gamelist_window_spec_test::cleanup
 } -result {{{{idle {::windows::gamelist::filterRelease_ 1 dbfilter+tree}}} 2 newfilter {{.glistWin1.games 2 newfilter 1}} {{.glistWin1 { base2 (3 / 10)}}} .glistWin1} {{idle {::windows::gamelist::filterRelease_ 2 newfilter}}} 3 dbfilter 0 {} {} {} {} {{.glistWin1.progress 100 100}} {{3 dbfilter}} {}}
 
+test gui-gamelist-window-spec-refresh-1.0 {Game list window refresh updates active windows and reroutes stale ones to the current base} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::windows::gamelist::Open 2 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshDispatchStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::scid_test::gui_fixtures::gamelist_window::setCurrentBase 3
+    ::scid_test::gui_fixtures::gamelist_window::setBaseInUse 1 1
+    ::scid_test::gui_fixtures::gamelist_window::setBaseInUse 2 0
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::Refresh 7
+
+    list \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::setBaseCalls]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{.glistWin1.games 1 dbfilter 7}} {{.glistWin1 { base1 (3 / 10)}}} {{.glistWin2 3 dbfilter}}}
+
 cleanupTests

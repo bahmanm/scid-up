@@ -3,8 +3,10 @@ namespace eval ::scid_test::gui_fixtures {}
 namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable bindCalls {}
     variable afterCalls {}
+    variable currentBase 1
     variable glistCreateCalls {}
     variable glistUpdateCalls {}
+    variable setBaseCalls {}
     variable titleCalls {}
     variable updateStatsCalls {}
     variable updateTreeFilterCalls {}
@@ -19,6 +21,7 @@ namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable searchMaterialCalls {}
     variable filterResetCalls {}
     variable filterNegateCalls {}
+    array set baseInUse {}
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
@@ -34,8 +37,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
 
     set ::scid_test::gui_fixtures::gamelist_window::bindCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::currentBase 1
     set ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
@@ -50,6 +55,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
+    array unset ::scid_test::gui_fixtures::gamelist_window::baseInUse
 
     set ::language E
     set ::clipbase_db 9
@@ -270,7 +276,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     ::scid_test::mocks::stubCommand stubbedCommands sc_base {subcmd args} {
         switch -- $subcmd {
             current {
-                return 1
+                return $::scid_test::gui_fixtures::gamelist_window::currentBase
             }
             list {
                 return {1 2 3}
@@ -279,6 +285,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
                 return [expr {[lindex $args 0] == 3}]
             }
             inUse {
+                set base [lindex $args 0]
+                if {[info exists ::scid_test::gui_fixtures::gamelist_window::baseInUse($base)]} {
+                    return $::scid_test::gui_fixtures::gamelist_window::baseInUse($base)
+                }
                 return 1
             }
             numGames {
@@ -363,8 +373,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
 
     set ::scid_test::gui_fixtures::gamelist_window::bindCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::currentBase 1
     set ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
@@ -379,6 +391,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
+    array unset ::scid_test::gui_fixtures::gamelist_window::baseInUse
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs {registryVar} {
@@ -406,6 +419,15 @@ proc ::scid_test::gui_fixtures::gamelist_window::installRefreshRuntimeStubs {reg
     }
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::installRefreshDispatchStubs {registryVar} {
+    upvar 1 $registryVar stubbedCommands
+
+    ::scid_test::mocks::stubCommand stubbedCommands ::windows::gamelist::SetBase {w base {filter "dbfilter"}} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::setBaseCalls [list $w $base $filter]
+        return
+    }
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::bindCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::bindCalls
 }
@@ -420,6 +442,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::glistCreateCalls {} {
 
 proc ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::setBaseCalls
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::titleCalls {} {
@@ -493,9 +519,18 @@ proc ::scid_test::gui_fixtures::gamelist_window::resetActionCalls {} {
 proc ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls {} {
     set ::scid_test::gui_fixtures::gamelist_window::afterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::setBaseCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::titleCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateStatsCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls {}
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setCurrentBase {base} {
+    set ::scid_test::gui_fixtures::gamelist_window::currentBase $base
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setBaseInUse {base inUse} {
+    set ::scid_test::gui_fixtures::gamelist_window::baseInUse($base) $inUse
 }
