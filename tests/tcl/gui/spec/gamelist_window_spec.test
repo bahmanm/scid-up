@@ -45,6 +45,14 @@ proc ::gui_gamelist_window_spec_test::runScript {script} {
     return [uplevel #0 $script]
 }
 
+proc ::gui_gamelist_window_spec_test::asDict {items} {
+    return [dict create {*}$items]
+}
+
+proc ::gui_gamelist_window_spec_test::listTailFrom {items start} {
+    return [lrange $items $start end]
+}
+
 test gui-gamelist-window-spec-first-paint-1.0 {Game list window keeps first paint live and preserves key callback wiring} -setup {
     ::gui_gamelist_window_spec_test::setup
 } -body {
@@ -203,5 +211,426 @@ test gui-gamelist-window-spec-filter-actions-1.0 {Game list window filter button
 } -cleanup {
     ::gui_gamelist_window_spec_test::cleanup
 } -result {{{1 dbfilter full}} {{1 dbfilter}} {{1 dbfilter}} 1 {{1 dbfilter}} {{1 dbfilter} {1 dbfilter}}}
+
+test gui-gamelist-window-spec-database-modified-1.0 {Game list window refresh dispatch stays stable across full and component filter updates} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::windows::gamelist::Open 2 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::DatabaseModified 1
+    ::windows::gamelist::DatabaseModified 1 tree
+    ::windows::gamelist::DatabaseModified 2 dbfilter
+    ::windows::gamelist::DatabaseModified 2 other
+
+    list \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateStatsCalls]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{.glistWin1.games 1 dbfilter+tree 0} {.glistWin1.games 1 dbfilter+tree 1} {.glistWin2.games 2 dbfilter 1}} {{.glistWin1 { base1 (3 / 10)}} {.glistWin1 { base1 (3 / 10)}} {.glistWin2 { base2 (3 / 10)}}} {.glistWin1 .glistWin1 .glistWin2}}
+
+test gui-gamelist-window-spec-setbase-1.0 {Game list window base switches preserve refresh scheduling and positional-filter teardown semantics} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::SetBase .glistWin1 2 newfilter
+    set regularResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::afterCalls] \
+        $::gamelistBase(.glistWin1) \
+        $::gamelistFilter(.glistWin1) \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateStatsCalls]]
+
+    set ::gamelistMenu(.glistWin1) stats
+    set ::gamelistPosMask(.glistWin1) 1
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::SetBase .glistWin1 3 dbfilter+tree
+
+    list \
+        $regularResult \
+        [::scid_test::gui_fixtures::gamelist_window::afterCalls] \
+        $::gamelistBase(.glistWin1) \
+        $::gamelistFilter(.glistWin1) \
+        $::gamelistPosMask(.glistWin1) \
+        $::gamelistMenu(.glistWin1) \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateStatsCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::updateTreeFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::cancelUpdateTreeFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls] \
+        [::scid_test::widgets::getState .glistWin1.buttons.boardFilter widget.states]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{idle {::windows::gamelist::filterRelease_ 1 dbfilter+tree}}} 2 newfilter {{.glistWin1.games 2 newfilter 1}} {{.glistWin1 { base2 (3 / 10)}}} .glistWin1} {{idle {::windows::gamelist::filterRelease_ 2 newfilter}}} 3 dbfilter 0 {} {} {} {} {{.glistWin1.progress 100 100}} {{3 dbfilter}} {}}
+
+test gui-gamelist-window-spec-refresh-1.0 {Game list window refresh updates active windows and reroutes stale ones to the current base} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::windows::gamelist::Open 2 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshDispatchStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::scid_test::gui_fixtures::gamelist_window::setCurrentBase 3
+    ::scid_test::gui_fixtures::gamelist_window::setBaseInUse 1 1
+    ::scid_test::gui_fixtures::gamelist_window::setBaseInUse 2 0
+    ::scid_test::gui_fixtures::gamelist_window::resetRefreshCalls
+
+    ::windows::gamelist::Refresh 7
+
+    list \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::setBaseCalls]
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{.glistWin1.games 1 dbfilter 7}} {{.glistWin1 { base1 (3 / 10)}}} {{.glistWin2 3 dbfilter}}}
+
+test gui-gamelist-window-spec-filter-export-1.0 {Game list window export keeps save-dialog, extension, and error handling stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    set ::glistSortStr(.glistWin1.games.glist) W+
+
+    set ::gamelistExport PGN
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse /tmp/filter-export
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::FilterExport .glistWin1
+    set saveDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::saveFileCalls] 0]]
+    set pgnResult [list \
+        [dict get $saveDialog -initialdir] \
+        [dict get $saveDialog -typevariable] \
+        [dict get $saveDialog -title] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    set ::gamelistExport LaTeX
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse /tmp/filter-export-tex
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::FilterExport .glistWin1
+    set latexResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    set ::gamelistExport PGN
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse ""
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::FilterExport .glistWin1
+    set cancelSaveDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::saveFileCalls] 0]]
+    set cancelResult [list \
+        [dict get $cancelSaveDialog -initialdir] \
+        [dict get $cancelSaveDialog -typevariable] \
+        [dict get $cancelSaveDialog -title] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls]]
+
+    set ::gamelistExport PGN
+    ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse /tmp/filter-export-error
+    ::scid_test::gui_fixtures::gamelist_window::setExportError export-failed NOT_USER_CANCEL
+    ::windows::gamelist::FilterExport .glistWin1
+    set errorResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::filterExportCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    list $pgnResult $latexResult $cancelResult $errorResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{/tmp/scid-base ::gamelistExport ToolsExpFilter {{ScidUp {Exporting games...} Cancel}} {{1 dbfilter W+ /tmp/filter-export.pgn PGN}} 1 {}} {{{ScidUp {Exporting games...} Cancel}} {{1 dbfilter W+ /tmp/filter-export-tex.tex LaTeX latex-start latex-end}} 1 {}} {/tmp/scid-base ::gamelistExport ToolsExpFilter {} {} 0} {{{1 dbfilter W+ /tmp/filter-export-error.pgn PGN}} 1 {{}}}}
+
+test gui-gamelist-window-spec-list-tree-bases-1.0 {Game list window listTreeBases keeps busy-state updates and base filtering stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    ::windows::gamelist::Open 2 dbfilter
+
+    set ::gamelistPosMask(.glistWin1) 1
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+    set ::gamelistPosMask(.glistWin2) 1
+    set ::gamelistFilter(.glistWin2) second+tree
+
+    set tagCalls1Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist]]
+    set tagCalls2Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist]]
+    set allResult [::windows::gamelist::listTreeBases]
+    set allTagCalls1 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist] $tagCalls1Before]
+    set allTagCalls2 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist] $tagCalls2Before]
+    set allImage1 [::scid_test::widgets::getState .glistWin1.buttons.boardFilter -image]
+    set allImage2 [::scid_test::widgets::getState .glistWin2.buttons.boardFilter -image]
+
+    .glistWin1.buttons.boardFilter configure -image tb_BoardMask
+    .glistWin2.buttons.boardFilter configure -image tb_BoardMask
+    set tagCalls1Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist]]
+    set tagCalls2Before [llength [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist]]
+    set constrainedResult [::windows::gamelist::listTreeBases 2]
+    set constrainedTagCalls1 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin1.games.glist] $tagCalls1Before]
+    set constrainedTagCalls2 [::gui_gamelist_window_spec_test::listTailFrom [::scid_test::widgets::getTagConfigureCalls .glistWin2.games.glist] $tagCalls2Before]
+    set constrainedImage1 [::scid_test::widgets::getState .glistWin1.buttons.boardFilter -image]
+    set constrainedImage2 [::scid_test::widgets::getState .glistWin2.buttons.boardFilter -image]
+
+    list \
+        $allResult \
+        $allTagCalls1 \
+        $allTagCalls2 \
+        $allImage1 \
+        $allImage2 \
+        $constrainedResult \
+        $constrainedTagCalls1 \
+        $constrainedTagCalls2 \
+        $constrainedImage1 \
+        $constrainedImage2
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{1 dbfilter+tree {.glistWin1.progress 100 100}} {2 second+tree {.glistWin2.progress 100 100}}} {{fsmall -foreground #bababa}} {{fsmall -foreground #bababa}} tb_BoardMaskBusy tb_BoardMaskBusy {{2 second+tree {.glistWin2.progress 100 100}}} {} {{fsmall -foreground #bababa}} tb_BoardMask tb_BoardMaskBusy}
+
+test gui-gamelist-window-spec-awesome-1.0 {Game list window Awesome search keeps reset, parse, and notify flow stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+
+    ::scid_test::gui_fixtures::gamelist_window::resetActionCalls
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::Awesome .glistWin1 ""
+    set emptyResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::filterResetCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::searchFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::resetActionCalls
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::Awesome .glistWin1 "carlsen + white magnus"
+    set searchResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::filterResetCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::searchFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls]]
+
+    list $emptyResult $searchResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{1 dbfilter full}} {} {} 0 {{1 dbfilter}}} {{{1 dbfilter empty}} {{1 dbfilter header -filter OR -player carlsen} {1 dbfilter header -filter OR -white magnus}} {{ScidUp HeaderSearch... Cancel} {ScidUp HeaderSearch... Cancel}} 2 {{1 dbfilter}}}}
+
+test gui-gamelist-window-spec-copy-games-1.0 {Game list window CopyGames keeps filter override, confirmation, and copy/error flow stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::windows::gamelist::CopyGames .glistWin1 1 2 other true
+    set confirmDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] 0]]
+    set confirmResult [list \
+        [dict get $confirmDialog -type] \
+        [dict get $confirmDialog -icon] \
+        [dict get $confirmDialog -title] \
+        [dict get $confirmDialog -message] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::setFilterCount 1 dbfilter+tree 0
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::windows::gamelist::CopyGames .glistWin1 1 2 other true
+    set emptyDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] 0]]
+    set emptyResult [list \
+        [dict get $emptyDialog -type] \
+        [dict get $emptyDialog -icon] \
+        [dict get $emptyDialog -title] \
+        [dict get $emptyDialog -message] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::setFilterCount 1 dbfilter+tree 5
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::windows::gamelist::CopyGames .glistWin1 1 9 other true
+    set clipbaseResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::scid_test::gui_fixtures::gamelist_window::setCopyGamesError copy-failed
+    ::windows::gamelist::CopyGames .glistWin1 1 2 other false
+    set errorResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    list $confirmResult $emptyResult $clipbaseResult $errorResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{okcancel question {ScidUp: CopyGames} CopyConfirm {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 2}} 2 {}} {ok info ScidUp {CopyErr 
+"base1" -> "base2": 
+CopyErrSource CopyErrNoGames.} {} {} {}} {{} {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 9}} 9} {{} {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 2}} 2 copy-failed}}
+
+test gui-gamelist-window-spec-clear-clipbase-1.0 {Game list window ClearClipbase refreshes clipbase windows and emits the expected notifications} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 9 dbfilter
+    ::windows::gamelist::Open 1 dbfilter
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshDispatchStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::scid_test::gui_fixtures::gamelist_window::setCurrentBase 1
+    ::scid_test::gui_fixtures::gamelist_window::resetClearClipbaseCalls
+    ::windows::gamelist::ClearClipbase
+    set inactiveCurrentResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::setBaseCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::gameChangedCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::setCurrentBase 9
+    ::scid_test::gui_fixtures::gamelist_window::resetClearClipbaseCalls
+    ::windows::gamelist::ClearClipbase
+    set clipbaseCurrentResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::setBaseCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::gameChangedCalls]]
+
+    list $inactiveCurrentResult $clipbaseCurrentResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{.glistWin1 9 dbfilter}} 1 9 0} {{{.glistWin1 9 dbfilter}} 1 9 1}}
+
+test gui-gamelist-window-spec-open-tree-best-1.0 {Game list window OpenTreeBest keeps special title, hidden buttons, and failure close flow stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::scid_test::gui_fixtures::gamelist_window::resetOpenTreeBestCalls
+    ::windows::gamelist::OpenTreeBest 2 .treeBestWin
+    set successResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistCreateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        [lsearch -exact $::windows::gamelist::wins .treeBestWin] \
+        $::gamelistBase(.treeBestWin) \
+        $::gamelistFilter(.treeBestWin) \
+        $::gamelistPosMask(.treeBestWin) \
+        [::scid_test::gui_fixtures::gamelist_window::gridCalls] \
+        [llength [info commands .treeBestWin.buttons]]]
+
+    ::scid_test::gui_fixtures::gamelist_window::setWinCreateWindowResult 0
+    ::scid_test::gui_fixtures::gamelist_window::resetOpenTreeBestCalls
+    ::windows::gamelist::OpenTreeBest 3 .treeBestFail
+    set failureResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::winCloseWindowCalls] \
+        [info exists ::gamelistBase(.treeBestFail)] \
+        [lsearch -exact $::windows::gamelist::wins .treeBestFail]]
+
+    list $successResult $failureResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{.treeBestWin {}}} {} {{.treeBestWin.games ly.treeBestWin}} {{.treeBestWin.games 2 tree 1}} {{.treeBestWin {TreeBestGames: base2 (3 / 10)}}} 0 2 tree 1 {{.treeBestWin.buttons.filter -row 0} {.treeBestWin.buttons.stats -row 1} {.treeBestWin.buttons.boardFilter -row 2} {.treeBestWin.buttons.export -row 3} {.treeBestWin.buttons -row 0 -column 0 -sticky news} {.treeBestWin.filter.b -sticky news} {rowconfigure .treeBestWin.filter 0 -weight 1} {columnconfigure .treeBestWin.filter 0 -weight 1} .treeBestWin.filter.b.rfilter .treeBestWin.filter.b.hsearch .treeBestWin.filter.b.bsearch .treeBestWin.filter.b.msearch .treeBestWin.filter.b.crosst {.treeBestWin.stats.b -sticky news} {rowconfigure .treeBestWin.stats 0 -weight 1} {columnconfigure .treeBestWin.stats 0 -weight 1} {.treeBestWin.games -row 0 -column 2 -sticky news} {rowconfigure .treeBestWin 0 -weight 1} {columnconfigure .treeBestWin 0 -weight 0} {columnconfigure .treeBestWin 1 -weight 0} {columnconfigure .treeBestWin 2 -weight 1} {forget .treeBestWin.buttons}} 1} {{{.treeBestFail {}}} .treeBestFail 0 -1}}
+
+test gui-gamelist-window-spec-open-1.0 {Game list window Open keeps default-base, duplicate-filter, and clipbase-reuse flow stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::scid_test::gui_fixtures::gamelist_window::setCurrentBase 2
+    ::scid_test::gui_fixtures::gamelist_window::resetOpenCalls
+    ::windows::gamelist::Open
+    set defaultResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistCreateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        $::windows::gamelist::wins \
+        $::gamelistBase(.glistWin1) \
+        $::gamelistFilter(.glistWin1) \
+        [::scid_test::gui_fixtures::gamelist_window::filterNewCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::resetOpenCalls
+    ::windows::gamelist::Open 2
+    set duplicateResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistCreateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::titleCalls] \
+        $::windows::gamelist::wins \
+        $::gamelistBase(.glistWin2) \
+        $::gamelistFilter(.glistWin2) \
+        [::scid_test::gui_fixtures::gamelist_window::filterNewCalls]]
+
+    ::windows::gamelist::Open 9 dbfilter
+    set ::recentSort [list /tmp/base1.si5 {22 - 7 -}]
+    ::scid_test::gui_fixtures::gamelist_window::setBaseNumGames 9 0
+    ::scid_test::gui_fixtures::gamelist_window::installRefreshDispatchStubs ::gui_gamelist_window_spec_test::stubbedCommands
+    ::scid_test::gui_fixtures::gamelist_window::resetOpenCalls
+    ::windows::gamelist::Open 1
+    set clipbaseReuseResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::winCreateWindowCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistCreateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::glistUpdateCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::setBaseCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::winMakeVisibleCalls] \
+        $::windows::gamelist::wins \
+        $::glist_Sort(ly.glistWin3) \
+        [::scid_test::gui_fixtures::gamelist_window::filterNewCalls]]
+
+    list $defaultResult $duplicateResult $clipbaseReuseResult
+} -cleanup {
+    catch {unset ::recentSort}
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{.glistWin1 {}}} {{.glistWin1.games ly.glistWin1}} {{.glistWin1.games 2 dbfilter 1}} {{.glistWin1 { base2 (3 / 10)}}} .glistWin1 2 dbfilter {}} {{{.glistWin2 {}}} {{.glistWin2.games ly.glistWin2}} {{.glistWin2.games 2 newfilter 1}} {{.glistWin2 { base2 (3 / 10)}}} {.glistWin1 .glistWin2} 2 newfilter 2} {{} {{.glistWin3.games ly.glistWin3}} {} {{.glistWin3 1 dbfilter}} .glistWin3 {.glistWin1 .glistWin2 .glistWin3} {22 - 7 -} {}}}
 
 cleanupTests
