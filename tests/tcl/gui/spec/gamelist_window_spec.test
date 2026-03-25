@@ -414,4 +414,102 @@ test gui-gamelist-window-spec-list-tree-bases-1.0 {Game list window listTreeBase
     ::gui_gamelist_window_spec_test::cleanup
 } -result {{{1 dbfilter+tree {.glistWin1.progress 100 100}} {2 second+tree {.glistWin2.progress 100 100}}} {{fsmall -foreground #bababa}} {{fsmall -foreground #bababa}} tb_BoardMaskBusy tb_BoardMaskBusy {{2 second+tree {.glistWin2.progress 100 100}}} {} {{fsmall -foreground #bababa}} tb_BoardMask tb_BoardMaskBusy}
 
+test gui-gamelist-window-spec-awesome-1.0 {Game list window Awesome search keeps reset, parse, and notify flow stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+
+    ::scid_test::gui_fixtures::gamelist_window::resetActionCalls
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::Awesome .glistWin1 ""
+    set emptyResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::filterResetCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::searchFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::resetActionCalls
+    ::scid_test::gui_fixtures::gamelist_window::resetExportCalls
+    ::windows::gamelist::Awesome .glistWin1 "carlsen + white magnus"
+    set searchResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::filterResetCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::searchFilterCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls]]
+
+    list $emptyResult $searchResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{{{1 dbfilter full}} {} {} 0 {{1 dbfilter}}} {{{1 dbfilter empty}} {{1 dbfilter header -filter OR -player carlsen} {1 dbfilter header -filter OR -white magnus}} {{ScidUp HeaderSearch... Cancel} {ScidUp HeaderSearch... Cancel}} 2 {{1 dbfilter}}}}
+
+test gui-gamelist-window-spec-copy-games-1.0 {Game list window CopyGames keeps filter override, confirmation, and copy/error flow stable} -setup {
+    ::gui_gamelist_window_spec_test::setup
+} -body {
+    source [file join [::scid_test::tclDir] windows gamelist.tcl]
+    ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs ::gui_gamelist_window_spec_test::stubbedCommands
+
+    ::windows::gamelist::Open 1 dbfilter
+    set ::gamelistFilter(.glistWin1) dbfilter+tree
+
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::windows::gamelist::CopyGames .glistWin1 1 2 other true
+    set confirmDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] 0]]
+    set confirmResult [list \
+        [dict get $confirmDialog -type] \
+        [dict get $confirmDialog -icon] \
+        [dict get $confirmDialog -title] \
+        [dict get $confirmDialog -message] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::setFilterCount 1 dbfilter+tree 0
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::windows::gamelist::CopyGames .glistWin1 1 2 other true
+    set emptyDialog [::gui_gamelist_window_spec_test::asDict [lindex [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] 0]]
+    set emptyResult [list \
+        [dict get $emptyDialog -type] \
+        [dict get $emptyDialog -icon] \
+        [dict get $emptyDialog -title] \
+        [dict get $emptyDialog -message] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::setFilterCount 1 dbfilter+tree 5
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::windows::gamelist::CopyGames .glistWin1 1 9 other true
+    set clipbaseResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls]]
+
+    ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls
+    ::scid_test::gui_fixtures::gamelist_window::setCopyGamesError copy-failed
+    ::windows::gamelist::CopyGames .glistWin1 1 2 other false
+    set errorResult [list \
+        [::scid_test::gui_fixtures::gamelist_window::messageBoxCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::progressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::closeProgressCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::copyGamesCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls] \
+        [::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls]]
+
+    list $confirmResult $emptyResult $clipbaseResult $errorResult
+} -cleanup {
+    ::gui_gamelist_window_spec_test::cleanup
+} -result {{okcancel question {ScidUp: CopyGames} CopyConfirm {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 2}} 2 {}} {ok info ScidUp {CopyErr 
+"base1" -> "base2": 
+CopyErrSource CopyErrNoGames.} {} {} {}} {{} {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 9}} 9} {{} {{ScidUp CopyGames... Cancel}} 1 {{1 dbfilter+tree 2}} 2 copy-failed}}
+
 cleanupTests

@@ -21,15 +21,24 @@ namespace eval ::scid_test::gui_fixtures::gamelist_window {
     variable exportErrorCode ""
     variable errorMessageBoxCalls {}
     variable messageBoxCalls {}
+    variable messageBoxResponse ok
     variable addSanMoveCalls {}
     variable gridCalls {}
     variable eventCalls {}
     variable searchBoardCalls {}
+    variable searchFilterCalls {}
     variable searchHeaderCalls {}
     variable searchMaterialCalls {}
     variable filterResetCalls {}
     variable filterNegateCalls {}
+    variable filterCountDefault 5
+    variable copyGamesCalls {}
+    variable copyGamesError ""
+    variable databaseModifiedCalls {}
+    variable gameChangedCalls 0
+    variable clipbaseClearCalls 0
     array set baseInUse {}
+    array set filterCounts {}
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
@@ -63,15 +72,24 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::exportErrorCode ""
     set ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::messageBoxResponse ok
     set ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::eventCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterCountDefault 5
+    set ::scid_test::gui_fixtures::gamelist_window::copyGamesCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::copyGamesError ""
+    set ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::gameChangedCalls 0
+    set ::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls 0
     array unset ::scid_test::gui_fixtures::gamelist_window::baseInUse
+    array unset ::scid_test::gui_fixtures::gamelist_window::filterCounts
 
     set ::language E
     set ::clipbase_db 9
@@ -81,8 +99,16 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
         ShowHideStatistic ShowHideStatistic
         BoardFilter BoardFilter
         ToolsExpFilter ToolsExpFilter
+        HeaderSearch HeaderSearch
         ScidUp ScidUp
         Cancel Cancel
+        CopyErr CopyErr
+        CopyErrSource CopyErrSource
+        CopyErrNoGames CopyErrNoGames
+        CopyErrTarget CopyErrTarget
+        CopyErrReadOnly CopyErrReadOnly
+        CopyGames CopyGames
+        CopyConfirm CopyConfirm
         all all
         noGames noGames
     }
@@ -302,9 +328,24 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
         lappend ::scid_test::gui_fixtures::gamelist_window::notifyFilterCalls [list $base $filter]
         return
     }
+    ::scid_test::mocks::stubCommand stubbedCommands ::notify::DatabaseModified {base} {
+        lappend ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls $base
+        return
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands ::notify::GameChanged {} {
+        incr ::scid_test::gui_fixtures::gamelist_window::gameChangedCalls
+        return
+    }
     ::scid_test::mocks::stubCommand stubbedCommands tk_messageBox {args} {
         lappend ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls $args
-        return ok
+        return $::scid_test::gui_fixtures::gamelist_window::messageBoxResponse
+    }
+    ::scid_test::mocks::stubCommand stubbedCommands sc_clipbase {subcmd args} {
+        if {$subcmd ne "clear"} {
+            error "sc_clipbase $subcmd not stubbed in tests"
+        }
+        incr ::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls
+        return
     }
     ::scid_test::mocks::stubCommand stubbedCommands addSanMove {moveSAN} {
         lappend ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls $moveSAN
@@ -338,6 +379,13 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
             filename {
                 return "/tmp/base[lindex $args 0].si5"
             }
+            copygames {
+                lappend ::scid_test::gui_fixtures::gamelist_window::copyGamesCalls $args
+                if {$::scid_test::gui_fixtures::gamelist_window::copyGamesError ne ""} {
+                    error $::scid_test::gui_fixtures::gamelist_window::copyGamesError
+                }
+                return
+            }
             default {
                 error "sc_base $subcmd not stubbed in tests"
             }
@@ -353,6 +401,17 @@ proc ::scid_test::gui_fixtures::gamelist_window::setup {registryVar} {
                     error $::scid_test::gui_fixtures::gamelist_window::exportError
                 }
                 return
+            }
+            search {
+                lappend ::scid_test::gui_fixtures::gamelist_window::searchFilterCalls $args
+                return
+            }
+            count {
+                lassign $args base filter
+                if {[info exists ::scid_test::gui_fixtures::gamelist_window::filterCounts($base,$filter)]} {
+                    return $::scid_test::gui_fixtures::gamelist_window::filterCounts($base,$filter)
+                }
+                return $::scid_test::gui_fixtures::gamelist_window::filterCountDefault
             }
             sizes {
                 return {3 10 10}
@@ -446,15 +505,24 @@ proc ::scid_test::gui_fixtures::gamelist_window::cleanup {registryVar} {
     set ::scid_test::gui_fixtures::gamelist_window::exportErrorCode ""
     set ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::messageBoxResponse ok
     set ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::eventCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterNegateCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::filterCountDefault 5
+    set ::scid_test::gui_fixtures::gamelist_window::copyGamesCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::copyGamesError ""
+    set ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::gameChangedCalls 0
+    set ::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls 0
     array unset ::scid_test::gui_fixtures::gamelist_window::baseInUse
+    array unset ::scid_test::gui_fixtures::gamelist_window::filterCounts
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::installRuntimeStubs {registryVar} {
@@ -555,6 +623,22 @@ proc ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::messageBoxCalls
 }
 
+proc ::scid_test::gui_fixtures::gamelist_window::copyGamesCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::copyGamesCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::gameChangedCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::gameChangedCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::clipbaseClearCalls
+}
+
 proc ::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::addSanMoveCalls
 }
@@ -569,6 +653,10 @@ proc ::scid_test::gui_fixtures::gamelist_window::eventCalls {} {
 
 proc ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {} {
     return $::scid_test::gui_fixtures::gamelist_window::searchBoardCalls
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::searchFilterCalls {} {
+    return $::scid_test::gui_fixtures::gamelist_window::searchFilterCalls
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {} {
@@ -592,6 +680,7 @@ proc ::scid_test::gui_fixtures::gamelist_window::resetActionCalls {} {
     set ::scid_test::gui_fixtures::gamelist_window::gridCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::eventCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchBoardCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchFilterCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchHeaderCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::searchMaterialCalls {}
     set ::scid_test::gui_fixtures::gamelist_window::filterResetCalls {}
@@ -618,6 +707,19 @@ proc ::scid_test::gui_fixtures::gamelist_window::resetExportCalls {} {
     set ::scid_test::gui_fixtures::gamelist_window::exportError ""
     set ::scid_test::gui_fixtures::gamelist_window::exportErrorCode ""
     set ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::searchFilterCalls {}
+    catch {unset ::errorCode}
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::resetCopyCalls {} {
+    set ::scid_test::gui_fixtures::gamelist_window::progressCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::closeProgressCalls 0
+    set ::scid_test::gui_fixtures::gamelist_window::messageBoxCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::messageBoxResponse ok
+    set ::scid_test::gui_fixtures::gamelist_window::copyGamesCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::copyGamesError ""
+    set ::scid_test::gui_fixtures::gamelist_window::databaseModifiedCalls {}
+    set ::scid_test::gui_fixtures::gamelist_window::errorMessageBoxCalls {}
     catch {unset ::errorCode}
 }
 
@@ -631,6 +733,18 @@ proc ::scid_test::gui_fixtures::gamelist_window::setBaseInUse {base inUse} {
 
 proc ::scid_test::gui_fixtures::gamelist_window::setSaveFileResponse {path} {
     set ::scid_test::gui_fixtures::gamelist_window::saveFileResponse $path
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setMessageBoxResponse {response} {
+    set ::scid_test::gui_fixtures::gamelist_window::messageBoxResponse $response
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setFilterCount {base filter count} {
+    set ::scid_test::gui_fixtures::gamelist_window::filterCounts($base,$filter) $count
+}
+
+proc ::scid_test::gui_fixtures::gamelist_window::setCopyGamesError {{message ""}} {
+    set ::scid_test::gui_fixtures::gamelist_window::copyGamesError $message
 }
 
 proc ::scid_test::gui_fixtures::gamelist_window::setExportError {{message ""} {errorCode ""}} {
