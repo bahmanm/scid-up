@@ -17,7 +17,6 @@
 */
 
 #include "dbasepool.h"
-#include "ui.h"
 #include "scidbase.h"
 
 
@@ -96,4 +95,3 @@ int DBasePool::switchCurrent(scidBaseT* dbase) {
 	}
 	return currentBase + 1;
 }
-
