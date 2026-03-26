@@ -173,15 +173,15 @@ proc ::scidup::updates::_attempt {requestId} {
   }
 
   if {$::tcl_platform(platform) eq "windows"} {
-    set psExe [::scidup::updates::_findPowerShellExecutable]
-    if {$psExe eq ""} {
+    set psPrefix [::scidup::updates::_findPowerShellExecutable]
+    if {$psPrefix eq ""} {
       ::scidup::updates::_finish $requestId [dict create \
         status prerequisites_missing \
         message "PowerShell is required to check for updates." \
         attempts $_requests($requestId,attempt)]
       return
     }
-    set tokens [list $psExe -NoProfile -ExecutionPolicy Bypass -File $scriptPath $_requests($requestId,localVersion)]
+    set tokens [concat $psPrefix [list -NoProfile -ExecutionPolicy Bypass -File $scriptPath $_requests($requestId,localVersion)]]
   } else {
     set tokens [list $scriptPath $_requests($requestId,localVersion)]
   }
@@ -193,6 +193,10 @@ proc ::scidup::updates::_attempt {requestId} {
 }
 
 proc ::scidup::updates::_findPowerShellExecutable {} {
+  # Returns a command prefix list suitable for `exec`/pipeline use.
+  # On Windows, `auto_execok` may already return a multi-element command
+  # prefix, so callers must treat the result as a list rather than a single
+  # executable path string.
   # Prefer PATH lookup, then fall back to common system locations.
   foreach candidate {pwsh pwsh.exe powershell powershell.exe} {
     set exe [auto_execok $candidate]
@@ -214,7 +218,7 @@ proc ::scidup::updates::_findPowerShellExecutable {} {
 
   foreach exe $candidates {
     if {[file exists $exe]} {
-      return $exe
+      return [list $exe]
     }
   }
   return ""

@@ -1,4 +1,6 @@
 if( CMAKE_SYSTEM_NAME STREQUAL "Linux" )
+    include( cmake/tests/tcl/common.cmake )
+
     set(
         TCL_GUI_TEST_RUNNER
         "${CMAKE_SOURCE_DIR}/tests/tcl/run_gui_tests.tcl" )
@@ -9,18 +11,7 @@ if( CMAKE_SYSTEM_NAME STREQUAL "Linux" )
         "${CMAKE_COMMAND}" -E chdir "${CMAKE_SOURCE_DIR}"
         "${TCL_TCLSH}" "${TCL_GUI_TEST_RUNNER}" )
 
-    get_filename_component(
-        _tcl_bin_dir
-        "${TCL_TCLSH}" DIRECTORY )
-    get_filename_component(
-        _tcl_lib_dir
-        "${TCL_LIBRARY}" DIRECTORY )
-
-    set_tests_properties(
-        tcl_gui_test
-        PROPERTIES
-        ENVIRONMENT "PATH=${_tcl_bin_dir}:$ENV{PATH};LD_LIBRARY_PATH=${_tcl_lib_dir}:$ENV{LD_LIBRARY_PATH}"
-        LABELS "tcl;gui" )
+    scidup_configure_tcl_test( tcl_gui_test "tcl;gui" )
 
     add_custom_target(
         tcl_gui_tests

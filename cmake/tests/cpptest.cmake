@@ -14,6 +14,7 @@ set( gtest_force_shared_crt ON CACHE BOOL "Always use msvcrt.dll" FORCE )
 set(
     SCIDUP_TESTS_LIBS_CPPSUPPORT_SOURCES
     "${CMAKE_SOURCE_DIR}/src/cxx/codec_scid4.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cxx/dbasepool.cpp"
     "${CMAKE_SOURCE_DIR}/src/cxx/scidbase.cpp"
     "${CMAKE_SOURCE_DIR}/src/cxx/sortcache.cpp"
     "${CMAKE_SOURCE_DIR}/src/cxx/stored.cpp"
